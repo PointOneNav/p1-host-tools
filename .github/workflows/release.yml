@@ -1,0 +1,262 @@
+name: Release
+
+# Create and upload release file.
+
+on:
+  push:
+    # Build on a push of any tag named host-tools-*, a push to  main, or a
+    # manual call via github CLI.
+    tags:
+      - '*'
+    branches:
+      - 'main'
+
+jobs:
+  build_tools:
+    name: Build Host Tools
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Set Up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '>=3.8'
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-west-1
+
+    - name: Compile Tools
+      run: |
+        scripts/build_scripts/compile_p1_runner.bat
+
+    - name: Upload .exe Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: p1-host-tools-exe
+        path: pyinstaller_dist\
+
+  package_release:
+    name: Package and Export Release
+    needs: [build_tools]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          # Disable shallow checkout so we get the whole history, including tags, rather than just a single shallow commit
+          # and no tag history. That way the `git describe` version query done by get_version.sh works.
+          fetch-depth: 0
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-1
+
+      - name: Get Github Ref
+        run: |
+          echo "REF=${{ github.ref_name }}" >> $GITHUB_ENV
+
+      - name: Get Version
+        run: |
+          export EXPORT_TO_GITHUB_ENV="true"
+          scripts/get_version.sh
+
+      - name: Create Release Directory
+        run: |
+          RELEASE_DIR="point-one-host-tools-${{ env.VERSION_NUMBER }}"
+          RELEASE_FILE="${RELEASE_DIR}.python.zip"
+
+          echo "Creating release directory ${RELEASE_DIR}."
+          if [[ -d "${RELEASE_DIR}" ]]; then
+              rm -rf "${RELEASE_DIR}"
+          fi
+
+          echo "RELEASE_FILE=$RELEASE_FILE" >> $GITHUB_ENV
+          echo "RELEASE_DIR=$RELEASE_DIR" >> $GITHUB_ENV
+
+      - name: Create Release Directory and Structure
+        run: |
+          mkdir -p ${{ env.RELEASE_DIR }}
+          mkdir -p ${{ env.RELEASE_DIR }}/bin
+          mkdir -p ${{ env.RELEASE_DIR }}/p1_runner
+          mkdir -p ${{ env.RELEASE_DIR }}/user_config_loader
+
+      - name: Copy in p1_runner
+        run: |
+          echo "Copying in p1_runner application."
+          cp -r README.md ${{ env.RELEASE_DIR }}/
+          cp -r requirements.txt ${{ env.RELEASE_DIR }}/
+          cp -r setup.py ${{ env.RELEASE_DIR }}/
+          cp -r p1_runner/*.py ${{ env.RELEASE_DIR }}/p1_runner/
+          cp -r user_config_loader/*.py ${{ env.RELEASE_DIR }}/user_config_loader/
+          cp -r bin/*.py ${{ env.RELEASE_DIR }}/bin/
+
+      - name: Display List of Downloaded Structures
+        run: ls -R ${{ env.RELEASE_DIR }}
+
+      - name: Export Release to S3
+        run: |
+          ARTIFACT_BUCKET=pointone-build-artifacts
+          ARTIFACT_PATH=nautilus/p1-host-tools
+
+          # Create and upload the complete release package.
+          zip -r ${{ env.RELEASE_FILE }} ${{ env.RELEASE_DIR }}
+          RELEASE_AWS_PATH="s3://${ARTIFACT_BUCKET}/${ARTIFACT_PATH}/${{ env.VERSION_STR }}/${{ env.RELEASE_FILE }}"
+          aws s3 cp ${{ env.RELEASE_FILE }} ${RELEASE_AWS_PATH}
+
+          SLACK_MESSAGE=$(cat <<EOF
+          Results available at:
+          - ${RELEASE_AWS_PATH}
+          EOF
+          )
+          echo "SLACK_MESSAGE<<EOF" >> $GITHUB_ENV
+          echo "${SLACK_MESSAGE}" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Upload .zip Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: p1-host-tools-zip
+          path: ${{ env.RELEASE_FILE }}
+
+      - name: Create Windows Release Directory
+        run: |
+          WIN_RELEASE_DIR="point-one-host-tools-${{ env.VERSION_NUMBER }}"
+          WIN_RELEASE_FILE="${WIN_RELEASE_DIR}.windows.zip"
+
+          echo "Creating release directory ${WIN_RELEASE_DIR}."
+          if [[ -d "${WIN_RELEASE_DIR}" ]]; then
+              rm -rf "${WIN_RELEASE_DIR}"
+          fi
+
+          echo "WIN_RELEASE_FILE=$WIN_RELEASE_FILE" >> $GITHUB_ENV
+          echo "WIN_RELEASE_DIR=$WIN_RELEASE_DIR" >> $GITHUB_ENV
+
+      - name: Download .exe Artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: p1-host-tools-exe
+          path: ${{ env.WIN_RELEASE_DIR }}
+
+      - name: Copy in files
+        run: |
+          cp -r README.md ${{ env.WIN_RELEASE_DIR }}
+
+      - name: Display List of Release Files
+        run: |
+          ls -R ${{ env.WIN_RELEASE_DIR }}
+
+      - name: Export Release to S3
+        run: |
+          ARTIFACT_BUCKET=pointone-build-artifacts
+          ARTIFACT_PATH=nautilus/p1-host-tools
+
+          zip -r ${{ env.WIN_RELEASE_FILE }} ${{ env.WIN_RELEASE_DIR }}
+          WIN_RELEASE_AWS_PATH="s3://${ARTIFACT_BUCKET}/${ARTIFACT_PATH}/${{ env.VERSION_STR }}/${{ env.WIN_RELEASE_FILE }}"
+          aws s3 cp ${{ env.WIN_RELEASE_FILE }} ${WIN_RELEASE_AWS_PATH}
+
+      - name: Upload Zip of .exe Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: p1-host-tools-exe-zip
+          path: ${{ env.WIN_RELEASE_FILE }}
+
+      # # Note: We must manually call curl here so the message gets conveyed
+      # # properly with line breaks. We previously used slack-github-action, but
+      # # it does not support newlines in JSON strings.
+      # - name: Post Success Notification to Nautilus Slack Channel
+      #   run: |
+      #     curl --request POST \
+      #          --header "Content-Type: application/json" \
+      #          --data "{\"success\": \"successful\", \"reference\": \"${{ github.ref_name }}\", \"message\": \"${SLACK_MESSAGE}\"}" \
+      #          "${{ secrets.SLACK_WEBHOOK_RELEASE_BUILD_COMPLETE }}"
+
+  # Create a release only on a tag (not on a branch push).
+  release:
+    name: Create Release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [package_release]
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+    - name: Get Zipped Source Artifact
+      uses: actions/download-artifact@v2
+      with:
+        name: p1-host-tools-zip
+
+    - name: Get Windows Build Artifact
+      uses: actions/download-artifact@v2
+      with:
+        name: p1-host-tools-exe-zip
+
+    - name: Get Artifact Paths
+      run: |
+        RELEASE_FILE="$(ls *.windows.zip)"
+        echo "WIN_RELEASE_FILE=$RELEASE_FILE" >> $GITHUB_ENV
+
+        RELEASE_FILE="$(ls *.python.zip)"
+        echo "RELEASE_FILE=$RELEASE_FILE" >> $GITHUB_ENV
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@latest
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        draft: false
+        prerelease: false
+
+    - name: Upload Release Files
+      if: steps.create_release.conclusion == 'success'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ${{ env.RELEASE_FILE }}
+        asset_name: ${{ env.RELEASE_FILE }}
+        asset_content_type: application/zip
+
+    - name: Upload Windows Release Files
+      if: steps.create_release.conclusion == 'success'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ${{ env.WIN_RELEASE_FILE }}
+        asset_name: ${{ env.WIN_RELEASE_FILE }}
+        asset_content_type: application/zip
+
+  failure_notification:
+    name: Conditional Failure Notification
+    runs-on: ubuntu-latest
+    needs: [build_tools, package_release]
+    if: |
+      always() &&
+      (needs.build_tools.result == 'failure' ||
+       needs.package_release.result == 'failure')
+    steps:
+      - name: Post Failure Notification to Nautilus Slack Channel
+        uses: slackapi/slack-github-action@v1.18.0
+        with:
+          payload: |
+            {
+              "success": "failed",
+              "reference": "${{ github.ref_name }}",
+              "message": ""
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_RELEASE_BUILD_COMPLETE }}
