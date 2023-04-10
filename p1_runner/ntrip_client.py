@@ -10,6 +10,7 @@ import traceback
 from urllib3.util import parse_url
 
 import ntripstreams
+from serial import SerialException
 
 from . import trace as logging
 
@@ -171,6 +172,8 @@ class NTRIPClient(threading.Thread):
                 self.data_callback(data)
             asyncio.run_coroutine_threadsafe(self.__receive_data(), loop=self.event_loop)
         except asyncio.CancelledError as e:
+            raise e
+        except SerialException as e:
             raise e
         except asyncio.TimeoutError:
             self.rx_logger.trace('Read timed out with no data. Reading again.', depth=2)

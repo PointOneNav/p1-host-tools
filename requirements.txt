@@ -1,7 +1,7 @@
 argparse-formatter>=1.4
 colorama>=0.4.4
 construct~=2.10.67
-fusion-engine-client==1.17.0
+fusion-engine-client==1.18.0
 gpstime>=0.6.2
 pynmea2~=1.18.0
 pyserial~=3.5

@@ -37,10 +37,10 @@ class WheelTickDisplay:
         # hardware tick config. Once we have both, we'll actually print the result.
         self.device_interface.get_config(ConfigurationSource.ACTIVE, WheelConfig.GetType())
 
-    def handle_message(self, header: MessageHeader, response_payload: WheelTickMeasurement, *args):
-        if header.message_type == MessageType.VEHICLE_TICK_MEASUREMENT:
+    def handle_message(self, header: MessageHeader, response_payload: MessagePayload, *args):
+        if header.message_type == MessageType.RAW_VEHICLE_TICK_OUTPUT:
             self._handle_vehicle_tick_message(response_payload)
-        elif header.message_type == MessageType.VEHICLE_SPEED_MEASUREMENT:
+        elif header.message_type == MessageType.VEHICLE_SPEED_OUTPUT:
             self._handle_vehicle_speed_message(response_payload)
         elif header.message_type == MessageType.POSE:
             self._handle_pose_message(response_payload)
@@ -63,7 +63,7 @@ class WheelTickDisplay:
             self.logger.info(self.wheel_config)
             self.logger.info("############################## END CONFIGURATION ###############################")
 
-    def _handle_vehicle_tick_message(self, message: WheelTickMeasurement):
+    def _handle_vehicle_tick_message(self, message: RawVehicleTickOutput):
         # If we never got a speed message corresponding with the previous tick message, print the old tick data now.
         # Otherwise, we'll print when the speed message comes in.
         if self.tick_count is not None:
@@ -75,7 +75,7 @@ class WheelTickDisplay:
 
         self.last_data_p1_time = self.p1_time
 
-    def _handle_vehicle_speed_message(self, message: VehicleSpeedMeasurement):
+    def _handle_vehicle_speed_message(self, message: VehicleSpeedOutput):
         p1_time = message.get_p1_time()
 
         # Check if we have pending tick data that corresponds with this speed message.

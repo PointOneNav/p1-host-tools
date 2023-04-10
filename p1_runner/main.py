@@ -104,9 +104,9 @@ Forward NMEA output from the receiver to an application on TCP port 1234:
         help="The baud rate used by the corrections serial port (--corrections-port).")
 
     device_group.add_argument(
-        '--reset-type', choices=('hot', 'warm', 'cold', 'none'), default='hot',
+        '--reset-type', choices=('hot', 'warm', 'pvt', 'diag', 'cold', 'none'), default='none',
         help="The type of reset to perform after connecting to the device. Resetting helps to facilitate deterministic "
-             "log playback.")
+             "log playback. When capturing a log for diagnostic and support purposes, use 'diag'.")
 
     device_group.add_argument(
         '--no-reset', action='store_true',
@@ -137,6 +137,9 @@ Forward NMEA output from the receiver to an application on TCP port 1234:
         help="The username and password to use when receiving RTK corrections from Point One the Polaris network. "
              "--ntrip and --ntrip-tls will be ignored if --polaris is specified. If username is omitted, it will be "
              "set to the device ID (--device-id).")
+    corr_sel_group.add_argument(
+        '--polaris-hostname', metavar='HOSTNAME', default='polaris.pointonenav.com',
+        help="The hostname used to access the Point One Polaris network.")
 
     corr_group.add_argument(
         '--polaris-tls', action='store_true', default=True,
@@ -277,7 +280,7 @@ Forward NMEA output from the receiver to an application on TCP port 1234:
             logging.getLogger('ntripstreams').setLevel(logging.DEBUG)
             logging.getLogger('ntripstreams.receive').setLevel(logging.INFO)
         elif options.verbose == 3:
-            logging.root.setLevel(logging.DEBUG)
+            logging.Logger.root.setLevel(logging.DEBUG)
             logging.getLogger('point_one.p1_runner').setLevel(logging.TRACE - 1)
             logging.getLogger('point_one.p1_runner.output').setLevel(logging.TRACE)
             logging.getLogger('point_one.p1_runner.websocket').setLevel(logging.TRACE)
@@ -289,7 +292,7 @@ Forward NMEA output from the receiver to an application on TCP port 1234:
             logging.getLogger('point_one.rtcm_framer').setLevel(logging.DEBUG)
             logging.getLogger('point_one.fusion_engine').setLevel(logging.DEBUG)
         else:
-            logging.root.setLevel(logging.DEBUG)
+            logging.Logger.root.setLevel(logging.DEBUG)
             logging.getLogger('point_one.p1_runner').setLevel(logging.TRACE - 1)
             logging.getLogger('point_one.p1_runner.output').setLevel(logging.TRACE)
             logging.getLogger('point_one.p1_runner.websocket').setLevel(logging.TRACE)
@@ -381,9 +384,9 @@ Forward NMEA output from the receiver to an application on TCP port 1234:
 
     if options.polaris is not None:
         if options.polaris_tls:
-            url = 'https://ntrip.polaris.pointonenav.com:2102'
+            url = f'https://{options.polaris_hostname}:2102'
         else:
-            url = 'http://ntrip.polaris.pointonenav.com:2101'
+            url = f'http://{options.polaris_hostname}:2101'
 
         parts = options.polaris.split(",")
         if len(parts) == 1:

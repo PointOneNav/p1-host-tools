@@ -316,7 +316,8 @@ class P1Runner(threading.Thread):
                 data = self.device_serial.read(self.device_serial.in_waiting or 1)
             except serial.SerialException as e:
                 self.logger.error('Unexpected error reading from device:\r%s' % traceback.format_exc())
-                break
+                self.logger.error('Application exiting.')
+                sys.exit(1)
 
             if len(data) > 0:
                 self.last_data_timeout_warning_time = None
@@ -472,6 +473,10 @@ Are you using the correct UART/COM port (--device-port)?
             reset_cmd.reset_mask = ResetRequest.HOT_START
         elif self.reset_type == 'warm':
             reset_cmd.reset_mask = ResetRequest.WARM_START
+        elif self.reset_type == 'pvt':
+            reset_cmd.reset_mask = ResetRequest.PVT_RESET
+        elif self.reset_type == 'diag':
+            reset_cmd.reset_mask = ResetRequest.DIAGNOSTIC_LOG_RESET
         elif self.reset_type == 'cold':
             reset_cmd.reset_mask = ResetRequest.COLD_START
         else:

@@ -326,6 +326,8 @@ class NavigationConfig:
     enable_l1: bool = True
     enable_l2: bool = True
     enable_l5: bool = True
+    leap_second: int = 255
+    gps_week_rollover: int = 255
 
     @staticmethod
     def serialize(val: 'NavigationConfig') -> bytes:
@@ -348,7 +350,8 @@ _NavigationConfigRawConstruct = Struct(
     "enable_l1" / Flag,
     "enable_l2" / Flag,
     "enable_l5" / Flag,
-    Padding(2),
+    "leap_second" / Int8ul,
+    "gps_week_rollover" / Int8ul,
     Padding(64)
 )
 NavigationConfigConstruct = DataClassAdapter(NavigationConfig, _NavigationConfigRawConstruct)
@@ -366,28 +369,28 @@ class SerialStopBit(IntOrStrEnum):
     STOPBITS_2 = 3
 
 @dataclass
-class SerialConfig:
+class SerialInterfaceConfig:
     baud_rate: int = 460800
     data_width: int = 8
     parity: SerialParity = SerialParity.NONE
     stop_bits: SerialStopBit = SerialStopBit.STOPBITS_1
 
     @staticmethod
-    def serialize(val: 'SerialConfig') -> bytes:
-        return SerialConfigConstruct.build(val)
+    def serialize(val: 'SerialInterfaceConfig') -> bytes:
+        return SerialInterfaceConfigConstruct.build(val)
 
     @staticmethod
-    def deserialize(data: bytes) -> 'SerialConfig':
-        return SerialConfigConstruct.parse(data)
+    def deserialize(data: bytes) -> 'SerialInterfaceConfig':
+        return SerialInterfaceConfigConstruct.parse(data)
 
-_SerialConfigRawConstruct = Struct(
+_SerialInterfaceConfigRawConstruct = Struct(
     "baud_rate" / Int32ul,
     "data_width" / Int8ul,
     "parity" / AutoEnum(Int8ul, SerialParity),
     "stop_bits" / AutoEnum(Int8ul, SerialStopBit),
     Padding(1)
 )
-SerialConfigConstruct = DataClassAdapter(SerialConfig, _SerialConfigRawConstruct)
+SerialInterfaceConfigConstruct = DataClassAdapter(SerialInterfaceConfig, _SerialInterfaceConfigRawConstruct)
 
 
 class MessageRate(IntOrStrEnum):
@@ -415,17 +418,21 @@ class FusionEngineMessageRates:
     pose_aux: MessageRate = MessageRate.OFF
     calibration_status: MessageRate = MessageRate.OFF
     relative_enu_position: MessageRate = MessageRate.OFF
-    imu_measurement: MessageRate = MessageRate.OFF
-    wheel_speed_measurement: MessageRate = MessageRate.OFF
-    vehicle_speed_measurement: MessageRate = MessageRate.OFF
-    wheel_tick_measurement: MessageRate = MessageRate.OFF
-    vehicle_tick_measurement: MessageRate = MessageRate.OFF
+    imu_output: MessageRate = MessageRate.OFF
+    wheel_speed_output: MessageRate = MessageRate.OFF
+    vehicle_speed_output: MessageRate = MessageRate.OFF
+    raw_wheel_tick_output: MessageRate = MessageRate.OFF
+    raw_vehicle_tick_output: MessageRate = MessageRate.OFF
     ros_pose: MessageRate = MessageRate.OFF
     ros_gps_fix: MessageRate = MessageRate.OFF
     ros_imu: MessageRate = MessageRate.OFF
     version_info: MessageRate = MessageRate.OFF
     event_notification: MessageRate = MessageRate.OFF
     heading_measurement: MessageRate = MessageRate.OFF
+    system_status: MessageRate = MessageRate.OFF
+    raw_imu_output: MessageRate = MessageRate.OFF
+    raw_wheel_speed_output: MessageRate = MessageRate.OFF
+    raw_vehicle_speed_output: MessageRate = MessageRate.OFF
 
     @staticmethod
     def serialize(val: 'FusionEngineMessageRates') -> bytes:
@@ -442,18 +449,22 @@ _FusionEngineMessageRatesRawConstruct = Struct(
     "pose_aux" / AutoEnum(Int8ul, MessageRate),
     "calibration_status" / AutoEnum(Int8ul, MessageRate),
     "relative_enu_position" / AutoEnum(Int8ul, MessageRate),
-    "imu_measurement" / AutoEnum(Int8ul, MessageRate),
-    "wheel_speed_measurement" / AutoEnum(Int8ul, MessageRate),
-    "vehicle_speed_measurement" / AutoEnum(Int8ul, MessageRate),
-    "wheel_tick_measurement" / AutoEnum(Int8ul, MessageRate),
-    "vehicle_tick_measurement" / AutoEnum(Int8ul, MessageRate),
+    "imu_output" / AutoEnum(Int8ul, MessageRate),
+    "wheel_speed_output" / AutoEnum(Int8ul, MessageRate),
+    "vehicle_speed_output" / AutoEnum(Int8ul, MessageRate),
+    "raw_wheel_tick_output" / AutoEnum(Int8ul, MessageRate),
+    "raw_vehicle_tick_output" / AutoEnum(Int8ul, MessageRate),
     "ros_pose" / AutoEnum(Int8ul, MessageRate),
     "ros_gps_fix" / AutoEnum(Int8ul, MessageRate),
     "ros_imu" / AutoEnum(Int8ul, MessageRate),
     "version_info" / AutoEnum(Int8ul, MessageRate),
     "event_notification" / AutoEnum(Int8ul, MessageRate),
     "heading_measurement" / AutoEnum(Int8ul, MessageRate),
-    Padding(23)
+    "system_status" / AutoEnum(Int8ul, MessageRate),
+    "raw_imu_output" / AutoEnum(Int8ul, MessageRate),
+    "raw_wheel_speed_output" / AutoEnum(Int8ul, MessageRate),
+    "raw_vehicle_speed_output" / AutoEnum(Int8ul, MessageRate),
+    Padding(19)
 )
 FusionEngineMessageRatesConstruct = DataClassAdapter(FusionEngineMessageRates, _FusionEngineMessageRatesRawConstruct)
 
@@ -547,27 +558,42 @@ ProtocolMessageRatesConstruct = DataClassAdapter(ProtocolMessageRates, _Protocol
 
 
 @dataclass
-class OutputInterfaceConfig:
-    serial_ports: List[SerialConfig] = field(default_factory=list)
-    uart1_output_rates: ProtocolMessageRates = field(default_factory=lambda:ProtocolMessageRates())
-    uart2_output_rates: ProtocolMessageRates = field(default_factory=lambda:ProtocolMessageRates())
+class SerialPortConfig:
+    interface_config: SerialInterfaceConfig = field(default_factory=lambda:SerialInterfaceConfig())
+    output_rates: ProtocolMessageRates = field(default_factory=lambda:ProtocolMessageRates())
 
     @staticmethod
-    def serialize(val: 'OutputInterfaceConfig') -> bytes:
-        return OutputInterfaceConfigConstruct.build(val)
+    def serialize(val: 'SerialPortConfig') -> bytes:
+        return SerialPortConfigConstruct.build(val)
 
     @staticmethod
-    def deserialize(data: bytes) -> 'OutputInterfaceConfig':
-        return OutputInterfaceConfigConstruct.parse(data)
+    def deserialize(data: bytes) -> 'SerialPortConfig':
+        return SerialPortConfigConstruct.parse(data)
 
-_OutputInterfaceConfigRawConstruct = Struct(
-    Padding(260),
-    "serial_ports" / FrozenVectorAdapter(2, SerialConfigConstruct),
-    "uart1_output_rates" / ProtocolMessageRatesConstruct,
-    "uart2_output_rates" / ProtocolMessageRatesConstruct,
-    Padding(20)
+_SerialPortConfigRawConstruct = Struct(
+    "interface_config" / SerialInterfaceConfigConstruct,
+    "output_rates" / ProtocolMessageRatesConstruct
 )
-OutputInterfaceConfigConstruct = DataClassAdapter(OutputInterfaceConfig, _OutputInterfaceConfigRawConstruct)
+SerialPortConfigConstruct = DataClassAdapter(SerialPortConfig, _SerialPortConfigRawConstruct)
+
+
+@dataclass
+class CommInterfacesConfig:
+    serial_ports: List[SerialPortConfig] = field(default_factory=lambda:[SerialPortConfig(), SerialPortConfig()])
+
+    @staticmethod
+    def serialize(val: 'CommInterfacesConfig') -> bytes:
+        return CommInterfacesConfigConstruct.build(val)
+
+    @staticmethod
+    def deserialize(data: bytes) -> 'CommInterfacesConfig':
+        return CommInterfacesConfigConstruct.parse(data)
+
+_CommInterfacesConfigRawConstruct = Struct(
+    "serial_ports" / Array(2, SerialPortConfigConstruct),
+    Padding(284)
+)
+CommInterfacesConfigConstruct = DataClassAdapter(CommInterfacesConfig, _CommInterfacesConfigRawConstruct)
 
 
 @dataclass
@@ -596,9 +622,9 @@ class UserConfig:
     sensors: SensorExtrinsicsConfig = field(default_factory=lambda:SensorExtrinsicsConfig())
     vehicle: VehicleConfig = field(default_factory=lambda:VehicleConfig())
     navigation: NavigationConfig = field(default_factory=lambda:NavigationConfig())
-    output_interfaces: OutputInterfaceConfig = field(default_factory=lambda:OutputInterfaceConfig())
+    comm_interfaces: CommInterfacesConfig = field(default_factory=lambda:CommInterfacesConfig())
     system_controls: SystemControlConfig = field(default_factory=lambda:SystemControlConfig())
-    VERSION: str = "5.0"
+    VERSION: str = "6.2"
 
     @staticmethod
     def serialize(val: 'UserConfig') -> bytes:
@@ -620,16 +646,19 @@ class UserConfig:
         Ver 4.4 - Update to force enable heading msg on current devices. 2/8/2023
         Ver 4.5 - Update to enable system profiling context. 2/14/2023
         Ver 5.0 - Major change to drop unused features and reserve space. 2/22/2023
+        Ver 6.0 - Major refactor of IO interfaces. 3/10/2023
+        Ver 6.1 - Added UTC leap second manual override. 3/21/2023
+        Ver 6.2 - Added week rollover manual override. 3/24/2023
 
         """
-        return 5, 0
+        return 6, 2
 
 _UserConfigRawConstruct = Struct(
     "profiling" / ProfilingConfigConstruct,
     "sensors" / SensorExtrinsicsConfigConstruct,
     "vehicle" / VehicleConfigConstruct,
     "navigation" / NavigationConfigConstruct,
-    "output_interfaces" / OutputInterfaceConfigConstruct,
+    "comm_interfaces" / CommInterfacesConfigConstruct,
     "system_controls" / SystemControlConfigConstruct,
     Padding(248),
     Padding(224)
