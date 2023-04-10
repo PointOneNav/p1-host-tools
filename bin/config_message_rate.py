@@ -11,7 +11,7 @@ import fnmatch
 from fusion_engine_client.messages import *
 
 from p1_runner import trace as logging
-from p1_runner.device_interface import DeviceInterface
+from p1_runner.device_interface import DeviceInterface, RESPONSE_TIMEOUT
 
 logger = logging.getLogger('point_one.config_tool')
 
@@ -43,6 +43,10 @@ MESSAGE_RATE_MAP = {
     '500ms': MessageRate.INTERVAL_500_MS,
     '200ms': MessageRate.INTERVAL_200_MS,
     '100ms': MessageRate.INTERVAL_100_MS,
+    '1hz': MessageRate.INTERVAL_1_S,
+    '2hz': MessageRate.INTERVAL_500_MS,
+    '5hz': MessageRate.INTERVAL_200_MS,
+    '10hz': MessageRate.INTERVAL_100_MS,
     'default': MessageRate.DEFAULT,
 }
 
@@ -105,7 +109,7 @@ def _search_message_ids(name_to_message_id: Dict[str, int], query: str) -> List[
         if len(matches) > 1:
             exact_matches = []
             for k in matches:
-                if re.sub(r'(message|measurement)$', '', k) == lower_name:
+                if re.sub(r'(message|measurement|input|output)$', '', k) == lower_name:
                     exact_matches.append(k)
 
             if len(exact_matches) == 1:
@@ -135,7 +139,8 @@ def _get_message_ids(protocol: ProtocolType, query: str) -> List[int]:
         nmea_type_by_name = {str(t): t for t in NmeaMessageType}
         message_ids = _search_message_ids(nmea_type_by_name, query)
     elif protocol == ProtocolType.FUSION_ENGINE:
-        message_ids = _search_message_ids(message_type_by_name, query)
+        types = {k: v for k, v in message_type_by_name.items() if not k.endswith('Input')}
+        message_ids = _search_message_ids(types, query)
     else:
         message_ids = [int(s.strip()) for s in query.split(',')]
 
@@ -176,7 +181,9 @@ def message_rate_args_to_output_interface(cls, args, config_interface):
         message_id = args.message_id
         rate = args.rate
 
-    (interface, protocol, message_ids) = parse_message_rate_args(interface=args.param.split('_')[0],
+    interface = args.param if 'interface_config_type' in args else args.param.split('_')[0]
+
+    (interface, protocol, message_ids) = parse_message_rate_args(interface=interface,
                                                                  protocol=protocol, message_id=message_id)
 
     try:
@@ -208,7 +215,7 @@ def read_message_rate_config(config_interface: DeviceInterface,
 
         # Check if the response timed out.
         if resp is None:
-            logger.error('Response timed out after %d seconds.' % config_interface.timeout)
+            logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
             return None
 
         # Now print the response.
@@ -249,7 +256,7 @@ def get_current_interface(config_interface: DeviceInterface) -> Optional[Interfa
     if isinstance(resp, MessageRateResponse):
         return resp.output_interface
     else:
-        logger.error('Response timed out after %d seconds.' % config_interface.timeout)
+        logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
         return None
 
 
@@ -274,7 +281,7 @@ def apply_message_rate_config(config_interface: DeviceInterface,
         config_interface.set_message_rate([interface, protocol, message_id, rate, flags])
         resp = config_interface.wait_for_message(CommandResponseMessage.MESSAGE_TYPE)
         if resp is None:
-            logger.error('Response timed out after %d seconds.' % config_interface.timeout)
+            logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
             return False
         elif resp.response != Response.OK:
             logger.error('Apply command rejected: %s (%d)' % (str(resp.response), int(resp.response)))
@@ -304,8 +311,7 @@ def copy_message_config(config_interface: DeviceInterface,
                                           config_object=[source, ProtocolType.ALL, ALL_MESSAGES_ID])
         read_resp = config_interface.wait_for_message(MessageRateResponse.MESSAGE_TYPE)
         if read_resp is None:
-            logger.error('Timed out waiting for message rate query after %d seconds.' %
-                         config_interface.timeout)
+            logger.error('Timed out waiting for message rate query after %d seconds.' % RESPONSE_TIMEOUT)
             return False
         elif read_resp.response != Response.OK:
             logger.error('Error querying message rates: %s (%d)' % (str(read_resp.response), int(read_resp.response)))
@@ -316,7 +322,7 @@ def copy_message_config(config_interface: DeviceInterface,
             config_interface.set_message_rate([dest, rate.protocol, rate.message_id, rate.configured_rate, 0x0])
             resp = config_interface.wait_for_message(CommandResponseMessage.MESSAGE_TYPE)
             if resp is None:
-                logger.error('Timed out setting message rate after %d seconds.' % config_interface.timeout)
+                logger.error('Timed out setting message rate after %d seconds.' % RESPONSE_TIMEOUT)
                 return False
             elif resp.response != Response.OK:
                 logger.error('Error setting message rate: %s (%d)' % (str(resp.response), int(resp.response)))
@@ -331,8 +337,7 @@ def copy_message_config(config_interface: DeviceInterface,
             config_interface.get_config(source=ConfigurationSource.ACTIVE, config_type=source_diag_type.GetType())
             resp = config_interface.wait_for_message(ConfigResponseMessage.MESSAGE_TYPE)
             if resp is None:
-                logger.error('Timed out waiting for diagnostics config query after %d seconds.' %
-                             config_interface.timeout)
+                logger.error('Timed out waiting for diagnostics config query after %d seconds.' % RESPONSE_TIMEOUT)
                 return False
             elif resp.response != Response.OK:
                 logger.error('Error querying diagnostics state: %s (%d)' % (str(resp.response), int(resp.response)))
@@ -342,8 +347,7 @@ def copy_message_config(config_interface: DeviceInterface,
             config_interface.set_config(dest_diag_type(resp.config_object.value))
             resp = config_interface.wait_for_message(ConfigResponseMessage.MESSAGE_TYPE)
             if resp is None:
-                logger.error('Timed out waiting for diagnostics set request after %d seconds.' %
-                             config_interface.timeout)
+                logger.error('Timed out waiting for diagnostics set request after %d seconds.' % RESPONSE_TIMEOUT)
                 return False
             elif resp.response != Response.OK:
                 logger.error('Error setting diagnostics state: %s (%d)' % (str(resp.response), int(resp.response)))
@@ -358,7 +362,7 @@ def copy_message_config(config_interface: DeviceInterface,
         config_interface.send_save()
         resp = config_interface.wait_for_message(CommandResponseMessage.MESSAGE_TYPE)
         if resp is None:
-            logger.error('Timed out saving settings after %d seconds.' % config_interface.timeout)
+            logger.error('Timed out saving settings after %d seconds.' % RESPONSE_TIMEOUT)
             return False
         elif resp.response != Response.OK:
             logger.error('Save command rejected: %s (%d)' % (str(resp.response), int(resp.response)))

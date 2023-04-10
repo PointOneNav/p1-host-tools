@@ -1,11 +1,7 @@
 #!/usr/bin/env python3
 
-from typing import Dict, List
-
-import argparse
 from datetime import datetime
 import os
-import re
 import subprocess
 import sys
 
@@ -15,7 +11,9 @@ from fusion_engine_client.messages import *
 from fusion_engine_client.utils.log import DEFAULT_LOG_BASE_DIR
 
 # If this running in the development repo, try updating the UserConfig definitions.
-update_user_config_script = os.path.normpath(os.path.join(os.path.dirname(__file__), '../../scripts/update_user_config_loader.sh'))
+update_user_config_script = os.path.normpath(
+    os.path.join(os.path.dirname(__file__),
+                 '../../scripts/update_user_config_loader.sh'))
 if os.path.exists(update_user_config_script):
     subprocess.run(update_user_config_script)
 
@@ -302,12 +300,18 @@ def _args_to_enabled_gnss_frequencies(cls, args, config_interface):
     return EnabledGNSSFrequencyBandsConfig(mask)
 
 
-def _args_to_baud(cls, args, config_interface):
-    return cls(int(args.baud_rate))
+def _args_to_int_gen(arg_name):
+    def _func(cls, args, config_interface):
+        return cls(int(getattr(args, arg_name)))
+    return _func
 
 
 def _args_to_bool(cls, args, config_interface):
     return cls(args.enabled)
+
+
+def _args_to_interface_config(cls, args, config_interface):
+    return []
 
 
 PARAM_DEFINITION = {
@@ -318,6 +322,8 @@ PARAM_DEFINITION = {
 
     'gnss_systems':  {'format': EnabledGNSSSystemsConfig, 'arg_parse': _args_to_enabled_gnss_systems},
     'gnss_frequencies':  {'format': EnabledGNSSFrequencyBandsConfig, 'arg_parse': _args_to_enabled_gnss_frequencies},
+    'leap_second': {'format': LeapSecondConfig, 'arg_parse': _args_to_int_gen('value')},
+    'gps_week_rollover': {'format': GPSWeekRolloverConfig, 'arg_parse': _args_to_int_gen('value')},
 
     'vehicle_details': {'format': VehicleDetailsConfig, 'arg_parse': _args_to_vehicle_details},
     'wheel_config': {'format': WheelConfig, 'arg_parse': _args_to_wheel_config},
@@ -325,13 +331,19 @@ PARAM_DEFINITION = {
 
     'watchdog_enabled': {'format': WatchdogTimerEnabled, 'arg_parse': _args_to_bool},
 
-    'uart1_baud': {'format': Uart1BaudConfig, 'arg_parse': _args_to_baud},
-    'uart2_baud': {'format': Uart2BaudConfig, 'arg_parse': _args_to_baud},
+    'uart1_baud': {'format': Uart1BaudConfig, 'arg_parse': _args_to_int_gen('baud_rate')},
+    'uart2_baud': {'format': Uart2BaudConfig, 'arg_parse': _args_to_int_gen('baud_rate')},
     'uart1_diagnostics_enabled': {'format': Uart1DiagnosticMessagesEnabled, 'arg_parse': _args_to_bool},
     'uart2_diagnostics_enabled': {'format': Uart2DiagnosticMessagesEnabled, 'arg_parse': _args_to_bool},
     'current_message_rate': {'format': list, 'arg_parse': message_rate_args_to_output_interface},
     'uart1_message_rate': {'format': list, 'arg_parse': message_rate_args_to_output_interface},
     'uart2_message_rate': {'format': list, 'arg_parse': message_rate_args_to_output_interface},
+}
+
+INTERFACE_PARAM_DEFINITION = {
+    'baud_rate': {'format': InterfaceBaudRateConfig, 'arg_parse': _args_to_int_gen('baud_rate')},
+    'diagnostics_enabled': {'format': InterfaceDiagnosticMessagesEnabled, 'arg_parse': _args_to_bool},
+    'message_rate': {'format': list, 'arg_parse': message_rate_args_to_output_interface},
 }
 
 _cocom_type = {str(e).lower(): e for e in CoComType}
@@ -349,9 +361,14 @@ def read_config(config_interface: DeviceInterface, args):
 
     # If the user did not specify a parameter to read, read all configuration parameters.
     read_all = args.param is None
+    interface = None
     if read_all:
         params = PARAM_DEFINITION.copy()
         del params['current_message_rate']
+    # If the config targets an interface read its parameters.
+    elif 'interface_config_type' in args:
+        params = {args.interface_config_type: INTERFACE_PARAM_DEFINITION[args.interface_config_type]}
+        interface = args.param
     # Otherwise, read a single parameter.
     else:
         params = {args.param: PARAM_DEFINITION[args.param]}
@@ -367,11 +384,17 @@ def read_config(config_interface: DeviceInterface, args):
             logger.info('  %s: No read defined', key)
             continue
 
-        # If this is a uartN_message_rate query, we handle it differently. Message rate queries are done via
+        # If this is a message_rate query, we handle it differently. Message rate queries are done via
         # GetMessageRate requests, specifying the interface, protocol, and message ID. They do not use GetConfig.
-        if key.endswith('_message_rate'):
+        if key.endswith('message_rate'):
+            # If this is a uartN_message_rate request, get the interface key.
+            if interface is None:
+                selected_interface = key.split('_')[0]
+            else:
+                selected_interface = interface
+
             ret = read_message_rate_config(config_interface=config_interface, source=source,
-                                           interface=key.split('_')[0], protocol=getattr(args, 'protocol', 'all'),
+                                           interface=selected_interface, protocol=getattr(args, 'protocol', 'all'),
                                            message_id=getattr(args, 'message_id', 'all'))
             if not ret:
                 return None
@@ -380,8 +403,13 @@ def read_config(config_interface: DeviceInterface, args):
         # Otherwise, issue a GetConfig for the payload type corresponding with this parameter.
         else:
             format = definition['format']
-            type = format.GetType()
-            config_interface.get_config(source, type)
+            if interface:
+                subtype = format.GetSubtype()
+                interface_id = INTERFACE_MAP[interface]
+                config_interface.get_config(source, InterfaceConfigSubmessage(interface_id, subtype))
+            else:
+                type = format.GetType()
+                config_interface.get_config(source, type)
             resp = config_interface.wait_for_message(ConfigResponseMessage.MESSAGE_TYPE)
 
             # Check if the response timed out.
@@ -390,34 +418,109 @@ def read_config(config_interface: DeviceInterface, args):
                 return None
 
             # Now print the response.
+            interface_str = f'{interface} ' if interface else ''
             if resp.response != Response.OK:
-                logger.error('  %s: %s (%d)' % (key, str(resp.response), int(resp.response)))
+                logger.error('  %s%s: %s (%d)' % (interface_str, key, str(resp.response), int(resp.response)))
             else:
                 modified_str = ''
                 if resp.flags & ConfigResponseMessage.FLAG_ACTIVE_DIFFERS_FROM_SAVED:
                     modified_str = '(active differs from saved)'
-                logger.info('  %s: %s %s', key, str(resp.config_object), modified_str)
+                logger.info('  %s%s: %s %s', interface_str, key, str(resp.config_object), modified_str)
 
             config_responses.append(resp)
 
     return config_responses
 
 
+def revert_config(config_interface: DeviceInterface, args):
+    logger.debug('Revert configuration.')
+
+    # If the user did not specify a parameter to read, revert all configuration parameters.
+    revert_all = args.param is None
+    interface = None
+    if revert_all:
+        params = PARAM_DEFINITION.copy()
+        del params['current_message_rate']
+    # If the config targets an interface read its parameters.
+    elif 'interface_config_type' in args:
+        params = {args.interface_config_type: INTERFACE_PARAM_DEFINITION[args.interface_config_type]}
+        interface = args.param
+    # Otherwise, read a single parameter.
+    else:
+        params = {args.param: PARAM_DEFINITION[args.param]}
+
+    # For each listed parameter, issue a SetConfig request to the device and wait for the response.
+    for key, definition in params.items():
+        # If this is a message_rate query, we handle it differently. Message rate changes are done via
+        # SetMessageRate requests, specifying the interface, protocol, and message ID. They do not use SetConfig.
+        if key.endswith('message_rate'):
+            # If this is a uartN_message_rate request, get the interface key.
+            if interface is None:
+                selected_interface = key.split('_')[0]
+            else:
+                selected_interface = interface
+
+            flags = 0
+            if args.save:
+                flags |= SetMessageRate.FLAG_APPLY_AND_SAVE
+            if args.include_disabled:
+                flags |= SetMessageRate.FLAG_INCLUDE_DISABLED_MESSAGES
+
+            ret = apply_message_rate_config(
+                config_interface=config_interface, interface=selected_interface,
+                rate=MessageRate.DEFAULT, protocol=getattr(args, 'protocol', 'all'),
+                message_id=getattr(args, 'message_id', 'all'), flags=flags)
+            if not ret:
+                return False
+        # Otherwise, issue a GetConfig for the payload type corresponding with this parameter.
+        else:
+            format = definition['format']
+            interface_id = INTERFACE_MAP[interface] if interface else None
+            config_interface.set_config(format(), args.save, revert=True, interface=interface_id)
+
+            resp = config_interface.wait_for_message(CommandResponseMessage.MESSAGE_TYPE)
+
+            # Check if the response timed out.
+            if resp is None:
+                logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
+                return None
+
+            # Now print the response.
+            interface_str = f'{interface} ' if interface else ''
+            if resp.response != Response.OK:
+                logger.error('  %s%s: %s (%d)' % (interface_str, key, str(resp.response), int(resp.response)))
+                return False
+
+        logger.info('  %s: reverted', key)
+
+    return True
+
+
 def apply_config(config_interface: DeviceInterface, args):
-    definition = PARAM_DEFINITION[args.param]
+    # If the config targets an interface read its parameters.
+    interface = None
+    if 'interface_config_type' in args:
+        definition = INTERFACE_PARAM_DEFINITION[args.interface_config_type]
+        interface = args.param
+        param = args.interface_config_type
+    else:
+        definition = PARAM_DEFINITION[args.param]
+        param = args.param
+
     format = definition['format']
     arg_parse = definition['arg_parse']
     config_object = arg_parse(cls=format, args=args, config_interface=config_interface)
 
     logger.debug('Applying config parameter update.')
-    if args.param.endswith('_message_rate'):
+    if param.endswith('message_rate'):
         interface, protocol, message_ids, rate, flags = config_object
         if not apply_message_rate_config(config_interface=config_interface,
                                          interface=interface, protocol=protocol, message_id=message_ids,
                                          rate=rate, flags=flags):
             return False
     else:
-        config_interface.set_config(config_object, args.save)
+        interface_id = INTERFACE_MAP[interface] if interface else None
+        config_interface.set_config(config_object, save=args.save, interface=interface_id)
         resp = config_interface.wait_for_message(CommandResponseMessage.MESSAGE_TYPE)
         if resp is None:
             logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
@@ -503,37 +606,48 @@ def query_nmea_versions(config_interface: DeviceInterface, args):
 
 
 def request_reset(config_interface: DeviceInterface, args):
-    if args.type == 'factory':
-        logger.info('Issuing factory reset request.')
-        mask = ResetRequest.FACTORY_RESET
-    elif args.type == 'hot':
-        logger.info('Issuing hot start request.')
-        mask = ResetRequest.HOT_START
-    elif args.type == 'warm':
-        logger.info('Issuing warm start request.')
-        mask = ResetRequest.WARM_START
-    elif args.type == 'cold':
-        logger.info('Issuing cold start request.')
-        mask = ResetRequest.COLD_START
-    elif args.type == 'reboot':
-        logger.info('Issuing reboot request.')
-        mask = ResetRequest.REBOOT_NAVIGATION_PROCESSOR
-    elif args.type == 'calibration':
-        logger.info('Issuing calibration reset request.')
-        mask = (ResetRequest.RESET_CALIBRATION_DATA |
-                ResetRequest.RESET_NAVIGATION_ENGINE_DATA)
-    elif args.type == 'config':
-        logger.info('Issuing user configuration reset request. This may reset the device calibration.')
-        mask = ResetRequest.RESET_CONFIG
-    elif args.type == 'nav_engine':
-        logger.info('Issuing navigation engine state reset request.')
-        mask = ResetRequest.RESET_NAVIGATION_ENGINE_DATA
-    elif args.type == 'position':
-        logger.info('Issuing position reset request.')
-        mask = ResetRequest.RESET_POSITION_DATA
-    else:
-        logger.error('Unrecognized reset type.')
-        return False
+    mask = 0
+    for reset_type in args.type:
+        if reset_type == 'factory':
+            logger.info('Issuing factory reset request.')
+            mask |= ResetRequest.FACTORY_RESET
+        elif reset_type == 'hot':
+            logger.info('Issuing hot start request.')
+            mask |= ResetRequest.HOT_START
+        elif reset_type == 'warm':
+            logger.info('Issuing warm start request.')
+            mask |= ResetRequest.WARM_START
+        elif reset_type == 'pvt':
+            logger.info('Issuing a PVT reset request.')
+            mask |= ResetRequest.PVT_RESET
+        elif reset_type == 'diag':
+            logger.info('Issuing a diagnostic logging reset request.')
+            mask |= ResetRequest.DIAGNOSTIC_LOG_RESET
+        elif reset_type == 'cold':
+            logger.info('Issuing cold start request.')
+            mask |= ResetRequest.COLD_START
+        elif reset_type == 'reboot':
+            logger.info('Issuing reboot request.')
+            mask |= ResetRequest.REBOOT_NAVIGATION_PROCESSOR
+        elif reset_type == 'reboot_gnss':
+            logger.info('Issuing GNSS receiver reboot request.')
+            mask |= ResetRequest.REBOOT_GNSS_MEASUREMENT_ENGINE
+        elif reset_type == 'calibration':
+            logger.info('Issuing calibration reset request.')
+            mask |= (ResetRequest.RESET_CALIBRATION_DATA |
+                     ResetRequest.RESET_NAVIGATION_ENGINE_DATA)
+        elif reset_type == 'config':
+            logger.info('Issuing user configuration reset request. This may reset the device calibration.')
+            mask |= ResetRequest.RESET_CONFIG
+        elif reset_type == 'nav_engine':
+            logger.info('Issuing navigation engine state reset request.')
+            mask |= ResetRequest.RESET_NAVIGATION_ENGINE_DATA
+        elif reset_type == 'position':
+            logger.info('Issuing position reset request.')
+            mask |= ResetRequest.RESET_POSITION_DATA
+        else:
+            logger.error("Unrecognized reset type '%s'." % reset_type)
+            return False
 
     config_interface.send_message(ResetRequest(mask))
 
@@ -666,8 +780,6 @@ def request_import(config_interface: DeviceInterface, args):
             logger.info('Updating %s %s data on device.', source.name.lower(), import_cmd.data_type.name)
             import_cmd.source = source
 
-            # Clear the input buffer to avoid missing the response.
-            config_interface.serial_out.reset_input_buffer()
             config_interface.send_message(import_cmd)
 
             resp = config_interface.wait_for_message(CommandResponseMessage.MESSAGE_TYPE)
@@ -730,7 +842,7 @@ def get_port_id(config_interface: DeviceInterface, args):
     interface = get_current_interface(config_interface)
     if interface is not None:
         name = None
-        for k, v  in INTERFACE_MAP.items():
+        for k, v in INTERFACE_MAP.items():
             if v == interface:
                 name = k
                 break
@@ -777,25 +889,25 @@ Change the output lever arm, and save the new value immediately.
     %(command)s apply --save output 0 0.4 1
 
 Change the UART1 baud rate, and save the new value immediately.
-    %(command)s apply --save uart1_baud 115200
+    %(command)s apply --save uart1 baud 115200
 
 Change the UART1 output rate to 1 Hz for all messages (change not saved).
-    %(command)s apply uart1_message_rate 1s
+    %(command)s apply uart1 message_rate 1s
 
 Change the UART1 output rate to 1 Hz for all NMEA messages (change not saved).
-    %(command)s apply uart1_message_rate nmea 1s
+    %(command)s apply uart1 message_rate nmea 1s
 
 Enable _all_ FusionEngine messages on UART1 with a 1 Hz rate (change not saved).
-    %(command)s apply uart1_message_rate fe 1s --include-disabled
+    %(command)s apply uart1 message_rate fe 1s --include-disabled
 
 Read the current configuration for all message rates on UART2.
-    %(command)s read uart2_message_rate
+    %(command)s read uart2 message_rate
 
 Read the current configuration for all FusionEngine message rates on UART2.
-    %(command)s read uart2_message_rate fe
+    %(command)s read uart2 message_rate fe
 
 Read the current configuration for the NMEA GGA message rate on UART2.
-    %(command)s read uart2_message_rate nmea gga
+    %(command)s read uart2 message_rate nmea gga
 
 Disable GNSS for dead reckoning performance testing.
     %(command)s fault gnss off
@@ -817,10 +929,17 @@ Export the device's user configuration to a local file.
         dest='command',
         help='The command to be run.')
 
+    # Parent parser used to define arguments for both read and revert commands below.
+    param_parser_parent = ArgumentParser(add_help=False)
+    param_parser = param_parser_parent.add_subparsers(
+        dest='param',
+        help="The name of the parameters to be used. Leave blank to use all parameters.")
+
     # config_tool.py read
     help = 'Read the value of the specified parameter or set of parameters.'
     read_parser = command_subparsers.add_parser(
         'read',
+        parents=[param_parser_parent],
         help=help,
         description="""\
 %s
@@ -831,9 +950,9 @@ Example usage:
   config_tool.py read
   config_tool.py read --type=saved
   config_tool.py read gnss
-  config_tool.py read uart1_message_rate fe
-  config_tool.py read uart1_message_rate fe pose
-  config_tool.py read uart1_message_rate fe gnss*
+  config_tool.py read uart1 message_rate fe
+  config_tool.py read uart1 message_rate fe pose
+  config_tool.py read uart1 message_rate fe gnss*
 """ % help)
 
     read_parser.add_argument(
@@ -842,9 +961,31 @@ Example usage:
              "- active - Read the settings currently in use by the device\n"
              "- saved - Read the values saved to persistent storage, which will be restored on the next reboot\n")
 
-    read_param_parser = read_parser.add_subparsers(
-        dest='param',
-        help="The name of the parameter to be queried. Leave blank to query all parameters.")
+    # config_tool.py revert
+    help = 'Revert the value of the specified parameter or set of parameters back to its default value.'
+    revert_parser = command_subparsers.add_parser(
+        'revert',
+        parents=[param_parser_parent],
+        help=help,
+        description="""\
+%s
+
+If no parameter name is specified, revert the entire device configuration.
+
+Example usage:
+  config_tool.py revert
+  config_tool.py revert gnss
+  config_tool.py revert uart1 message_rate fe
+  config_tool.py revert uart1 message_rate fe pose
+  config_tool.py revert uart1 message_rate fe gnss*
+""" % help)
+
+    revert_parser.add_argument(
+        '-s', '--save', action=ExtendedBooleanAction,
+        help="If set, save the new configuration to persistent storage.")
+
+    revert_parser.add_argument('-f', '--include-disabled', action=ExtendedBooleanAction,
+                               help='When reverting multiple messages, include the ones that are off.')
 
     # config_tool.py apply
     help = 'Change the value of the specified parameter, and optionally save the new value to persistent storage.'
@@ -872,21 +1013,21 @@ example:
 
     # config_tool.py apply -- lever arms and device orientation
     help = 'The GNSS antenna lever arm (in meters).'
-    read_param_parser.add_parser('gnss', help=help, description=help)
+    param_parser.add_parser('gnss', help=help, description=help)
     gnss_parser = apply_param_parser.add_parser('gnss', help=help, description=help)
     gnss_parser.add_argument('x', type=float, help='The X offset with respect to the vehicle body (in meters).')
     gnss_parser.add_argument('y', type=float, help='The Y offset with respect to the vehicle body (in meters).')
     gnss_parser.add_argument('z', type=float, help='The Z offset with respect to the vehicle body (in meters).')
 
     help = 'The device (IMU) lever arm (in meters).'
-    read_param_parser.add_parser('device', help=help, description=help)
+    param_parser.add_parser('device', help=help, description=help)
     gnss_parser = apply_param_parser.add_parser('device', help=help, description=help)
     gnss_parser.add_argument('x', type=float, help='The X offset with respect to the vehicle body (in meters).')
     gnss_parser.add_argument('y', type=float, help='The Y offset with respect to the vehicle body (in meters).')
     gnss_parser.add_argument('z', type=float, help='The Z offset with respect to the vehicle body (in meters).')
 
     help = 'The location of the desired output location with respect to the vehicle body frame.'
-    read_param_parser.add_parser('output', help=help, description=help)
+    param_parser.add_parser('output', help=help, description=help)
     gnss_parser = apply_param_parser.add_parser('output', help=help, description=help)
     gnss_parser.add_argument('x', type=float, help='The X offset with respect to the vehicle body (in meters).')
     gnss_parser.add_argument('y', type=float, help='The Y offset with respect to the vehicle body (in meters).')
@@ -894,7 +1035,7 @@ example:
 
     help = 'The orientation of the device (IMU) within the vehicle, specified using the directions of the device +X ' \
            'and +Z axes relative to the vehicle body axes (+X = forward, +Y = left, +Z = up).'
-    read_param_parser.add_parser('orientation', help=help, description=help)
+    param_parser.add_parser('orientation', help=help, description=help)
     orientation_parser = apply_param_parser.add_parser('orientation', help=help, description=help)
     orientation_parser.add_argument('x', choices=_orientation_map.keys(),
                                     help='The orientation of the IMU +X axis relative to the vehicle body axes.')
@@ -903,7 +1044,7 @@ example:
 
     # config_tool.py apply -- enabled GNSS systems/frequencies
     help = 'Enable/disable use of the specified GNSS systems.'
-    read_param_parser.add_parser('gnss_systems', help=help, description=help)
+    param_parser.add_parser('gnss_systems', help=help, description=help)
     enable_gnss_parser = apply_param_parser.add_parser(
         'gnss_systems',
         help=help, description=help, epilog="""\
@@ -929,7 +1070,7 @@ Enable only GPS and Galileo:
              '- only - Enable only the specified systems, disable all others')
 
     help = 'Enable/disable use of the specified GNSS frequency bands.'
-    read_param_parser.add_parser('gnss_frequencies', help=help, description=help)
+    param_parser.add_parser('gnss_frequencies', help=help, description=help)
     enable_freq_parser = apply_param_parser.add_parser(
         'gnss_frequencies',
         help=help, description=help, epilog="""\
@@ -954,9 +1095,37 @@ Enable only L1 and L5:
              '- off - Disable the specified frequency bands\n'
              '- only - Enable only the specified frequency bands, disable all others')
 
+    help = 'Manually specify the UTC leap second.'
+    param_parser.add_parser('leap_second', help=help, description=help)
+    leap_second_parser = apply_param_parser.add_parser(
+        'leap_second',
+        help=help, description=f"""\
+{help}
+
+The specified value will be used instead of any current or future leap second
+information decoded from the incoming GNSS signals.
+""")
+    leap_second_parser.add_argument(
+        'value',
+        help='The UTC leap second count to use. Set to -1 to disable manual override.')
+
+    help = 'Manually specify the GPS legacy week rollover count.'
+    param_parser.add_parser('gps_week_rollover', help=help, description=help)
+    gps_week_rollover_parser = apply_param_parser.add_parser(
+        'gps_week_rollover',
+        help=help, description=f"""\
+{help}
+
+The specified value will be used instead of any date information available from
+other sources (non-GPS signals, modernized GPS navigation messages, etc.).
+""")
+    gps_week_rollover_parser.add_argument(
+        'value',
+        help='The GPS legacy week rollover count to use. Set to -1 to disable manual override.')
+
     # config_tool.py apply -- vehicle details
     help = 'Set vehicle model and dimensions.'
-    read_param_parser.add_parser('vehicle_details', help=help, description=help)
+    param_parser.add_parser('vehicle_details', help=help, description=help)
     vehicle_details_parser = apply_param_parser.add_parser('vehicle_details', help=help, description="""\
 %s
 
@@ -972,7 +1141,7 @@ Any omitted arguments will retain their previous values.""" % help)
 
     # config_tool.py apply -- wheel speed configuration
     help = 'Configure software wheel speed/tick support.'
-    read_param_parser.add_parser('wheel_config', help=help, description=help)
+    param_parser.add_parser('wheel_config', help=help, description=help)
     wheel_config_parser = apply_param_parser.add_parser('wheel_config', help=help, description=f'''\
 {help}
 
@@ -1009,7 +1178,7 @@ using their existing values.''')
                                           'driving backward.')
 
     help = 'Configure hardware wheel encoder tick support.'
-    read_param_parser.add_parser('hardware_tick_config', help=help, description=help)
+    param_parser.add_parser('hardware_tick_config', help=help, description=help)
     hardware_tick_config_parser = apply_param_parser.add_parser('hardware_tick_config', help=help, description=help)
     hardware_tick_config_parser.add_argument('--tick-mode', help='Indication of whether ticks are being measured.',
                                              choices=_tick_mode_map.keys())
@@ -1021,43 +1190,45 @@ using their existing values.''')
 
     # config_tool.py apply -- output interface/stream control
     help = 'Configure the UART1 serial baud rate.'
-    read_param_parser.add_parser('uart1_baud', help=help, description=help)
+    param_parser.add_parser('uart1_baud', help=help, description=help)
     uart_1_baud_parser = apply_param_parser.add_parser('uart1_baud', help=help, description=help)
     uart_1_baud_parser.add_argument('baud_rate', type=float,
                                     help='The desired baud rate (in bits/second).')
 
     help = 'Configure the UART2 serial baud rate.'
-    read_param_parser.add_parser('uart2_baud', help=help, description=help)
+    param_parser.add_parser('uart2_baud', help=help, description=help)
     uart_2_baud_parser = apply_param_parser.add_parser('uart2_baud', help=help, description=help)
     uart_2_baud_parser.add_argument('baud_rate', type=float,
                                     help='The desired baud rate (in bits/second).')
 
     help = 'Enable/disable output for all diagnostics messages on UART1.'
-    read_param_parser.add_parser('uart1_diagnostics_enabled', help=help, description=help)
+    param_parser.add_parser('uart1_diagnostics_enabled', help=help, description=help)
     uart_1_diagnostics_enabled_parser = apply_param_parser.add_parser(
         'uart1_diagnostics_enabled', help=help, description=help)
     uart_1_diagnostics_enabled_parser.add_argument(
         'enabled', action=ExtendedBooleanAction, help='Enable/disable diagnostic messages.')
 
     help = 'Enable/disable output for all diagnostics messages on UART2.'
-    read_param_parser.add_parser('uart2_diagnostics_enabled', help=help, description=help)
+    param_parser.add_parser('uart2_diagnostics_enabled', help=help, description=help)
     uart_2_diagnostics_enabled_parser = apply_param_parser.add_parser(
         'uart2_diagnostics_enabled', help=help, description=help)
     uart_2_diagnostics_enabled_parser.add_argument(
         'enabled', action=ExtendedBooleanAction, help='Enable/disable diagnostic messages.')
 
     help = 'Enable/disable the watchdog timer reset after fatal errors.'
-    read_param_parser.add_parser('watchdog_enabled', help=help, description=help)
+    param_parser.add_parser('watchdog_enabled', help=help, description=help)
     watchdog_enabled_parser = apply_param_parser.add_parser(
         'watchdog_enabled', help=help, description=help)
     watchdog_enabled_parser.add_argument(
         'enabled', action=ExtendedBooleanAction,
         help='Enable/disable the watchdog timer reset after fatal errors.')
 
-    for interface_name in ['current', 'uart1', 'uart2']:
+    INTERFACES_WITH_EXPLICIT_ENUM = ['current', 'uart1', 'uart2']
+    for interface_name, interface_id in INTERFACE_MAP.items():
         supported_fe_messages = '\n'.join([
             f'  - {message_type_to_class[m].__name__} ({int(m)})'
-            for m in MessageType if m in message_type_to_class
+            for m in MessageType
+            if m in message_type_to_class and not str(m).endswith('INPUT')
         ])
         supported_nmea_messages = '\n'.join([f'  - {m}' for m in NmeaMessageType if m.name != 'INVALID'])
         if interface_name == 'current':
@@ -1065,8 +1236,62 @@ using their existing values.''')
         else:
             port_description = f'serial UART{interface_name[-1]}'
 
+        # config_tool.py read INTERFACE_NAME
+        help = f'Read configuration for {interface_name}.'
+        read_interface_config_parser = param_parser.add_parser(
+            interface_name,
+            help=help,
+            description=help)
 
-        help = f'Query the output rate for a specified message type or protocol on {port_description}.'
+        # config_tool.py apply INTERFACE_NAME
+        help = f'Apply configuration for {interface_name}.'
+        apply_interface_config_parsers = apply_param_parser.add_parser(
+            interface_name,
+            help=help,
+            description=help)
+
+        # config_tool.py read INTERFACE_NAME CONFIG_TYPE
+        read_interface_config_type_parsers = read_interface_config_parser.add_subparsers(
+            dest='interface_config_type', help='The name of the parameter to be read.')
+
+        # config_tool.py apply INTERFACE_NAME CONFIG_TYPE PARAMS
+        apply_interface_config_type_parsers = apply_interface_config_parsers.add_subparsers(
+            dest='interface_config_type',
+            help='The name of the parameter to be modified.')
+
+        # Parent parser for reading interface rates.
+        read_output_rate_parser = ArgumentParser(add_help=False)
+        # Parent parser for applying interface rates.
+        apply_output_rate_parser = ArgumentParser(add_help=False)
+
+        help = """\
+The message protocol name:
+- all - All messages on all protocols for an interface
+- fe, fusion_engine - Point One FusionEngine protocol
+- nmea - NMEA-0183
+- rtcm - RTCM 10403.3"""
+        read_output_rate_parser.add_argument('protocol', metavar="PROTOCOL", nargs='?', default='all', help=help)
+        apply_output_rate_parser.add_argument('protocol', metavar="PROTOCOL", help=help)
+
+        help = 'The message type (name) or ID (integer). Use "all" to request all messages for the specified ' \
+               'protocol. Requests may contain a comma-separated list with multiple message names, or may use ' \
+               'wildcards (*) to match multiple messages by name (e.g., "gnss*" to match GNSSInfo and GNSSSatellite).'
+        read_output_rate_parser.add_argument('message_id', metavar="ID", nargs='?', default='all', help=help)
+        apply_output_rate_parser.add_argument('message_id', metavar="ID", nargs='?', default=None, help=help)
+
+        apply_output_rate_parser.add_argument('rate', metavar="RATE", nargs='?', default=None,
+                                              help='The desired message rate:%s' %
+                                              ''.join(['\n- %s' % n for n in MESSAGE_RATE_MAP]))
+        apply_output_rate_parser.add_argument('-f', '--include-disabled', action=ExtendedBooleanAction,
+                                              help='When setting multiple messages, include the ones that are off.')
+
+        help = f'Query the output rate for a specified message type or protocol.'
+        epilog = f'''\
+FusionEngine message types:
+{supported_fe_messages}
+
+NMEA message types:
+{supported_nmea_messages}'''
         message_rate_description = f'''\
 {help}
 
@@ -1081,25 +1306,29 @@ For FusionEngine messages, you may enter either a numeric message ID, or a
 partial or complete message name (e.g., imu, IMU, IMUMeasurement, or 11000).
 
 Example usage:
-  config_tool.py read uart1_message_rate          # Read all message rates
-  config_tool.py read uart1_message_rate nmea gga # Read NMEA GGA rate
-  config_tool.py read uart1_message_rate nmea gga,rmc # Read NMEA GGA/RMC rates
-  config_tool.py read uart1_message_rate fe       # Read all FusionEngine rates
-  config_tool.py read uart1_message_rate fe imu   # Read FusionEngine IMU rate
-  config_tool.py read uart1_message_rate fe 11000 # Read FusionEngine IMU rate
-  config_tool.py read uart1_message_rate fe gnss* # Read all GNSS message rates'''
-        read_rate_parser = read_param_parser.add_parser(
-            f'{interface_name}_message_rate',
-            help=help,
-            description=message_rate_description,
-            epilog=f'''\
-FusionEngine message types:
-{supported_fe_messages}
+  config_tool.py read {interface_name} message_rate          # Read all message rates
+  config_tool.py read {interface_name} message_rate nmea gga # Read NMEA GGA rate
+  config_tool.py read {interface_name} message_rate nmea gga,rmc # Read NMEA GGA/RMC rates
+  config_tool.py read {interface_name} message_rate fe       # Read all FusionEngine rates
+  config_tool.py read {interface_name} message_rate fe imu   # Read FusionEngine IMU rate
+  config_tool.py read {interface_name} message_rate fe 11000 # Read FusionEngine IMU rate
+  config_tool.py read {interface_name} message_rate fe gnss* # Read all GNSS message rates'''
 
-NMEA message types:
-{supported_nmea_messages}''')
+        if interface_name in INTERFACES_WITH_EXPLICIT_ENUM:
+            # config_tool.py read uartN_message_rate
+            param_parser.add_parser(
+                f'{interface_name}_message_rate',
+                help=help,
+                parents=[read_output_rate_parser],
+                description=message_rate_description,
+                epilog=epilog)
 
-        help = f'Configure the output rate for a specified message type or protocol on {port_description}.'
+        # config_tool.py read INTERFACE_NAME message_rate
+        read_interface_config_type_parsers.add_parser(
+            'message_rate', parents=[read_output_rate_parser],
+            help=help, description=message_rate_description, epilog=epilog)
+
+        help = f'Configure the output rate for a specified message type or protocol.'
         message_rate_description = f'''\
 {help}
 
@@ -1122,45 +1351,50 @@ enabling messages when trying to change the rate of the current output. If you
 wish to enable all messages, use the --include-disabled argument.
 
 Example usage:
-  config_tool.py apply {interface_name}_message_rate nmea 1s
-  config_tool.py apply {interface_name}_message_rate nmea gga 1s
-  config_tool.py apply {interface_name}_message_rate nmea gga,rmc 1s
-  config_tool.py apply {interface_name}_message_rate fe 1s
-  config_tool.py apply {interface_name}_message_rate fe 1s --include-disabled
-  config_tool.py apply {interface_name}_message_rate fe gnss* 1s
-  config_tool.py apply {interface_name}_message_rate fe imu on_change
-  config_tool.py apply {interface_name}_message_rate fe 11000 on_change'''
-        message_output_rate_parser = apply_param_parser.add_parser(
-            f'{interface_name}_message_rate',
-            help=help,
-            description=message_rate_description,
-            epilog=f'''\
+  config_tool.py apply {interface_name} message_rate nmea 1s
+  config_tool.py apply {interface_name} message_rate nmea gga 1s
+  config_tool.py apply {interface_name} message_rate nmea gga,rmc 1s
+  config_tool.py apply {interface_name} message_rate fe 1s
+  config_tool.py apply {interface_name} message_rate fe 1s --include-disabled
+  config_tool.py apply {interface_name} message_rate fe gnss* 1s
+  config_tool.py apply {interface_name} message_rate fe imu on_change
+  config_tool.py apply {interface_name} message_rate fe 11000 on_change'''
+        epilog = f'''\
 FusionEngine message types:
 {supported_fe_messages}
 
 NMEA message types:
-{supported_nmea_messages}''')
+{supported_nmea_messages}'''
 
-        help = """\
-The message protocol name:
-- all - All messages on all protocols for an interface
-- fe, fusion_engine - Point One FusionEngine protocol
-- nmea - NMEA-0183
-- rtcm - RTCM 10403.3"""
-        read_rate_parser.add_argument('protocol', metavar="PROTOCOL", nargs='?', default='all', help=help)
-        message_output_rate_parser.add_argument('protocol', metavar="PROTOCOL", help=help)
+        if interface_name in INTERFACES_WITH_EXPLICIT_ENUM:
+            # config_tool.py apply uartN_message_rate
+            apply_param_parser.add_parser(
+                f'{interface_name}_message_rate',
+                parents=[apply_output_rate_parser],
+                help=help,
+                description=message_rate_description,
+                epilog=epilog)
 
-        help = 'The message type (name) or ID (integer). Use "all" to request all messages for the specified ' \
-               'protocol. Requests may contain a comma-separated list with multiple message names, or may use ' \
-               'wildcards (*) to match multiple messages by name (e.g., "gnss*" to match GNSSInfo and GNSSSatellite).'
-        read_rate_parser.add_argument('message_id', metavar="ID", nargs='?', default='all', help=help)
-        message_output_rate_parser.add_argument('message_id', metavar="ID", nargs='?', default=None, help=help)
+        # config_tool.py apply INTERFACE_NAME message_rate
+        apply_interface_config_type_parsers.add_parser(
+            'message_rate', parents=[apply_output_rate_parser],
+            help=help, description=help, epilog=epilog)
 
-        message_output_rate_parser.add_argument('rate', metavar="RATE", nargs='?', default=None,
-                                                help='The desired message rate:%s' %
-                                                ''.join(['\n- %s' % n for n in MESSAGE_RATE_MAP]))
-        message_output_rate_parser.add_argument('-f', '--include-disabled', action=ExtendedBooleanAction,
-                                                help='When setting multiple messages, include the ones that are off.')
+        # config_tool.py apply INTERFACE_NAME diagnostics_enabled
+        help = 'Enable/disable output for all diagnostics messages.'
+        read_interface_config_type_parsers.add_parser('diagnostics_enabled', help=help, description=help)
+        diagnostics_enabled_parser = apply_interface_config_type_parsers.add_parser(
+            'diagnostics_enabled', help=help, description=help)
+        diagnostics_enabled_parser.add_argument(
+            'enabled', action=ExtendedBooleanAction, help='Enable/disable diagnostic messages.')
+
+        if interface_id.type == TransportType.SERIAL or interface_id.type == TransportType.CURRENT:
+            # config_tool.py apply INTERFACE_NAME baud_rate
+            help = 'Configure the serial baud rate.'
+            read_interface_config_type_parsers.add_parser('baud_rate', help=help, description=help)
+            baud_rate_parser = apply_interface_config_type_parsers.add_parser('baud_rate', help=help, description=help)
+            baud_rate_parser.add_argument('baud_rate', type=float,
+                                          help='The desired baud rate (in bits/second).')
 
     # config_tool.py copy_message_config
     help = 'Copy the output message configuration from one interface to another.'
@@ -1244,12 +1478,34 @@ Example usage:
         help=help,
         description=help)
 
-    choices = ['factory', 'hot', 'warm', 'cold', 'calibration', 'config', 'nav_engine', 'position', 'reboot']
+    choices = {
+        'factory': 'Reset all settings back to factory defaults.',
+        'hot': 'Perform a hot start, keeping GNSS ephemeris data, and approximate position/time knowledge where '
+               'applicable',
+        'warm': 'Perform a warm start, resetting GNSS ephemeris data, and approximate position/time knowledge where '
+                'applicable',
+        'pvt': 'Reset all position, velocity, orientation, and time information',
+        'cold': 'Perform a cold start, resetting position/time information and GNSS ephemeris/corrections data',
+        'diag': 'Reset to a deterministic state for diagnostic and post-processing purposes',
+        'calibration': 'Reset all calibration and navigation state data',
+        'config': 'Reset all user configuration data (this will also reset calibration and navigation state data)',
+        'nav_engine': 'Reset the navigation engine (same as hot start)',
+        'position': 'Reset position, velocity, and orientation data',
+        'reboot': 'Reboot the navigation processor',
+        'reboot_gnss': 'Reboot the GNSS measurement engine',
+    }
+    newline = '\n'
     reset_parser.add_argument(
         'type', metavar='TYPE',
-        choices=choices,
+        choices=choices.keys(),
+        nargs='+',
         default='cold',
-        help="The type of reset to be performed: %s" % ', '.join(choices))
+        help=f"""\
+The type of reset to be performed: {''.join([f'{newline}- {k} - {v}' for k, v in choices.items()])}
+
+You may specify more than one value to reset multiple components. For example, to perform a warm start and also a
+diagnostic log reset:
+  {execute_command} reset diag cold""")
 
     # config_tool.py export
     help = 'Export data from the device to a local file.'
@@ -1359,7 +1615,12 @@ Example usage:
     if args.command is None:
         logger.error('No command specified.\n')
         parser.print_help()
-        sys.exit(0)
+        sys.exit(1)
+
+    if 'interface_config_type' in args and args.interface_config_type is None:
+        logger.error('No interface config type specified.\n')
+        parser.print_help()
+        sys.exit(1)
 
     # Note: We intentionally use the Enhanced port here, whereas p1_runner uses Standard port. That way users can
     # issue configuration requests while the device is active and p1_runner is operating. If the user explicitly
@@ -1375,6 +1636,8 @@ Example usage:
 
         if args.command == "read":
             passed = read_config(config_interface, args)
+        elif args.command == "revert":
+            passed = revert_config(config_interface, args)
         elif args.command == "apply":
             passed = apply_config(config_interface, args)
         elif args.command == "save":

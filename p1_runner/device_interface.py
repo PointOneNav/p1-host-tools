@@ -79,10 +79,13 @@ class DeviceInterface(serial.threaded.Protocol):
         self.data_event.set()
         self.data_lock.release()
 
-    def set_config(self, config_object, save=False):
+    def set_config(self, config_object, save=False, revert=False, interface: Optional[InterfaceID] = None):
         config_set_cmd = SetConfigMessage()
         if save:
-            config_set_cmd.flags = SetConfigMessage.FLAG_APPLY_AND_SAVE
+            config_set_cmd.flags |= SetConfigMessage.FLAG_APPLY_AND_SAVE
+        if revert:
+            config_set_cmd.flags |= SetConfigMessage.FLAG_REVERT_TO_DEFAULT
+        config_set_cmd.interface = interface
         config_set_cmd.config_object = config_object
         message = self.fe_encoder.encode_message(config_set_cmd)
         logger.debug('Sending config to device. [size=%d B]' % len(message))
@@ -94,9 +97,12 @@ class DeviceInterface(serial.threaded.Protocol):
         logger.debug('Saving config. [size=%d B]' % len(message))
         self._send(message)
 
-    def get_config(self, source: ConfigurationSource, config_type: ConfigType):
+    def get_config(self, source: ConfigurationSource, config: Union[ConfigType, InterfaceConfigSubmessage]):
         req_cmd = GetConfigMessage()
-        req_cmd.config_type = config_type
+        if isinstance(config, InterfaceConfigSubmessage):
+            req_cmd.interface_header = config
+        else:
+            req_cmd.config_type = config
         req_cmd.request_source = source
         message = self.fe_encoder.encode_message(req_cmd)
         logger.debug('Requesting config. [size=%d B]' % len(message))
