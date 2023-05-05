@@ -35,7 +35,7 @@ def create_exported_data(save_file: str, version: VersionInfoMessage):
         'device_version': {
             'firmware': version.fw_version_str,
             'fusion_engine': version.engine_version_str,
-            'hardware': version.hw_version_str,
+            'os': version.os_version_str,
             'gnss_reciever': version.rx_version_str
         }
     }

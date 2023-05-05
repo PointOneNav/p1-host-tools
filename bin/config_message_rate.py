@@ -334,7 +334,7 @@ def copy_message_config(config_interface: DeviceInterface,
             source_diag_type = _get_diagnostics_config_type(source)
             dest_diag_type = _get_diagnostics_config_type(dest)
             logger.debug(f'  Querying diagnostics enabled state.')
-            config_interface.get_config(source=ConfigurationSource.ACTIVE, config_type=source_diag_type.GetType())
+            config_interface.get_config(source=ConfigurationSource.ACTIVE, config=source_diag_type.GetType())
             resp = config_interface.wait_for_message(ConfigResponseMessage.MESSAGE_TYPE)
             if resp is None:
                 logger.error('Timed out waiting for diagnostics config query after %d seconds.' % RESPONSE_TIMEOUT)

@@ -4,7 +4,9 @@ import serial
 
 from fusion_engine_client.messages import *
 
-from p1_runner.device_interface import RESPONSE_TIMEOUT, DeviceInterface
+
+from p1_runner.data_source import SerialDataSource
+from p1_runner.device_interface import DeviceInterface
 from p1_runner import trace as logging
 
 MPS_TO_KPH = 3.6
@@ -17,7 +19,7 @@ class WheelTickDisplay:
     def __init__(self, device_serial: serial.Serial, display_mode: str = 'gui'):
         self.display_mode = display_mode
 
-        self.device_interface = DeviceInterface(device_serial, device_serial, RESPONSE_TIMEOUT)
+        self.device_interface = DeviceInterface(SerialDataSource(device_serial))
         self.hardware_tick_config = None
         self.wheel_config = None
 

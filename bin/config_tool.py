@@ -2,6 +2,7 @@
 
 from datetime import datetime
 import os
+import socket
 import subprocess
 import sys
 
@@ -24,6 +25,7 @@ sys.path.append(os.path.dirname(__file__))
 
 from p1_runner import trace as logging
 from p1_runner.argument_parser import ArgumentParser, ExtendedBooleanAction, TriStateBooleanAction
+from p1_runner.data_source import SerialDataSource, SocketDataSource
 from p1_runner.device_interface import DeviceInterface, RESPONSE_TIMEOUT
 from p1_runner.exported_data import add_to_exported_data, create_exported_data, is_export_valid, load_saved_data
 from p1_runner.find_serial_device import find_serial_device, PortType
@@ -38,6 +40,9 @@ def _args_to_point3f(cls, args, config_interface):
 
 
 SERIAL_TIMEOUT = 5
+
+
+DEFAULT_TCP_PORT = 2332
 
 
 _orientation_map = {
@@ -143,6 +148,28 @@ _tick_direction_map = {
 
 def _str_to_tick_direction(tick_direction_str):
     return _tick_direction_map.get(tick_direction_str, TickDirection.OFF)
+
+
+_iono_delay_model_map = {
+    "auto": IonoDelayModel.AUTO,
+    "off": IonoDelayModel.OFF,
+    "klobuchar": IonoDelayModel.KLOBUCHAR
+}
+
+
+def _str_to_iono_delay_model(iono_delay_model_str):
+    return _iono_delay_model_map.get(iono_delay_model_str, IonoDelayModel.AUTO)
+
+
+_tropo_delay_model_map = {
+    "auto": TropoDelayModel.AUTO,
+    "off": TropoDelayModel.OFF,
+    "saastamoinen": TropoDelayModel.SAASTAMOINEN
+}
+
+
+def _str_to_tropo_delay_model(tropo_delay_model_str):
+    return _tropo_delay_model_map.get(tropo_delay_model_str, TropoDelayModel.AUTO)
 
 
 def _args_to_coarse_orientation(cls, args, config_interface):
@@ -300,6 +327,38 @@ def _args_to_enabled_gnss_frequencies(cls, args, config_interface):
     return EnabledGNSSFrequencyBandsConfig(mask)
 
 
+def _args_to_ionosphere_config(cls, args, config_interface):
+    # Query the existing parameters, so we can use those values if any of the user settings are unspecified.
+    config_interface.get_config(ConfigurationSource.ACTIVE, IonosphereConfig.GetType())
+    resp = config_interface.wait_for_message(ConfigResponseMessage.MESSAGE_TYPE)
+
+    if resp is None:
+        raise RuntimeError('Response timed out after %d seconds while querying current values.' % RESPONSE_TIMEOUT)
+
+    if args.iono_delay_model is None:
+        iono_delay_model = resp.config_object.iono_delay_model
+    else:
+        iono_delay_model = _str_to_iono_delay_model(args.iono_delay_model)
+
+    return IonosphereConfig(iono_delay_model=iono_delay_model)
+
+
+def _args_to_troposphere_config(cls, args, config_interface):
+    # Query the existing parameters, so we can use those values if any of the user settings are unspecified.
+    config_interface.get_config(ConfigurationSource.ACTIVE, TroposphereConfig.GetType())
+    resp = config_interface.wait_for_message(ConfigResponseMessage.MESSAGE_TYPE)
+
+    if resp is None:
+        raise RuntimeError('Response timed out after %d seconds while querying current values.' % RESPONSE_TIMEOUT)
+
+    if args.tropo_delay_model is None:
+        tropo_delay_model = resp.config_object.tropo_delay_model
+    else:
+        tropo_delay_model = _str_to_tropo_delay_model(args.tropo_delay_model)
+
+    return TroposphereConfig(tropo_delay_model=tropo_delay_model)
+
+
 def _args_to_int_gen(arg_name):
     def _func(cls, args, config_interface):
         return cls(int(getattr(args, arg_name)))
@@ -324,6 +383,8 @@ PARAM_DEFINITION = {
     'gnss_frequencies':  {'format': EnabledGNSSFrequencyBandsConfig, 'arg_parse': _args_to_enabled_gnss_frequencies},
     'leap_second': {'format': LeapSecondConfig, 'arg_parse': _args_to_int_gen('value')},
     'gps_week_rollover': {'format': GPSWeekRolloverConfig, 'arg_parse': _args_to_int_gen('value')},
+    'ionosphere_config': {'format': IonosphereConfig, 'arg_parse': _args_to_ionosphere_config},
+    'troposphere_config': {'format': TroposphereConfig, 'arg_parse': _args_to_troposphere_config},
 
     'vehicle_details': {'format': VehicleDetailsConfig, 'arg_parse': _args_to_vehicle_details},
     'wheel_config': {'format': WheelConfig, 'arg_parse': _args_to_wheel_config},
@@ -561,6 +622,16 @@ def copy_interface_message_config(config_interface: DeviceInterface, args):
         # copy_message_config() will print an error.
         return False
 
+def query_system_status(config_interface: DeviceInterface, args):
+    logger.debug('Querying system status info.')
+    config_interface.send_message(MessageRequest(MessageType.SYSTEM_STATUS))
+
+    resp = config_interface.wait_for_message(MessageType.SYSTEM_STATUS)
+    if resp is None:
+        logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
+    else:
+        logger.info(str(resp))
+    return resp
 
 def query_version(config_interface: DeviceInterface, args):
     if args.type == 'nmea':
@@ -919,6 +990,10 @@ Export the device's user configuration to a local file.
     parser.add_argument('--device-port', '--port', default="auto",
                         help="The serial device to use when communicating with the device.  If 'auto', the serial port "
                              "will be located automatically by searching for a connected device.")
+
+    parser.add_argument('--device-tcp-address',
+                        help="The address to use when communicating with the device over TCP. The address can be "
+                             "specified with a port like 'address:port' to use a non-default port.")
     parser.add_argument('--device-baud', '--baud', type=int, default=460800,
                         help="The baud rate used by the device serial port (--device-port).")
     parser.add_argument('-v', '--verbose', action='count', default=0,
@@ -1122,6 +1197,22 @@ other sources (non-GPS signals, modernized GPS navigation messages, etc.).
     gps_week_rollover_parser.add_argument(
         'value',
         help='The GPS legacy week rollover count to use. Set to -1 to disable manual override.')
+
+    help = 'Set the ionospheric delay model.'
+    param_parser.add_parser('ionosphere_config', help=help, description=help)
+    ionosphere_config_parser = apply_param_parser.add_parser('ionosphere_config',
+                                                             help=help, description=help)
+    ionosphere_config_parser.add_argument('--iono-delay-model', '--iono-model',
+                                          choices=_iono_delay_model_map.keys(),
+                                          help='The ionospheric delay model to be used.')
+
+    help = 'Set the tropospheric delay model.'
+    param_parser.add_parser('troposphere_config', help=help, description=help)
+    troposphere_config_parser = apply_param_parser.add_parser('troposphere_config',
+                                                                    help=help, description=help)
+    troposphere_config_parser.add_argument('--tropo-delay-model', '--tropo-model',
+                                                 choices=_tropo_delay_model_map.keys(),
+                                                 help='The tropospheric delay model to be used.')
 
     # config_tool.py apply -- vehicle details
     help = 'Set vehicle model and dimensions.'
@@ -1484,12 +1575,12 @@ Example usage:
                'applicable',
         'warm': 'Perform a warm start, resetting GNSS ephemeris data, and approximate position/time knowledge where '
                 'applicable',
-        'pvt': 'Reset all position, velocity, orientation, and time information',
+        'pvt': 'Reset all position, velocity, orientation, time, and GNSS corrrections information',
         'cold': 'Perform a cold start, resetting position/time information and GNSS ephemeris/corrections data',
         'diag': 'Reset to a deterministic state for diagnostic and post-processing purposes',
         'calibration': 'Reset all calibration and navigation state data',
         'config': 'Reset all user configuration data (this will also reset calibration and navigation state data)',
-        'nav_engine': 'Reset the navigation engine (same as hot start)',
+        'nav_engine': 'Reset the navigation engine: clear all PVT data, plus sensor corrections (IMU and wheel speed)',
         'position': 'Reset position, velocity, and orientation data',
         'reboot': 'Reboot the navigation processor',
         'reboot_gnss': 'Reboot the GNSS measurement engine',
@@ -1580,6 +1671,13 @@ diagnostic log reset:
         '-r', '--revert', action=ExtendedBooleanAction,
         help="If set, revert the active configuration to the saved values.")
 
+    # config_tool.py system_status
+    help = 'Query the device system status information.'
+    system_status_parser = command_subparsers.add_parser(
+        'system_status',
+        help=help,
+        description=help)
+
     # config_tool.py version
     help = 'Query the device version information.'
     version_parser = command_subparsers.add_parser(
@@ -1622,55 +1720,77 @@ diagnostic log reset:
         parser.print_help()
         sys.exit(1)
 
-    # Note: We intentionally use the Enhanced port here, whereas p1_runner uses Standard port. That way users can
-    # issue configuration requests while the device is active and p1_runner is operating. If the user explicitly
-    # sets --device-port, we'll use that port regardless of type.
-    device_port = find_serial_device(port_name=args.device_port, port_type=PortType.ENHANCED)
-    logger.info('Connecting to device using serial port %s.' % device_port)
+    if args.device_tcp_address is not None:
+        try:
+            parts = args.device_tcp_address.split(':')
+            address = parts[0]
+            if len(parts) == 1:
+                port = DEFAULT_TCP_PORT
+            elif len(parts) == 2:
+                port = int(parts[1])
+            else:
+                raise ValueError('Invalid Address')
+                sys.exit(1)
 
-    with serial.Serial(port=device_port, baudrate=args.device_baud, timeout=SERIAL_TIMEOUT) as device_serial:
-        config_interface = DeviceInterface(device_serial, device_serial)
-        config_interface.start_rx_thread()
-
-        passed = False
-
-        if args.command == "read":
-            passed = read_config(config_interface, args)
-        elif args.command == "revert":
-            passed = revert_config(config_interface, args)
-        elif args.command == "apply":
-            passed = apply_config(config_interface, args)
-        elif args.command == "save":
-            passed = save_config(config_interface, args)
-        elif args.command == "copy_message_config":
-            passed = copy_interface_message_config(config_interface, args)
-        elif args.command == "version":
-            passed = query_version(config_interface, args)
-        elif args.command == "reset":
-            passed = request_reset(config_interface, args)
-        elif args.command == "shutdown":
-            passed = request_shutdown(config_interface, args)
-        elif args.command == "fault":
-            passed = request_fault(config_interface, args)
-        elif args.command == "export":
-            passed = request_export(config_interface, args)
-        elif args.command == "import":
-            passed = request_import(config_interface, args)
-        elif args.command == "export_file_info":
-            vars(args)['dry_run'] = True
-            vars(args)['type'] = "all"
-            passed = request_import(config_interface, args)
-        elif args.command == "get_port_id":
-            passed = get_port_id(config_interface, args)
-        else:
-            logger.error("Unrecognized command '%s'." % args.command)
-
-        config_interface.stop_rx_thread()
-
-        if passed:
-            sys.exit(0)
-        else:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect((address, port))
+        except Exception as e:
+            logger.error("Problem connecting to TCP address '%s': %s." % (args.device_tcp_address, str(e)))
             sys.exit(1)
+        data_source = SocketDataSource(s)
+    else:
+        # Note: We intentionally use the Enhanced port here, whereas p1_runner uses Standard port. That way users can
+        # issue configuration requests while the device is active and p1_runner is operating. If the user explicitly
+        # sets --device-port, we'll use that port regardless of type.
+        device_port = find_serial_device(port_name=args.device_port, port_type=PortType.ENHANCED)
+        logger.info('Connecting to device using serial port %s.' % device_port)
+        serial_port = serial.Serial(port=device_port, baudrate=args.device_baud, timeout=SERIAL_TIMEOUT)
+        data_source = SerialDataSource(serial_port)
+        data_source.start_read_thread()
+
+    config_interface = DeviceInterface(data_source)
+
+    passed = False
+
+    if args.command == "read":
+        passed = read_config(config_interface, args)
+    elif args.command == "revert":
+        passed = revert_config(config_interface, args)
+    elif args.command == "apply":
+        passed = apply_config(config_interface, args)
+    elif args.command == "save":
+        passed = save_config(config_interface, args)
+    elif args.command == "copy_message_config":
+        passed = copy_interface_message_config(config_interface, args)
+    elif args.command == "version":
+        passed = query_version(config_interface, args)
+    elif args.command == "system_status":
+        passed = query_system_status(config_interface, args)
+    elif args.command == "reset":
+        passed = request_reset(config_interface, args)
+    elif args.command == "shutdown":
+        passed = request_shutdown(config_interface, args)
+    elif args.command == "fault":
+        passed = request_fault(config_interface, args)
+    elif args.command == "export":
+        passed = request_export(config_interface, args)
+    elif args.command == "import":
+        passed = request_import(config_interface, args)
+    elif args.command == "export_file_info":
+        vars(args)['dry_run'] = True
+        vars(args)['type'] = "all"
+        passed = request_import(config_interface, args)
+    elif args.command == "get_port_id":
+        passed = get_port_id(config_interface, args)
+    else:
+        logger.error("Unrecognized command '%s'." % args.command)
+
+    data_source.stop()
+
+    if passed:
+        sys.exit(0)
+    else:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
