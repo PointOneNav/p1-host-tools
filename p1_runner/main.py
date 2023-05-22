@@ -107,10 +107,9 @@ Forward NMEA output from the receiver to an application on TCP port 1234:
         '--reset-type', choices=('hot', 'warm', 'pvt', 'diag', 'cold', 'none'), default='none',
         help="The type of reset to perform after connecting to the device. Resetting helps to facilitate deterministic "
              "log playback. When capturing a log for diagnostic and support purposes, use 'diag'.")
-
     device_group.add_argument(
-        '--no-reset', action='store_true',
-        help="If specified, do not reset the device after connecting. Same as --reset-type=none.")
+        '--wait-for-reset', action=ExtendedBooleanAction, default=True,
+        help="Wait for the reset to complete before logging data.")
 
     corr_group = parser.add_argument_group('Corrections')
 
@@ -344,12 +343,9 @@ Forward NMEA output from the receiver to an application on TCP port 1234:
     else:
         device_id = options.device_id
 
-    if options.no_reset:
-        options.reset_type = 'none'
-
     logger = logging.getLogger('point_one.p1_runner.__main__')
 
-    runner = P1Runner(device_id=device_id, reset_type=options.reset_type,
+    runner = P1Runner(device_id=device_id, reset_type=options.reset_type, wait_for_reset=options.wait_for_reset,
                       device_port=options.device_port, device_baudrate=options.device_baud,
                       corrections_port=options.corrections_port, corrections_baudrate=options.corrections_baud,
                       external_port=options.external_port, external_baudrate=options.external_baud,

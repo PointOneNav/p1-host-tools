@@ -5,7 +5,7 @@ here = pathlib.Path(__file__).parent.resolve()
 
 setup(
     name='p1-host-tools',
-    version='v0.17.3',
+    version='v0.17.5',
     packages=find_packages(where='.'),
     install_requires=[
         "argparse-formatter>=1.4",

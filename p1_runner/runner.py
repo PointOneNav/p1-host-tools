@@ -37,7 +37,7 @@ class P1Runner(threading.Thread):
 
     DEFAULT_DEVICE_ID = 'p1-lg69t'
 
-    def __init__(self, device_id=None, reset_type='hot',
+    def __init__(self, device_id=None, reset_type='hot', wait_for_reset=True,
                  device_port='auto', device_baudrate=460800,
                  corrections_port=None, corrections_baudrate=460800,
                  external_port=None, external_baudrate=4608000, external_output_path=None, external_corrections=False,
@@ -114,6 +114,7 @@ class P1Runner(threading.Thread):
         self.rtt_client = None
 
         self.reset_type = reset_type
+        self.wait_for_reset = wait_for_reset
         self.state = None
 
         self.wheel_tick_display = None
@@ -340,7 +341,7 @@ class P1Runner(threading.Thread):
         # a reset request, forcing the device to reset so that we receive and log 100% of the data the device uses.
         if self.state == State.WAITING_FOR_DATA:
             self._send_reset()
-            self.state = State.RESET_SENT
+            self.state = State.RESET_SENT if self.wait_for_reset else State.RESET_COMPLETE
             return
         elif self.state == State.RESET_SENT:
             while not self.state == State.RESET_COMPLETE:
