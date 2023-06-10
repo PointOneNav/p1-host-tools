@@ -38,6 +38,8 @@ logger = logging.getLogger('point_one.config_tool')
 def _args_to_point3f(cls, args, config_interface):
     return cls(args.x, args.y, args.z)
 
+def _args_to_heading_bias(cls, args, config_interface):
+    return cls(args.horizontal, args.vertical)
 
 SERIAL_TIMEOUT = 5
 
@@ -368,6 +370,13 @@ def _args_to_int_gen(arg_name):
 def _args_to_bool(cls, args, config_interface):
     return cls(args.enabled)
 
+def _args_to_id(cls, args, config_interface):
+    if len(args.device_id) > 32:
+        raise RuntimeError('User device ID must have length less than or equal to 32 characters.')
+    return cls(args.device_id)
+
+def _args_to_float(cls, args, config_interface):
+    return cls(float(args.x))
 
 def _args_to_interface_config(cls, args, config_interface):
     return []
@@ -378,6 +387,7 @@ PARAM_DEFINITION = {
     'device': {'format': DeviceLeverArmConfig, 'arg_parse': _args_to_point3f},
     'orientation': {'format': DeviceCourseOrientationConfig, 'arg_parse': _args_to_coarse_orientation},
     'output': {'format': OutputLeverArmConfig, 'arg_parse': _args_to_point3f},
+    'heading_bias': {'format': HeadingBias, 'arg_parse': _args_to_heading_bias},
 
     'gnss_systems':  {'format': EnabledGNSSSystemsConfig, 'arg_parse': _args_to_enabled_gnss_systems},
     'gnss_frequencies':  {'format': EnabledGNSSFrequencyBandsConfig, 'arg_parse': _args_to_enabled_gnss_frequencies},
@@ -391,6 +401,7 @@ PARAM_DEFINITION = {
     'hardware_tick_config': {'format': HardwareTickConfig, 'arg_parse': _args_to_hardware_tick_config},
 
     'watchdog_enabled': {'format': WatchdogTimerEnabled, 'arg_parse': _args_to_bool},
+    'user_device_id': {'format': UserDeviceID, 'arg_parse': _args_to_id},
 
     'uart1_baud': {'format': Uart1BaudConfig, 'arg_parse': _args_to_int_gen('baud_rate')},
     'uart2_baud': {'format': Uart2BaudConfig, 'arg_parse': _args_to_int_gen('baud_rate')},
@@ -627,6 +638,17 @@ def query_system_status(config_interface: DeviceInterface, args):
     config_interface.send_message(MessageRequest(MessageType.SYSTEM_STATUS))
 
     resp = config_interface.wait_for_message(MessageType.SYSTEM_STATUS)
+    if resp is None:
+        logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
+    else:
+        logger.info(str(resp))
+    return resp
+
+def query_device_id(config_interface: DeviceInterface, args):
+    logger.debug('Querying Device ID info.')
+    config_interface.send_message(MessageRequest(MessageType.DEVICE_ID))
+
+    resp = config_interface.wait_for_message(MessageType.DEVICE_ID)
     if resp is None:
         logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
     else:
@@ -1108,6 +1130,12 @@ example:
     gnss_parser.add_argument('y', type=float, help='The Y offset with respect to the vehicle body (in meters).')
     gnss_parser.add_argument('z', type=float, help='The Z offset with respect to the vehicle body (in meters).')
 
+    help = 'The heading horizontal and vertical biases (in degrees).'
+    param_parser.add_parser('heading_bias', help=help, description=help)
+    heading_parser = apply_param_parser.add_parser('heading_bias', help=help, description=help)
+    heading_parser.add_argument('horizontal', type=float, help='The horizontal bias (yaw) in degrees.')
+    heading_parser.add_argument('vertical', type=float, help='The vertical bias (pitch) in degrees.')
+
     help = 'The orientation of the device (IMU) within the vehicle, specified using the directions of the device +X ' \
            'and +Z axes relative to the vehicle body axes (+X = forward, +Y = left, +Z = up).'
     param_parser.add_parser('orientation', help=help, description=help)
@@ -1313,6 +1341,14 @@ using their existing values.''')
     watchdog_enabled_parser.add_argument(
         'enabled', action=ExtendedBooleanAction,
         help='Enable/disable the watchdog timer reset after fatal errors.')
+
+    help = 'Set the user device ID (max 32 characters).'
+    param_parser.add_parser('user_device_id', help=help, description=help)
+    user_device_id_parser = apply_param_parser.add_parser(
+        'user_device_id', help=help, description=help)
+    user_device_id_parser.add_argument(
+        'device_id',
+        help='Set the user device ID (max 32 characters).')
 
     INTERFACES_WITH_EXPLICIT_ENUM = ['current', 'uart1', 'uart2']
     for interface_name, interface_id in INTERFACE_MAP.items():
@@ -1678,6 +1714,13 @@ diagnostic log reset:
         help=help,
         description=help)
 
+    # config_tool.py device_id
+    help = 'Query the device system status information.'
+    device_id_parser = command_subparsers.add_parser(
+        'device_id',
+        help=help,
+        description=help)
+
     # config_tool.py version
     help = 'Query the device version information.'
     version_parser = command_subparsers.add_parser(
@@ -1766,6 +1809,8 @@ diagnostic log reset:
         passed = query_version(config_interface, args)
     elif args.command == "system_status":
         passed = query_system_status(config_interface, args)
+    elif args.command == "device_id":
+        passed = query_device_id(config_interface, args)
     elif args.command == "reset":
         passed = request_reset(config_interface, args)
     elif args.command == "shutdown":

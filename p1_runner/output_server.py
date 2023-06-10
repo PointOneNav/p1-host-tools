@@ -23,6 +23,7 @@ class WebSocketServerThread(Thread):
         self.exit = None
         self.websocket_address = websocket_address
         self.legacy_nmea = legacy_nmea
+        self.incoming_data_callback = None
 
     async def _handle_ws_connection(self, connection):
         queue = asyncio.Queue()
@@ -41,6 +42,11 @@ class WebSocketServerThread(Thread):
                     await connection.send(data)
                 except:
                     break
+
+            if self.incoming_data_callback is not None:
+                async for message in connection:
+                    await self.incoming_data_callback(message)
+
         self.queues.remove(queue)
         self.logger.debug('Websocket done with %s.' % repr(path))
 
@@ -80,6 +86,9 @@ class WebSocketServerThread(Thread):
         self.started.wait()
         asyncio.run_coroutine_threadsafe(self._send(data), loop=self.loop)
 
+    def register_incoming_data_callback(self, callback):
+        self.incoming_data_callback = callback
+
 
 class OutputServer(object):
     logger = logging.getLogger('point_one.p1_runner.output')
@@ -92,6 +101,7 @@ class OutputServer(object):
         self.tcp_thread = None
         self.tcp_lock = threading.Lock()
         self.tcp_clients = {}
+        self.incoming_data_callback = None
 
         self.ws_address = websocket_address
         self.ws_server = None
@@ -187,4 +197,15 @@ class OutputServer(object):
                         'Unexpected error from TCP socket:\r%s' % traceback.format_exc())
                 break
 
+            data = client.recv(1024)
+            if data and self.incoming_data_callback is not None:
+                self.incoming_data_callback(data)
+
         self.logger.debug('TCP thread finished.')
+
+    def register_incoming_data_callback(self, callback):
+        if self.tcp_thread is not None:
+            self.incoming_data_callback = callback
+
+        if self.ws_server is not None:
+            self.ws_server.register_incoming_data_callback(callback)

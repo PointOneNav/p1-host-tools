@@ -145,6 +145,9 @@ class P1Runner(threading.Thread):
             self.output_server = None
             self.output_type = None
 
+        # For sending a warning message in the event that data is arriving from multiple sources.
+        self.external_data_warning_sent = False
+
         self.shutdown_pending = threading.Event()
 
         self.total_bytes_received = {
@@ -184,6 +187,7 @@ class P1Runner(threading.Thread):
         if self.output_server is not None:
             self.logger.debug('Starting output server.')
             self.output_server.start()
+            self.output_server.register_incoming_data_callback(self._handle_external_message)
 
         if self.log_manager is not None:
             self.logger.debug('Starting log manager.')
@@ -592,3 +596,19 @@ Are you using the correct UART/COM port (--device-port)?
         ])
 
         self.updated_manifest_with_version = True
+
+    def _handle_external_message(self, msg):
+        # This is meant to handle data sent from the user (such as from P1 Desktop) and forwarded to the device; the
+        # types of data currently intended to be sent are commands and corrections.
+        #
+        # Note that no assumptions are made about the data, so it is not being framed or interleaved with corrections
+        # that may be coming from elsewhere. So, there is an implicit assumption that the user, if sending data from
+        # a source such as P1 Desktop, is configuring to send data ONLY from that source.
+        if self.ntrip_client is not None and not self.external_data_warning_sent:
+            self.logger.error("""
+Detected data incoming from external source, whereas NTRIP client is configured. If corrections are being sent from
+both sources, this may lead to conflicting data and undefined behavior.
+""")
+            self.external_data_warning_sent = True
+
+        self.device_serial.write(msg)
