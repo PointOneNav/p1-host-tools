@@ -1,4 +1,19 @@
-from contextlib import nullcontext
+try:
+    from contextlib import nullcontext
+except ImportError:
+    # nullcontext was added to contextlib in Python 3.7.
+    from contextlib import AbstractContextManager
+
+    class nullcontext(AbstractContextManager):
+        def __init__(self, enter_result=None):
+            self.enter_result = enter_result
+
+        def __enter__(self):
+            return self.enter_result
+
+        def __exit__(self, *excinfo):
+            pass
+
 import logging
 import os
 import select
@@ -103,7 +118,7 @@ class SeggerRTTCapture(threading.Thread):
                         # forwarded directly to RTT, and instead we can shut it down cleanly.
                         self.logger.debug("Starting RTT client.")
                         rtt = subprocess.Popen([self.rtt_path, '-RTTTelnetPort', str(telnet_port)],
-                                               text=True, bufsize=1,
+                                               universal_newlines=True, bufsize=1,
                                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                                stdin=subprocess.PIPE)
                         connected = False

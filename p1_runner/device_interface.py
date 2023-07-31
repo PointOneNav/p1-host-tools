@@ -16,6 +16,7 @@ REBOOT_MAX_START_TIME = 7
 REBOOT_MIN_TIME = 1
 REBOOT_MAX_TIME = 5
 
+MAX_FE_MSG_SIZE = 16 * 1024
 
 class DeviceInterface:
     '''!
@@ -32,7 +33,7 @@ class DeviceInterface:
         '''
         self.data_source = data_source
         # size of UserConfig is 2048 bytes
-        self.fe_decoder = FusionEngineDecoder(2080, warn_on_unrecognized=False, return_bytes=True)
+        self.fe_decoder = FusionEngineDecoder(MAX_FE_MSG_SIZE, warn_on_unrecognized=False, return_bytes=True)
         self.fe_encoder = FusionEngineEncoder()
         self.nmea_framer = NMEAFramer()
 

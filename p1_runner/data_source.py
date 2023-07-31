@@ -10,6 +10,10 @@ import select
 
 import serial.threaded
 from serial import Serial
+try:
+    from websockets.sync.client import ClientConnection
+except ImportError:
+    class ClientConnection: pass
 
 import p1_runner.trace as logging
 from p1_runner.log_manager import LogManager
@@ -70,6 +74,51 @@ class DataSource(ABC):
         any handles and stop and threads being used.
         """
         pass
+
+
+class WebSocketDataSource(DataSource):
+    """!
+    @brief A class to abstract socket IO details for a connection to a device.
+
+    For the most part this is just to make the access calls conform to the needed behaviors.
+    """
+    def __init__(
+            self, socket_out: ClientConnection, socket_in: Optional[ClientConnection] = None,
+            rx_log: Optional[Union[LogManager, BinaryIO]] = None):
+        self.socket_out = socket_out
+        self.socket_in = socket_in if socket_in is not None else socket_out
+
+        self.rx_log = rx_log
+
+    def write(self, data: bytes):
+        self.socket_out.send(data)
+
+    def read(self, size: int, timeout=RESPONSE_TIMEOUT) -> bytes:
+        try:
+            data = self.socket_in.recv(timeout)
+        except TimeoutError:
+            data = b''
+        if isinstance(data, str):
+            data = data.encode('ascii')
+        if self.rx_log:
+            self.rx_log.write(data)
+        return data
+
+    def stop(self):
+        self.flush_rx()
+        if self.socket_in != None:
+            self.socket_in.close()
+        if self.socket_out != None and self.socket_out != self.socket_in:
+            self.socket_out.close()
+
+    def flush_rx(self):
+        in_waiting = 0
+        while True:
+            data = self.read(1024, 0)
+            if len(data) == 0:
+                break
+            in_waiting += len(data)
+        logger.debug('Flushing data in buffer. [size=%d B]' % in_waiting)
 
 
 class SocketDataSource(DataSource):

@@ -1,9 +1,10 @@
 from dataclasses import dataclass, field
+import json
 from typing import Dict, Any, List, Optional, Tuple
 
 from construct import *
 
-from .loader_utilities import AutoEnum, FrozenVectorAdapter, DataClassAdapter, OptionalAdapter, IntOrStrEnum
+from .loader_utilities import AutoEnum, FrozenVectorAdapter, DataClassAdapter, OptionalAdapter, prepare_dataclass_for_json, IntOrStrEnum, update_dataclass_contents
 
 @dataclass
 class ProfilingConfig:
@@ -169,10 +170,32 @@ ExternalPoseExtrinsicsConfigConstruct = DataClassAdapter(ExternalPoseExtrinsicsC
 
 
 @dataclass
+class HeadingConfig:
+    vertical_bias_deg: float = 0
+    horizontal_bias_deg: float = 0
+
+    @staticmethod
+    def serialize(val: 'HeadingConfig') -> bytes:
+        return HeadingConfigConstruct.build(val)
+
+    @staticmethod
+    def deserialize(data: bytes) -> 'HeadingConfig':
+        return HeadingConfigConstruct.parse(data)
+
+_HeadingConfigRawConstruct = Struct(
+    "vertical_bias_deg" / Float32l,
+    "horizontal_bias_deg" / Float32l,
+    Padding(12)
+)
+HeadingConfigConstruct = DataClassAdapter(HeadingConfig, _HeadingConfigRawConstruct)
+
+
+@dataclass
 class SensorExtrinsicsConfig:
     gps_receivers: List[GpsReceiverExtrinsicsConfig] = field(default_factory=list)
     imus: List[ImuExtrinsicsConfig] = field(default_factory=list)
     external_pose: List[ExternalPoseExtrinsicsConfig] = field(default_factory=list)
+    heading: HeadingConfig = field(default_factory=lambda:HeadingConfig())
 
     @staticmethod
     def serialize(val: 'SensorExtrinsicsConfig') -> bytes:
@@ -186,7 +209,8 @@ _SensorExtrinsicsConfigRawConstruct = Struct(
     "gps_receivers" / FrozenVectorAdapter(2, GpsReceiverExtrinsicsConfigConstruct),
     "imus" / FrozenVectorAdapter(1, ImuExtrinsicsConfigConstruct),
     "external_pose" / FrozenVectorAdapter(4, ExternalPoseExtrinsicsConfigConstruct),
-    Padding(128)
+    "heading" / HeadingConfigConstruct,
+    Padding(108)
 )
 SensorExtrinsicsConfigConstruct = DataClassAdapter(SensorExtrinsicsConfig, _SensorExtrinsicsConfigRawConstruct)
 
@@ -243,6 +267,7 @@ class TickDirection(IntOrStrEnum):
 @dataclass
 class CanConfig:
     id_whitelist: List[int] = field(default_factory=list)
+    baudrate: int = 500000
 
     @staticmethod
     def serialize(val: 'CanConfig') -> bytes:
@@ -254,7 +279,8 @@ class CanConfig:
 
 _CanConfigRawConstruct = Struct(
     "id_whitelist" / FrozenVectorAdapter(10, Int32ul),
-    Padding(32)
+    "baudrate" / Int32ul,
+    Padding(28)
 )
 CanConfigConstruct = DataClassAdapter(CanConfig, _CanConfigRawConstruct)
 
@@ -312,6 +338,16 @@ _VehicleConfigRawConstruct = Struct(
 VehicleConfigConstruct = DataClassAdapter(VehicleConfig, _VehicleConfigRawConstruct)
 
 
+class IonoDelayModel(IntOrStrEnum):
+    AUTO = 0
+    OFF = 1
+    KLOBUCHAR = 2
+
+class TropoDelayModel(IntOrStrEnum):
+    AUTO = 0
+    OFF = 1
+    SAASTAMOINEN = 2
+
 @dataclass
 class NavigationConfig:
     r_b_bo: Point3f = field(default_factory=lambda:Point3f(**{'x': 0.0, 'y': 0.0, 'z': 0.0}))
@@ -328,6 +364,8 @@ class NavigationConfig:
     enable_l5: bool = True
     leap_second: int = 255
     gps_week_rollover: int = 255
+    iono_delay_model: IonoDelayModel = IonoDelayModel.AUTO
+    tropo_delay_model: TropoDelayModel = TropoDelayModel.AUTO
 
     @staticmethod
     def serialize(val: 'NavigationConfig') -> bytes:
@@ -352,7 +390,9 @@ _NavigationConfigRawConstruct = Struct(
     "enable_l5" / Flag,
     "leap_second" / Int8ul,
     "gps_week_rollover" / Int8ul,
-    Padding(64)
+    "iono_delay_model" / AutoEnum(Int8ul, IonoDelayModel),
+    "tropo_delay_model" / AutoEnum(Int8ul, TropoDelayModel),
+    Padding(62)
 )
 NavigationConfigConstruct = DataClassAdapter(NavigationConfig, _NavigationConfigRawConstruct)
 
@@ -433,6 +473,7 @@ class FusionEngineMessageRates:
     raw_imu_output: MessageRate = MessageRate.OFF
     raw_wheel_speed_output: MessageRate = MessageRate.OFF
     raw_vehicle_speed_output: MessageRate = MessageRate.OFF
+    device_id: MessageRate = MessageRate.OFF
 
     @staticmethod
     def serialize(val: 'FusionEngineMessageRates') -> bytes:
@@ -464,7 +505,8 @@ _FusionEngineMessageRatesRawConstruct = Struct(
     "raw_imu_output" / AutoEnum(Int8ul, MessageRate),
     "raw_wheel_speed_output" / AutoEnum(Int8ul, MessageRate),
     "raw_vehicle_speed_output" / AutoEnum(Int8ul, MessageRate),
-    Padding(19)
+    "device_id" / AutoEnum(Int8ul, MessageRate),
+    Padding(18)
 )
 FusionEngineMessageRatesConstruct = DataClassAdapter(FusionEngineMessageRates, _FusionEngineMessageRatesRawConstruct)
 
@@ -599,6 +641,7 @@ CommInterfacesConfigConstruct = DataClassAdapter(CommInterfacesConfig, _CommInte
 @dataclass
 class SystemControlConfig:
     enable_watchdog_timer: bool = True
+    device_id: str = ""
 
     @staticmethod
     def serialize(val: 'SystemControlConfig') -> bytes:
@@ -611,7 +654,8 @@ class SystemControlConfig:
 _SystemControlConfigRawConstruct = Struct(
     "enable_watchdog_timer" / Flag,
     Padding(3),
-    Padding(128)
+    "device_id" / PaddedString(32, "utf8"),
+    Padding(96)
 )
 SystemControlConfigConstruct = DataClassAdapter(SystemControlConfig, _SystemControlConfigRawConstruct)
 
@@ -624,7 +668,6 @@ class UserConfig:
     navigation: NavigationConfig = field(default_factory=lambda:NavigationConfig())
     comm_interfaces: CommInterfacesConfig = field(default_factory=lambda:CommInterfacesConfig())
     system_controls: SystemControlConfig = field(default_factory=lambda:SystemControlConfig())
-    VERSION: str = "6.2"
 
     @staticmethod
     def serialize(val: 'UserConfig') -> bytes:
@@ -649,9 +692,30 @@ class UserConfig:
         Ver 6.0 - Major refactor of IO interfaces. 3/10/2023
         Ver 6.1 - Added UTC leap second manual override. 3/21/2023
         Ver 6.2 - Added week rollover manual override. 3/24/2023
+        Ver 6.3 - Added ionospheric and tropospheric delay model configurations. 4/20/2023
+        Ver 6.4 - Added heading vertical and horizontal bias configurations. 5/22/2023
+        Ver 6.5 - Added device ID. 6/06/2023
+        Ver 6.6 - Added CAN baudrate. 6/07/2023
 
         """
-        return 6, 2
+        return 6, 6
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'UserConfig':
+        config = cls()
+        config.update(data)
+        return config
+
+    def update(self, other, merge_list_elements: bool = False) -> None:
+        update_dataclass_contents(self, other, merge_list_elements)
+
+    def to_dict(self) ->  Dict[str, Any]:
+        return prepare_dataclass_for_json(self)
+
+    def to_json(self) -> str:
+        dict_contents = self.to_dict()
+        dict_contents['__version'] = "6.6"
+        return json.dumps(dict_contents, indent=2, sort_keys=True)
 
 _UserConfigRawConstruct = Struct(
     "profiling" / ProfilingConfigConstruct,

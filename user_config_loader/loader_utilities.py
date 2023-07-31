@@ -257,21 +257,27 @@ def _interpret_value(field_type: type, val):
 # Recursively update the fields in data_class in-place with the corresponding values.
 # Only values that aren't none and with keys that match the field names will be used to update data_class.
 # Fields that aren't updated will preserve their current values.
-def update_dataclass_contents(data_class, values: Dict[str, Any]):
+# By default the elements of a list aren't updated, they are replaced. Setting `merge_list_elements` to
+# `True` will instead try to merge existing elements of a list.
+def update_dataclass_contents(data_class, values: Dict[str, Any], merge_list_elements: bool = False):
     for field in fields(data_class):
         k = field.name
         if k in values and values[k] is not None:
             if is_dataclass(field.type):
-                update_dataclass_contents(getattr(data_class, k), values[k])
+                update_dataclass_contents(getattr(data_class, k), values[k], merge_list_elements)
             # Used to recursively update fields that are typed to a list.
             elif hasattr(field.type, '_name') and field.type._name == "List":
                 # The type of the values in the List.
                 list_type = field.type.__args__[0]
                 loaded_values = []
-                for v in values[k]:
+                current_values = getattr(data_class, k)
+                for i, v in enumerate(values[k]):
                     if is_dataclass(list_type):
-                        data_val = list_type()
-                        update_dataclass_contents(data_val, v)
+                        if merge_list_elements and current_values and i < len(current_values):
+                            data_val = current_values[i]
+                        else:
+                            data_val = list_type()
+                        update_dataclass_contents(data_val, v, merge_list_elements)
                     else:
                         data_val = _interpret_value(list_type, v)
                     loaded_values.append(data_val)

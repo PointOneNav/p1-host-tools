@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from enum import auto, Enum
 from typing import Optional
 
@@ -24,7 +22,7 @@ class DeviceType(Enum):
         return self.is_lg69t() or self is DeviceType.LC29H
 
     @classmethod
-    def from_string(cls, name: Optional[str]) -> DeviceType:
+    def from_string(cls, name: Optional[str]) -> 'DeviceType':
         if name is not None:
             try:
                 return cls[name]

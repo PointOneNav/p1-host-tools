@@ -73,9 +73,11 @@ def _search_message_ids(name_to_message_id: Dict[str, int], query: str) -> List[
     message_ids = set()
     for message_id_str in message_id_strs:
         # Try the message ID as an integer first.
+        known_numeric_message_id = False
         try:
             message_id = int(message_id_str)
             if message_id in known_message_ids:
+                known_numeric_message_id = True
                 message_ids.add(message_id)
             else:
                 raise ValueError('Unrecognized FusionEngine message ID %d.' % message_id)
@@ -123,6 +125,8 @@ def _search_message_ids(name_to_message_id: Dict[str, int], query: str) -> List[
             display_names = [message_id_to_display_name[t] for t in types]
             raise ValueError("Found multiple types matching '%s':\n  %s" %
                              (message_id_str, '\n  '.join(display_names))) from None
+        elif known_numeric_message_id:
+            continue
         else:
             raise ValueError("Unrecognized message type '%s'." % message_id_str) from None
 

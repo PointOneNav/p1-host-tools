@@ -6,10 +6,13 @@ import threading
 from threading import Thread, Event
 import traceback
 
-import websockets
-
 from . import trace as logging
 from .eos_message import WebsocketHeader
+
+try:
+    import websockets
+except ImportError:
+    websockets = None
 
 
 class WebSocketServerThread(Thread):
@@ -120,10 +123,13 @@ class OutputServer(object):
                 name='quectel_tcp', target=self._run_tcp)
 
         if self.ws_address is not None:
-            self.logger.debug('Listening for incoming websocket connections on ws://%s:%d.' %
-                              (self.ws_address[0], self.ws_address[1]))
-            self.ws_server = WebSocketServerThread(self.ws_address, legacy_nmea=self.legacy_nmea)
-            self.ws_server.start()
+            if websockets is None:
+                self.logger.error('Websocket support not available.')
+            else:
+                self.logger.debug('Listening for incoming websocket connections on ws://%s:%d.' %
+                                  (self.ws_address[0], self.ws_address[1]))
+                self.ws_server = WebSocketServerThread(self.ws_address, legacy_nmea=self.legacy_nmea)
+                self.ws_server.start()
 
         if self.tcp_thread is not None:
             self.is_open = True

@@ -3,20 +3,17 @@
 from datetime import datetime
 import os
 import socket
-import subprocess
 import sys
+
+try:
+    from websockets.sync.client import connect as websocket_connect
+except ImportError:
+    websocket_connect = None
 
 import serial
 
 from fusion_engine_client.messages import *
 from fusion_engine_client.utils.log import DEFAULT_LOG_BASE_DIR
-
-# If this running in the development repo, try updating the UserConfig definitions.
-update_user_config_script = os.path.normpath(
-    os.path.join(os.path.dirname(__file__),
-                 '../../scripts/update_user_config_loader.sh'))
-if os.path.exists(update_user_config_script):
-    subprocess.run(update_user_config_script)
 
 # Add the parent directory to the search path to enable p1_runner and bin package imports when not installed in Python.
 repo_root = os.path.normpath(os.path.join(os.path.dirname(__file__), '..'))
@@ -25,9 +22,14 @@ sys.path.append(os.path.dirname(__file__))
 
 from p1_runner import trace as logging
 from p1_runner.argument_parser import ArgumentParser, ExtendedBooleanAction, TriStateBooleanAction
-from p1_runner.data_source import SerialDataSource, SocketDataSource
+from p1_runner.data_source import SerialDataSource, SocketDataSource, WebSocketDataSource
 from p1_runner.device_interface import DeviceInterface, RESPONSE_TIMEOUT
-from p1_runner.exported_data import add_to_exported_data, create_exported_data, is_export_valid, load_saved_data
+from p1_runner.exported_data import (add_to_exported_data,
+                                     create_exported_data,
+                                     is_export_valid,
+                                     load_saved_json,
+                                     load_saved_data,
+                                     user_config_from_platform_storage)
 from p1_runner.find_serial_device import find_serial_device, PortType
 
 from config_message_rate import *
@@ -607,7 +609,13 @@ def apply_config(config_interface: DeviceInterface, args):
 
 def save_config(config_interface: DeviceInterface, args):
     logger.debug('Saving lever arm parameter updates.')
-    action = SaveAction.REVERT_TO_SAVED if args.revert else SaveAction.SAVE
+    if args.revert_to_saved:
+        action = SaveAction.REVERT_TO_SAVED
+    elif args.revert_to_defaults:
+        action = SaveAction.REVERT_TO_DEFAULT
+    else:
+        action = SaveAction.SAVE
+
     config_interface.send_save(action)
 
     resp = config_interface.wait_for_message(CommandResponseMessage.MESSAGE_TYPE)
@@ -775,6 +783,14 @@ def request_export(config_interface: DeviceInterface, args):
     data_types = _data_types_map[args.type]
     responses = []
 
+    if args.format == 'json':
+        if args.type == 'all':
+            logger.info('JSON export only valid for user_config.')
+            data_types = [DataType.USER_CONFIG]
+        elif args.type != 'user_config':
+            logger.error('JSON export only valid for user_config. Use `--type=user_config`.')
+            return None
+
     # Query device for version to save with metadata.
     config_interface.send_message(MessageRequest(MessageType.VERSION_INFO))
     version_resp = config_interface.wait_for_message(VersionInfoMessage.MESSAGE_TYPE)
@@ -787,9 +803,14 @@ def request_export(config_interface: DeviceInterface, args):
     if export_file is None:
         timestr = datetime.now().strftime("%y%m%d_%H%M%S")
         device_type = '-'.join(version_resp.engine_version_str.split('-')[:2])
-        export_file = device_type + '.' + timestr + '.p1nvm'
+        if args.format == 'json':
+            export_file = device_type + '.user_config.' + timestr + '.json'
+        else:
+            export_file = device_type + '.' + timestr + '.p1nvm'
+    logger.info('Exporting to %s', export_file)
 
-    create_exported_data(export_file, version_resp)
+    if args.format == 'p1nvm':
+        create_exported_data(export_file, version_resp)
 
     for data_type in data_types:
         export_msg = ExportDataMessage(data_type)
@@ -816,20 +837,61 @@ def request_export(config_interface: DeviceInterface, args):
             return None
 
         responses.append(data_msg)
-        add_to_exported_data(export_file, data_msg)
+
+        if args.format == 'p1nvm':
+            add_to_exported_data(export_file, data_msg)
+        else:
+            with open(export_file, 'w') as fd:
+                user_config = user_config_from_platform_storage(data_msg)
+                if user_config:
+                    fd.write(user_config.to_json())
+                else:
+                    return None
 
     logger.info('Exports successful.')
     return responses
 
 
 def request_import(config_interface: DeviceInterface, args):
+    file_extension = args.file.split('.')[-1].lower()
     data_types = _data_types_map[args.type]
 
-    if not is_export_valid(args.file):
-        logger.error('%s is not a valid data export.', args.file)
-        return False
+    if file_extension == 'json':
+        if args.type != 'user_config':
+            logger.error('JSON import only valid for user_config. Use `--type=user_config`.')
+            return False
 
-    import_cmds = load_saved_data(args.file, data_types)
+        default_data = None
+        # To preserve the current configuration and only override the values set in the JSON, first
+        # load the current configuration from the device.
+        if args.preserve_unspecified:
+            logger.info('Reading current settings to preserve if unspecified.')
+            while True:
+                export_msg = ExportDataMessage(DataType.USER_CONFIG)
+                config_interface.send_message(export_msg)
+                data_msg = config_interface.wait_for_message(MessageType.PLATFORM_STORAGE_DATA)
+                if data_msg is None or not isinstance(data_msg, PlatformStorageDataMessage):
+                    logger.error('Device did not respond to export request.')
+                    return False
+                # Check the response has the expected data type to avoid handling the periodic PlatformStorageDataMessage
+                # output.
+                if DataType.USER_CONFIG == data_msg.data_type:
+                    break
+            if data_msg.response != Response.NO_DATA_STORED and data_msg.response != Response.OK:
+                logger.warning('Export USER_CONFIG error: "%s"', data_msg.response.name)
+                return False
+            else:
+                default_data = data_msg
+        import_cmds = load_saved_json(args.file, DataType.USER_CONFIG, default_data)
+    else:
+        if args.preserve_unspecified:
+            logger.error('`--preserve-unspecified` is only valid for JSON files.')
+            return False
+        elif not is_export_valid(args.file):
+            logger.error('%s is not a valid data export.', args.file)
+            return False
+        else:
+            import_cmds = load_saved_data(args.file, data_types)
 
     if len(import_cmds) == 0:
         logger.error('None of the data types %s found in %s.', [t.name for t in data_types], args.file)
@@ -909,6 +971,9 @@ def request_fault(config_interface: DeviceInterface, args):
     elif args.fault == 'blackout':
         logger.info('Sending a blackout region fault command.')
         payload = FaultControlMessage.RegionBlackout(args.enabled)
+    elif args.fault == 'quectel_test':
+        logger.info(f'{"Enabling" if args.enabled else "Disabling"} Quectel test mode.')
+        payload = FaultControlMessage.QuectelTest(args.enabled)
     else:
         logger.error('Unrecognized fault type.')
         return False
@@ -940,9 +1005,9 @@ def get_port_id(config_interface: DeviceInterface, args):
                 name = k
                 break
         if name is None:
-            logger.info('Unexpected interface %s reported.')
+            logger.info('Unexpected interface %s reported.', str(interface))
         else:
-            logger.info('Host port %s is connected to device interface %s.', config_interface.serial_out.port, name)
+            logger.info('Host port is connected to device interface %s.', name)
         return True
     else:
         return False
@@ -1015,6 +1080,9 @@ Export the device's user configuration to a local file.
 
     parser.add_argument('--device-tcp-address',
                         help="The address to use when communicating with the device over TCP. The address can be "
+                             "specified with a port like 'address:port' to use a non-default port.")
+    parser.add_argument('--device-websocket-address',
+                        help="The address to use when communicating with the device over a websocket. The address can be "
                              "specified with a port like 'address:port' to use a non-default port.")
     parser.add_argument('--device-baud', '--baud', type=int, default=460800,
                         help="The baud rate used by the device serial port (--device-port).")
@@ -1598,6 +1666,13 @@ Example usage:
         'enabled', action=ExtendedBooleanAction,
         help='Enable/disable simulated blackout region.')
 
+    quectel_test_parser = type_parser.add_parser(
+        'quectel_test',
+        help='Enable/disable Quectel test mode.')
+    quectel_test_parser.add_argument(
+        'enabled', action=ExtendedBooleanAction,
+        help='Enable/disable Quectel test mode.')
+
     # config_tool.py reset
     help = 'Issue a device reset request.'
     reset_parser = command_subparsers.add_parser(
@@ -1650,6 +1725,11 @@ diagnostic log reset:
         default='all',
         help="The type of data to export to a local file: %s" % ', '.join(_data_types_map.keys()))
     export_parser.add_argument(
+        '--format',
+        choices=['json', 'p1nvm'],
+        default='p1nvm',
+        help="The format for the exported file. json is only supported for user_config export.")
+    export_parser.add_argument(
         '--export-saved-config',
         action=ExtendedBooleanAction,
         help="When exporting the user_config, export the saved values instead of the active values.")
@@ -1670,6 +1750,12 @@ diagnostic log reset:
     import_parser.add_argument(
         '-f', '--force', action=ExtendedBooleanAction,
         help="If set, the user will not be prompted to confirm any actions.")
+    import_parser.add_argument(
+        '--preserve-unspecified', action=ExtendedBooleanAction,
+        help="""\
+If set, only modify the values specified in the JSON. This flag is only valid
+when importing a JSON file. If this is flag isn't specified, values not set in
+the JSON will be set to their default values.""")
     import_parser.add_argument(
         '--type',
         choices=_data_types_map.keys(),
@@ -1703,9 +1789,13 @@ diagnostic log reset:
         'save',
         help=help,
         description=help)
-    save_parser.add_argument(
-        '-r', '--revert', action=ExtendedBooleanAction,
+    revert_group = save_parser.add_mutually_exclusive_group()
+    revert_group.add_argument(
+        '-r', '--revert-to-saved', action=ExtendedBooleanAction,
         help="If set, revert the active configuration to the saved values.")
+    revert_group.add_argument(
+        '-d', '--revert-to-defaults', action=ExtendedBooleanAction,
+        help="If set, revert the active configuration to the factory defaults.")
 
     # config_tool.py system_status
     help = 'Query the device system status information.'
@@ -1763,7 +1853,19 @@ diagnostic log reset:
         parser.print_help()
         sys.exit(1)
 
-    if args.device_tcp_address is not None:
+    if args.device_websocket_address is not None:
+        if websocket_connect is None:
+            logger.error('Websocket support not available.')
+            sys.exit(1)
+        else:
+            try:
+                websocket = websocket_connect('ws://' + args.device_websocket_address)
+            except Exception as e:
+                logger.error("Problem connecting to Websocket address '%s': %s." %
+                             (args.device_websocket_address, str(e)))
+                sys.exit(1)
+            data_source = WebSocketDataSource(websocket)
+    elif args.device_tcp_address is not None:
         try:
             parts = args.device_tcp_address.split(':')
             address = parts[0]
@@ -1772,7 +1874,7 @@ diagnostic log reset:
             elif len(parts) == 2:
                 port = int(parts[1])
             else:
-                raise ValueError('Invalid Address')
+                logger.error('Invalid websocket address.')
                 sys.exit(1)
 
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
