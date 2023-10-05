@@ -43,8 +43,12 @@ class PortType(Enum):
 #   - port.product: CP2105 Dual USB to UART Bridge Controller
 #   - port.description: CP2105 Dual USB to UART Bridge Controller
 #   ^ Note: The Mac OS driver does not include "standard"/"enhanced" in the port description
+#
+# On some driver versions the manufacturer is "Silicon Laboratories" instead of "Silicon Labs"
 def _is_cp210x(port):
-    return port.manufacturer == 'Silicon Labs' and 'CP210' in port.description
+    if port.manufacturer is None or port.description is None:
+        return False
+    return 'Silicon Lab' in port.manufacturer and 'CP210' in port.description
 
 
 def _get_type(port):
@@ -158,18 +162,27 @@ def find_serial_device(port_name: str = 'auto', port_type: Optional[PortType] = 
                     else:
                         _logger.warning("Warning: %s" % message)
 
-                if port_type is not None and port_type != PortType.ANY:
-                    actual_type = _get_type(port)
-
-                    if port_type == actual_type:
-                        pass
-                    else:
-                        message = "Serial device %s matches CP210x type %s, not requested type %s." % \
-                                  (port.device, str(actual_type).title(), str(port_type).title())
+                elif port_type is not None and port_type != PortType.ANY:
+                    actual_type = None
+                    try:
+                        actual_type = _get_type(port)
+                        if port_type == actual_type:
+                            pass
+                        else:
+                            message = "Serial device %s matches CP210x type %s, not requested type %s." % \
+                                    (port.device, str(actual_type).title(), str(port_type).title())
+                            if raise_on_wrong_type:
+                                raise ValueError(message)
+                            else:
+                                _logger.warning("Warning: %s" % message)
+                    # This exception can occur for Quad CP210x.
+                    except:
+                        message = "Serial device %s matches CP210x type, but not standard/enhanced port labelling." % \
+                                (port.device)
                         if raise_on_wrong_type:
                             raise ValueError(message)
                         else:
-                            _logger.warning("Warning: %s" % message)
+                            _logger.warning(message)
 
                 return port.device
 

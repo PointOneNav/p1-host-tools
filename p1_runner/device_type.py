@@ -10,10 +10,9 @@ class DeviceType(Enum):
     LC29H = auto()
     ATLAS = auto()
     STANDALONE_GNSS = auto()
-    GENERIC_RINEX = auto()
-    GENERIC_RTCM = auto()
     GRAYBOX = auto()
     EXO = auto()
+    BEAM2K = auto()
 
     def is_lg69t(self) -> bool:
         return self in (DeviceType.LG69T_AH, DeviceType.LG69T_AM, DeviceType.LG69T_AP)

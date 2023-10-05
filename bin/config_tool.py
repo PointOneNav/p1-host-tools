@@ -96,7 +96,6 @@ def _str_to_vehicle_model(vehicle_model_str):
 
 _wheel_sensor_type_map = {
     "none": WheelSensorType.NONE,
-    "tick_rate": WheelSensorType.TICK_RATE,
     "ticks": WheelSensorType.TICKS,
     "wheel_speed": WheelSensorType.WHEEL_SPEED,
     "vehicle_speed": WheelSensorType.VEHICLE_SPEED,
@@ -704,6 +703,18 @@ def query_nmea_versions(config_interface: DeviceInterface, args):
         logger.info(resp)
         versions.append(resp)
     return versions
+
+
+def query_interfaces(config_interface: DeviceInterface, args):
+    logger.debug('Querying device interface list.')
+    config_interface.send_message(MessageRequest(MessageType.SUPPORTED_IO_INTERFACES))
+
+    resp = config_interface.wait_for_message(MessageType.SUPPORTED_IO_INTERFACES)
+    if resp is None:
+        logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
+    else:
+        logger.info(str(resp))
+    return resp
 
 
 def request_reset(config_interface: DeviceInterface, args):
@@ -1829,6 +1840,13 @@ the JSON will be set to their default values.""")
         help=help,
         description=help)
 
+    # config_tool.py list_interfaces
+    help = 'List the IO interfaces supported by the device.'
+    list_interfaces_parser = command_subparsers.add_parser(
+        'list_interfaces',
+        help=help,
+        description=help)
+
     args = parser.parse_known_args()
     args = parser.parse_args(args[1], args[0])
 
@@ -1929,6 +1947,8 @@ the JSON will be set to their default values.""")
         passed = request_import(config_interface, args)
     elif args.command == "get_port_id":
         passed = get_port_id(config_interface, args)
+    elif args.command == "list_interfaces":
+        passed = query_interfaces(config_interface, args)
     else:
         logger.error("Unrecognized command '%s'." % args.command)
 

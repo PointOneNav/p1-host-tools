@@ -376,7 +376,7 @@ class P1Runner(threading.Thread):
 
         # Now that the device is operating, if wheel tick display mode is enabled, query the configuration.
         if self.wheel_tick_display and first_data:
-            self.wheel_tick_display.query_wheel_config()
+            self.wheel_tick_display.query_config()
 
         # If we are logging data and we are _not_ using .p1log format (i.e., recording only FusionEngine messages),
         # store the data now before attempting to process it further.
@@ -610,5 +610,9 @@ Detected data incoming from external source, whereas NTRIP client is configured.
 both sources, this may lead to conflicting data and undefined behavior.
 """)
             self.external_data_warning_sent = True
+
+        # pyserial requires a bytes object as input, even for ASCII data.
+        if isinstance(msg, str):
+            msg = msg.encode('utf-8')
 
         self.device_serial.write(msg)

@@ -201,95 +201,94 @@ class RTCMFramer(object):
     ]
 
     def __init__(self):
-        self.buffer = bytearray(RTCM3_MAX_LENGTH)
-        self.offset = 0
+        self.buffer = bytes()
         self.header = None
         self.message_length = None
         self.callback = None
         self.total_data_offset = 0
+        self.preamble_found = False
 
     def set_callback(self, callback):
         self.callback = callback
 
     def reset(self):
-        self.offset = 0
+        self.buffer = bytes()
         self.header = None
         self.message_length = None
+        self.preamble_found = False
 
     def on_data(self, data, return_size=False, return_bytes=False, return_offset=False):
         messages = []
-        i = 0
-        while i < len(data):
-            b = data[i]
-            self.total_data_offset += 1
-            i += 1
-            if isinstance(b, str):
-                b = ord(b)
+        if isinstance(data, str):
+            data = data.encode()
+        self.buffer += data
 
+        while True:
             # Search for the RTCM preamble.
-            if self.offset == 0:
-                self.logger.trace('Searching for preamble. [byte=0x%02X]' % b)
-                self.reset()
-                if b == RTCM3_PREAMBLE:
-                    self.logger.trace('Found preamble. [byte=0x%02X]' % b)
-                    self.buffer[self.offset] = b
-                    self.offset += 1
-            # Collect the rest of the RTCM header _and_ the message ID. The RTCM message ID (12b) is technically not part of
-            # the header, but every single RTCM message starts with one. If it didn't, we'd have no way of knowing what kind
-            # of message it was... The rtcm3_header struct reads both the header and optionally the message ID. Note that
-            # technically we're reading 4b past the message ID, but that should be fine.
-            elif self.offset < RTCM3_HEADER_LENGTH + 2:
-                self.buffer[self.offset] = b
-                self.offset += 1
-                self.logger.trace('Received %d bytes. [byte=0x%02X]' % (self.offset, b))
+            if not self.preamble_found:
+                try:
+                    idx = self.buffer.index(RTCM3_PREAMBLE)
+                except ValueError:
+                    self.logger.trace('Skipping %d bytes searching for preamble.' % len(self.buffer))
+                    self.total_data_offset += len(self.buffer)
+                    self.buffer = bytes()
+                    break
 
-                if self.offset == RTCM3_HEADER_LENGTH + 2:
-                    header = rtcm3_header.parse(self.buffer[:self.offset])
-                    self.logger.debug('Received RTCM %d message header. Waiting for payload. [payload_size=%d B]' %
-                                    (header.message_id, header.info.payload_length))
-                    self.header = header
-                    self.message_length = RTCM3_HEADER_LENGTH + header.info.payload_length + RTCM3_CRC_LENGTH
+                self.total_data_offset += idx
+                self.buffer = self.buffer[idx:]
+
+                self.logger.trace('Found preamble.')
+                self.preamble_found = True
+
+            if len(self.buffer) < RTCM3_HEADER_LENGTH + 2:
+                break
+            elif self.message_length is None:
+                self.header = rtcm3_header.parse(self.buffer)
+                self.logger.debug('Received RTCM %d message header. Waiting for payload. [payload_size=%d B]' %
+                                (self.header.message_id, self.header.info.payload_length))
+                self.message_length = RTCM3_HEADER_LENGTH + self.header.info.payload_length + RTCM3_CRC_LENGTH
+
             # Collect the payload and CRC.
-            elif self.offset < self.message_length:
-                self.buffer[self.offset] = b
-                self.offset += 1
-                self.logger.trace('Received %d/%d bytes. [byte=0x%02X]' % (self.offset, self.message_length, b))
-
-                # If we collected the last byte, verify the CRC.
-                if self.offset == self.message_length:
-                    self.logger.debug('Message complete. Validating CRC.')
-                    expected_crc = self.calculate_crc24q(self.buffer[:self.offset - RTCM3_CRC_LENGTH])
-                    received_crc = rtcm3_crc.parse(self.buffer[(self.offset - RTCM3_CRC_LENGTH):])
-                    if expected_crc == received_crc:
-                        self.logger.debug(
-                            'CRC passed. Dispatching message. [message=%d, size=%d B, checksum=0x%06X]' %
-                            (self.header.message_id, self.message_length, received_crc))
-                        self.logger.trace(''.join(['\\x%02X' % b for b in self.buffer[:self.offset]]))
-                        message = rtcm3_frame.parse(self.buffer[:self.offset])
-                        if return_size or return_bytes:
-                            ret = {'message': message}
-                            if return_size:
-                                ret['size'] = self.offset
-                            if return_bytes:
-                                ret['bytes'] = self.buffer[:self.offset]
-                            if return_offset:
-                                ret['offset'] = self.total_data_offset - self.offset
-                            messages.append(ret)
-                        else:
-                            messages.append(message)
-                        if self.callback is not None:
-                            self.callback(message)
-                        # Message complete. Reset and search for the next preamble.
-                        self.reset()
+            if len(self.buffer) >= self.message_length:
+                self.logger.debug('Message complete. Validating CRC.')
+                content_len = self.message_length - RTCM3_CRC_LENGTH
+                expected_crc = self.calculate_crc24q(self.buffer[:content_len])
+                received_crc = rtcm3_crc.parse(self.buffer[content_len:])
+                if expected_crc == received_crc:
+                    self.logger.debug(
+                        'CRC passed. Dispatching message. [message=%d, size=%d B, checksum=0x%06X]' %
+                        (self.header.message_id, self.message_length, received_crc))
+                    self.logger.trace(''.join(['\\x%02X' % b for b in self.buffer[:self.message_length]]))
+                    message = rtcm3_frame.parse(self.buffer[:self.message_length])
+                    if return_size or return_bytes or return_offset:
+                        ret = {'message': message}
+                        if return_size:
+                            ret['size'] = self.message_length
+                        if return_bytes:
+                            ret['bytes'] = self.buffer[:self.message_length]
+                        if return_offset:
+                            ret['offset'] = self.total_data_offset
+                        messages.append(ret)
                     else:
-                        self.logger.debug(
-                            'CRC check failed, resyncing. [message=%d, size=%d B, crc=0x%62X, expected=0x%06X]' %
-                            (self.header.message_id, self.message_length, received_crc, expected_crc))
-                        # Add all but first byte of failed message back onto data buffer to retry parsing.
-                        data = self.buffer[1:self.offset] + data[i:]
-                        self.total_data_offset -= len(self.buffer[1:self.offset])
-                        i = 0
-                        self.reset()
+                        messages.append(message)
+                    if self.callback is not None:
+                        self.callback(message)
+                    # Message complete. Reset and search for the next preamble.
+                    self.buffer = self.buffer[self.message_length:]
+                    self.total_data_offset += self.message_length
+                else:
+                    self.logger.debug(
+                        'CRC check failed, resyncing. [message=%d, size=%d B, crc=0x%62X, expected=0x%06X]' %
+                        (self.header.message_id, self.message_length, received_crc, expected_crc))
+                    # Add all but first byte of failed message back onto data buffer to retry parsing.
+                    self.buffer = self.buffer[1:]
+                    self.total_data_offset += 1
+
+                self.header = None
+                self.message_length = None
+                self.preamble_found = False
+            else:
+                break
 
         return messages
 

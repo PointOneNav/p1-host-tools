@@ -8,7 +8,7 @@ requirements = [
     "argparse-formatter>=1.4",
     "colorama>=0.4.4",
     "construct~=2.10.67",
-    "fusion-engine-client==1.21.0",
+    "fusion-engine-client==1.22.0",
     "gpstime>=0.6.2",
     "psutil>=5.9.4",
     "pynmea2~=1.18.0",
@@ -23,7 +23,7 @@ if sys.version_info >= (3, 7):
 
 setup(
     name='p1-host-tools',
-    version='v0.18.0',
+    version='v0.19.0rc1',
     packages=find_packages(where='.'),
     install_requires=requirements,
 )

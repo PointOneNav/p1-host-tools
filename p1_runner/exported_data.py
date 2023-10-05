@@ -112,11 +112,11 @@ def load_json_user_config_data(json_fd: IO, default_data: Optional[PlatformStora
         json_data = json.load(json_fd)
         if "__version" in json_data:
             versions = json_data["__version"].split(".")
-            file_version = DataVersion(int(versions[1]), int(versions[0]))
+            file_version = DataVersion(int(versions[0]), int(versions[1]))
             if not user_config_version_match(file_version):
                 logger.warning("JSON file version %s did not match UserConfig library version %s. "
                                "Remove '__version' from the JSON to try loading anyway, or use a version of config_tools"
-                               " that matches the file Version.", (file_version, __user_config_version))
+                               " that matches the file Version.", file_version, __user_config_version)
                 return None
 
         if default_data:

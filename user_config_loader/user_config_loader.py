@@ -233,10 +233,10 @@ class VehicleModel(IntOrStrEnum):
     LINCOLN_MKZ = 180
     BMW_7 = 200
     VW_4 = 220
+    RIVIAN = 240
 
 class WheelSensorType(IntOrStrEnum):
     NONE = 0
-    TICK_RATE = 1
     TICKS = 2
     WHEEL_SPEED = 3
     VEHICLE_SPEED = 4
@@ -696,9 +696,10 @@ class UserConfig:
         Ver 6.4 - Added heading vertical and horizontal bias configurations. 5/22/2023
         Ver 6.5 - Added device ID. 6/06/2023
         Ver 6.6 - Added CAN baudrate. 6/07/2023
+        Ver 6.7 - Removed WheelSensorType::TICK_RATE enum. 9/25/2023
 
         """
-        return 6, 6
+        return 6, 7
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'UserConfig':
@@ -714,7 +715,7 @@ class UserConfig:
 
     def to_json(self) -> str:
         dict_contents = self.to_dict()
-        dict_contents['__version'] = "6.6"
+        dict_contents['__version'] = "6.7"
         return json.dumps(dict_contents, indent=2, sort_keys=True)
 
 _UserConfigRawConstruct = Struct(

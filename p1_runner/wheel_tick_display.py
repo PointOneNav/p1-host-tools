@@ -1,6 +1,7 @@
 import colorama
 import numpy as np
 import serial
+import time
 
 from fusion_engine_client.messages import *
 
@@ -23,6 +24,12 @@ class WheelTickDisplay:
         self.hardware_tick_config = None
         self.wheel_config = None
 
+        self.hardware_ticks_configured = False
+        self.hardware_tick_messages_enabled = False
+
+        self.hardware_tick_config_loaded = False
+        self.tick_message_rate_config_loaded = False
+
         self.p1_time = None
         self.tick_count = None
         self.speed_mps = None
@@ -31,8 +38,18 @@ class WheelTickDisplay:
 
         self.last_data_p1_time = None
         self.last_data_warning_p1_time = None
+        self.last_print_time = None
 
         self.printed_once = False
+
+    def query_config(self):
+        self.query_wheel_config()
+        self.query_tick_output_rate()
+
+    def query_tick_output_rate(self):
+        self.device_interface.get_message_rate(ConfigurationSource.ACTIVE, config_object=[
+                                      InterfaceID(TransportType.CURRENT, 0), ProtocolType.FUSION_ENGINE,
+                                      MessageType.RAW_VEHICLE_TICK_OUTPUT])
 
     def query_wheel_config(self):
         # First, issue a set request for the wheel config. When the response comes back, we'll send a request for the
@@ -48,6 +65,8 @@ class WheelTickDisplay:
             self._handle_pose_message(response_payload)
         elif header.message_type == MessageType.CONFIG_RESPONSE:
             self._handle_config_response(response_payload)
+        elif header.message_type == MessageType.MESSAGE_RATE_RESPONSE:
+            self._handle_message_rate_response(response_payload)
 
     def _handle_config_response(self, message: ConfigResponseMessage):
         if message.config_type == ConfigType.WHEEL_CONFIG and self.wheel_config is None:
@@ -57,6 +76,11 @@ class WheelTickDisplay:
             # configuration.
             self.device_interface.get_config(ConfigurationSource.ACTIVE, HardwareTickConfig.GetType())
         elif message.config_type == ConfigType.HARDWARE_TICK_CONFIG and self.hardware_tick_config is None:
+            self.hardware_tick_config_loaded = True
+
+            if message.config_object.tick_mode != TickMode.OFF:
+                self.hardware_ticks_configured = True
+
             self.hardware_tick_config = message.config_object
 
             # We should now have wheel and tick configuration. Print the settings.
@@ -64,6 +88,14 @@ class WheelTickDisplay:
             self.logger.info(self.hardware_tick_config)
             self.logger.info(self.wheel_config)
             self.logger.info("############################## END CONFIGURATION ###############################")
+
+    def _handle_message_rate_response(self, message: MessageRateResponse):
+        for rate_resp in message.rates:
+            if rate_resp.message_id == MessageType.RAW_VEHICLE_TICK_OUTPUT:
+                self.tick_message_rate_config_loaded = True
+
+                if rate_resp.effective_rate != MessageRate.OFF:
+                    self.hardware_tick_messages_enabled = True
 
     def _handle_vehicle_tick_message(self, message: RawVehicleTickOutput):
         # If we never got a speed message corresponding with the previous tick message, print the old tick data now.
@@ -128,49 +160,62 @@ class WheelTickDisplay:
                 self._print_state()
 
     def _print_state(self):
-        if self.display_mode == 'gui':
-            # Clear the previous text on each update.
-            if self.printed_once:
-                num_lines = 4
-                command = colorama.ansi.clear_line()
-                for i in range(num_lines - 1):
-                    command += colorama.Cursor.UP() + colorama.ansi.clear_line()
-                command += '\r'
-                print(command, end='', flush=True)
-            else:
-                self.printed_once = True
+        if self.last_print_time is None or time.time() - self.last_print_time >= 1.0:
+            self.last_print_time = time.time()
+            if not self.hardware_tick_config_loaded or not self.tick_message_rate_config_loaded:
+                self.logger.info("Hardware tick configuration loading...")
 
-            # Now print the display:
-            #   P1 Time:         123.456 sec
-            #   Tick Count:    123456789 ticks  |  Gear: FORWARD
-            #   Speed Measurement:  12.3 m/s (44.3 km/h = 27.5 mph)
-            #   Nav Engine Speed:   12.2 m/s (43.9 km/h = 27.3 mph)
-            tick_str = '% 12d' % self.tick_count if self.tick_count is not None else '% 12c' % '?'
-            if self.speed_mps is None or np.isnan(self.speed_mps):
-                speed_mps_str = '% 5c' % '?'
+            # If hardware ticks are not properly configured, then undefined state will not be printed.
+            elif not self.hardware_ticks_configured:
+                self.logger.error("ERROR: Hardware wheel ticks not configured: `tick_mode` parameter currently set to "
+                                "'off'")
+            # If the message rate for hardware tick FE messages are set to `OFF`, the state will not be printed.
+            elif not self.hardware_tick_messages_enabled:
+                self.logger.error("ERROR: Hardware wheel tick messages not enabled: message rate currently set to 'off'")
             else:
-                speed_mps = round(self.speed_mps * 10.0) / 10.0
-                speed_mps_str = '%5.1f m/s (%.1f km/h = %.1f mph)' % \
-                                (speed_mps, speed_mps * MPS_TO_KPH, speed_mps * MPS_TO_MPH)
-            if self.nav_engine_speed_mps is None or np.isnan(self.nav_engine_speed_mps):
-                nav_speed_mps_str = '% 6c' % '?'
-            else:
-                nav_engine_speed_mps = round(self.nav_engine_speed_mps * 10.0) / 10.0
-                nav_speed_mps_str = '%6.1f m/s (%.1f km/h = %.1f mph)' % \
-                                    (nav_engine_speed_mps, nav_engine_speed_mps * MPS_TO_KPH,
-                                     nav_engine_speed_mps * MPS_TO_MPH)
+                if self.display_mode == 'gui':
+                    # Clear the previous text on each update.
+                    if self.printed_once:
+                        num_lines = 4
+                        command = colorama.ansi.clear_line()
+                        for i in range(num_lines - 1):
+                            command += colorama.Cursor.UP() + colorama.ansi.clear_line()
+                        command += '\r'
+                        print(command, end='', flush=True)
+                    else:
+                        self.printed_once = True
 
-            print('P1 Time: %15.3f sec' % float(self.p1_time))
-            print('Tick Count: %s ticks  |  Gear: %s' % (tick_str, self.gear))
-            print('Speed Measurement: %s' % speed_mps_str)
-            print('Nav Engine Speed: %s' % nav_speed_mps_str, end='', flush=True)
-        else:
-            tick_str = '%d' % self.tick_count if self.tick_count is not None else '?'
-            speed_str = '%.1f' % (round(self.speed_mps * 10.0) / 10.0) if self.speed_mps is not None else '?'
-            self.logger.info('%s | %s ticks --> %s m/s | Gear: %s' %
-                             (str(self.p1_time), tick_str, speed_str, str(self.gear)))
+                    # Now print the display:
+                    #   P1 Time:         123.456 sec
+                    #   Tick Count:    123456789 ticks  |  Gear: FORWARD
+                    #   Speed Measurement:  12.3 m/s (44.3 km/h = 27.5 mph)
+                    #   Nav Engine Speed:   12.2 m/s (43.9 km/h = 27.3 mph)
+                    tick_str = '% 12d' % self.tick_count if self.tick_count is not None else '% 12c' % '?'
+                    if self.speed_mps is None or np.isnan(self.speed_mps):
+                        speed_mps_str = '% 5c' % '?'
+                    else:
+                        speed_mps = round(self.speed_mps * 10.0) / 10.0
+                        speed_mps_str = '%5.1f m/s (%.1f km/h = %.1f mph)' % \
+                                        (speed_mps, speed_mps * MPS_TO_KPH, speed_mps * MPS_TO_MPH)
+                    if self.nav_engine_speed_mps is None or np.isnan(self.nav_engine_speed_mps):
+                        nav_speed_mps_str = '% 6c' % '?'
+                    else:
+                        nav_engine_speed_mps = round(self.nav_engine_speed_mps * 10.0) / 10.0
+                        nav_speed_mps_str = '%6.1f m/s (%.1f km/h = %.1f mph)' % \
+                                            (nav_engine_speed_mps, nav_engine_speed_mps * MPS_TO_KPH,
+                                            nav_engine_speed_mps * MPS_TO_MPH)
 
-        self.p1_time = None
-        self.tick_count = None
-        self.speed_mps = None
-        self.gear = GearType.UNKNOWN
+                    print('P1 Time: %15.3f sec' % float(self.p1_time))
+                    print('Tick Count: %s ticks  |  Gear: %s' % (tick_str, self.gear))
+                    print('Speed Measurement: %s' % speed_mps_str)
+                    print('Nav Engine Speed: %s' % nav_speed_mps_str, end='', flush=True)
+                else:
+                    tick_str = '%d' % self.tick_count if self.tick_count is not None else '?'
+                    speed_str = '%.1f' % (round(self.speed_mps * 10.0) / 10.0) if self.speed_mps is not None else '?'
+                    self.logger.info('%s | %s ticks --> %s m/s | Gear: %s' %
+                                    (str(self.p1_time), tick_str, speed_str, str(self.gear)))
+
+            self.p1_time = None
+            self.tick_count = None
+            self.speed_mps = None
+            self.gear = GearType.UNKNOWN
