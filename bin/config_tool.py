@@ -227,8 +227,8 @@ def _args_to_wheel_config(cls, args, config_interface):
     if args.wheel_update_interval is not None:
         new_values['wheel_update_interval_sec'] = args.wheel_update_interval
 
-    if args.wheel_tick_interval is not None:
-        new_values['wheel_tick_output_interval_sec'] = args.wheel_tick_interval
+    if args.wheel_output_tick_interval is not None:
+        new_values['wheel_tick_output_interval_sec'] = args.wheel_output_tick_interval
 
     if args.meters_per_tick is not None:
         new_values['wheel_ticks_to_m'] = args.meters_per_tick
@@ -1352,11 +1352,14 @@ using their existing values.''')
     wheel_config_parser.add_argument('--steering-type', choices=_steering_type_map.keys(),
                                      help='Indication of which of the vehicle\'s wheels are steered.')
     wheel_config_parser.add_argument('--wheel-update-interval', type=float,
-                                     help='The nominal rate at which wheel speed measurements will be provided (in '
+                                     help='The nominal rate at which wheel speed/tick measurements will be input (in '
                                           'seconds).')
-    wheel_config_parser.add_argument('--wheel-tick-interval', type=float,
-                                     help='The nominal rate at which wheel tick measurements will be provided (in '
-                                          'seconds).')
+    wheel_config_parser.add_argument('--wheel-tick--output-interval', type=float,
+                                     help='Override the rate at which the device will calculate wheel speed values '
+                                          'from incoming wheel tick data (in seconds). By default, the device will '
+                                          'select the best value automatically based on the tick quanitzation '
+                                          '(meters/tick scale factor). We do _not_ recommend setting this value for '
+                                          'most configurations.')
     wheel_config_parser.add_argument('--steering-ratio', type=float,
                                      help='Ratio between angle of the steering wheel and the angle of the wheels on '
                                           'the ground.')

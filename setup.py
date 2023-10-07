@@ -23,7 +23,7 @@ if sys.version_info >= (3, 7):
 
 setup(
     name='p1-host-tools',
-    version='v0.19.0rc1',
+    version='v0.18.2',
     packages=find_packages(where='.'),
     install_requires=requirements,
 )
