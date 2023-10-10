@@ -11,6 +11,7 @@ _logger = logging.getLogger('point_one.p1bin_type')
 class P1BinType(IntEnum):
     INVALID = 0xFFFF
     DEBUG = 0x01,
+    RTCM3_POLARIS = 0x21
     EXTERNAL_UNFRAMED_GNSS = 0x42
 
 

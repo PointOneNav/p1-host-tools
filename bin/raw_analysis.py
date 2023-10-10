@@ -16,6 +16,7 @@ repo_root = os.path.normpath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(repo_root)
 
 from p1_runner import trace as logging
+from p1_runner.p1bin_type import find_matching_p1bin_types
 from p1_runner.nmea_framer import NMEAFramer
 from p1_runner.p1bin_reader import P1BinFileStream, P1BinType
 from p1_runner.rtcm_framer import RTCMFramer
@@ -24,9 +25,8 @@ _logger = logging.getLogger('point_one.raw_analysis')
 
 READ_SIZE = 1024
 
-UNFRAMED_DATA_P1BIN_TYPE = P1BinType.EXTERNAL_UNFRAMED_GNSS
-
 FORMAT_STRS = set(('fe', 'nmea', 'rtcm'))
+EOF_FORMAT = 'eof'
 
 
 def get_output_file_path(input_path, postfix, output_dir=None, prefix=None):
@@ -37,38 +37,68 @@ def get_output_file_path(input_path, postfix, output_dir=None, prefix=None):
     return os.path.join(output_dir, prefix + postfix)
 
 
-def get_fd(input_path: str, ignore_index: bool):
+def get_fd(input_path: str, options):
     if input_path.endswith('.p1bin'):
-        _logger.info(f"Reading raw data from p1bin.")
-        return P1BinFileStream(input_path, UNFRAMED_DATA_P1BIN_TYPE, ignore_index=ignore_index, show_read_progress=True)
+        _logger.info(f"Reading raw data from p1bin {options.p1bin_type}.")
+        return P1BinFileStream(input_path, options.p1bin_type, ignore_index=options.ignore_index, show_read_progress=True)
     else:
         return open(input_path, 'rb')
 
 
-def index_messages(input_path, index_path, options):
+def index_messages(input_path, options):
     rtcm_framer = RTCMFramer() if 'rtcm' in options.format else None
     fe_framer = FusionEngineDecoder(
         max_payload_len_bytes=4096, return_offset=True) if 'fe' in options.format else None
     nmea_framer = NMEAFramer(
         return_offset=True) if 'nmea' in options.format else None
 
-    in_fd = get_fd(input_path, options.ignore_index)
+    in_fd = get_fd(input_path, options)
     skip_bytes = options.skip_bytes
-
-    start_time = datetime.now()
 
     in_fd.seek(0, io.SEEK_END)
     file_size = in_fd.tell()
     in_fd.seek(skip_bytes, 0)
 
-    next_update_time = 0
-
-    if options.bytes_to_process is None:
-        bytes_to_process = file_size
-    else:
+    bytes_to_process = file_size - skip_bytes
+    if options.bytes_to_process is not None and options.bytes_to_process < bytes_to_process:
         bytes_to_process = options.bytes_to_process
 
-    with open(index_path, 'w') as timestamp_fd:
+    # File without prefix indicates all parsers used.
+    index_file_full = get_output_file_path(
+        input_path, '_index.csv', output_dir=options.output_dir, prefix=options.prefix)
+
+    if len(options.format) < len(FORMAT_STRS):
+        index_file = get_output_file_path(
+            input_path, '_' + '_'.join(options.format) + '_index.csv', output_dir=options.output_dir, prefix=options.prefix)
+    else:
+        index_file = index_file_full
+
+    if not options.ignore_index:
+        # Try using the full index when processing a subset of formats.
+        index_files_to_load = set([index_file, index_file_full])
+        for index_file_to_load in index_files_to_load:
+            if os.path.exists(index_file_to_load):
+                index = load_index(index_file_to_load)
+                # Check if index was generated for same datafile.
+                eof_index = index[-1]
+                if eof_index[0] == EOF_FORMAT:
+                    if eof_index[2] != bytes_to_process:
+                        _logger.info(
+                            f'Index file "{index_file_to_load}" was generated for different input data, skipping load.')
+                    else:
+                        _logger.info(
+                            f'Using existing index "{index_file_to_load}".')
+                        return index
+                else:
+                    _logger.info(
+                        f'Index file "{index_file_to_load}" missing EOF entry, skipping load.')
+
+    _logger.info(f"Indexing raw input.")
+
+    start_time = datetime.now()
+    next_update_time = 0
+
+    with open(index_file, 'w') as timestamp_fd:
         timestamp_fd.write(
             'Protocol, ID, Offset (Bytes), Length (Bytes), P1 Time\n')
         while True:
@@ -87,7 +117,7 @@ def index_messages(input_path, index_path, options):
             data = in_fd.read(READ_SIZE)
 
             if len(data) == 0:
-                return
+                break
 
             entries = []
             if rtcm_framer is not None:
@@ -109,6 +139,10 @@ def index_messages(input_path, index_path, options):
                 timestamp_fd.write(
                     f'{",".join([str(elem) for elem in entry])}\n')
 
+        timestamp_fd.write(f'{EOF_FORMAT},0,{bytes_to_process},0,\n')
+
+    return load_index(index_file)
+
 
 def load_index(index_file):
     indexes = []
@@ -128,7 +162,7 @@ def find_gaps(indexes):
     next_offset = 0
     has_gaps = False
     for index in indexes:
-        if index[2] != next_offset:
+        if index[2] != next_offset and index[0] != EOF_FORMAT:
             has_gaps = True
             gap = index[2] - next_offset
             _logger.info(
@@ -180,6 +214,16 @@ parser.add_argument('-o', '--output-dir', type=str, metavar='DIR',
 parser.add_argument('-p', '--prefix', type=str,
                     help="Use the specified prefix for the output file: `<prefix>.p1log`. Otherwise, use the "
                     "filename of the input data file.")
+parser.add_argument(
+    '-t', '--p1bin-type', type=str, action='append',
+    help="An optional list message types to analyse from a p1bin file. Defaults to 'EXTERNAL_UNFRAMED_GNSS'. Only used if the "
+         "raw log is a *.p1bin file. May be specified multiple times (-m DEBUG -m EXTERNAL_UNFRAMED_GNSS), or as a "
+         "comma-separated list (-m DEBUG,EXTERNAL_UNFRAMED_GNSS). All matches are case-insensitive.\n"
+         "\n"
+         "If a partial name is specified, the best match will be returned. Use the wildcard '*' to match multiple "
+         "message types.\n"
+         "\n"
+         "Supported types:\n%s" % '\n'.join(['- %s' % c for c in P1BinType]))
 parser.add_argument('-f', '--format', type=str, action=CSVAction,
                     help="An optional list of message formats to search for. May be specified "
                     "multiple times (-f nmea -f rtcm), or as a comma-separated list (-m nmea,rtcm). All matches are"
@@ -240,26 +284,29 @@ def raw_analysis(options):
     else:
         format_str = ''
         options.format = FORMAT_STRS
-
     logger.info(f"Processing {options.format}.")
 
-    # File without prefix indicates all parsers used.
-    index_file_default = get_output_file_path(
-        input_path, '_index.csv', output_dir=options.output_dir, prefix=options.prefix)
+    # Use the EXTERNAL_UNFRAMED_GNSS unless the user explicitly specified different P1BinType.
+    if options.p1bin_type is not None:
+        # Pattern match to any of:
+        #   -t Type1
+        #   -t Type1 -t Type2
+        #   -t Type1,Type2
+        #   -t Type1,Type2 -t Type3
+        #   -t Type*
+        try:
+            options.p1bin_type = find_matching_p1bin_types(options.p1bin_type)
+            if len(options.p1bin_type) == 0:
+                # find_matching_message_types() will print an error.
+                sys.exit(1)
+        except ValueError as e:
+            _logger.error(str(e))
+            sys.exit(1)
+    else:
+        options.p1bin_type = [P1BinType.EXTERNAL_UNFRAMED_GNSS]
 
-    index_file = get_output_file_path(
-        input_path, format_str + '_index.csv', output_dir=options.output_dir, prefix=options.prefix)
-
-    # Use the full index when only processing a subset of formats.
-    if not options.ignore_index and os.path.exists(index_file_default) and not os.path.exists(index_file):
-        index_file = index_file_default
-
-    if options.ignore_index or not os.path.exists(index_file):
-        logger.info(f"Indexing raw input.")
-        index_messages(input_path, index_file, options)
-        logger.info(f"Output index stored in '{output_dir}'.")
-
-    index = load_index(index_file)
+    logger.info(f"Output index stored in '{output_dir}'.")
+    index = index_messages(input_path, options)
 
     if options.check_gaps:
         find_gaps(index)
