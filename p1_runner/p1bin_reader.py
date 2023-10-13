@@ -585,7 +585,7 @@ class P1BinFileStream:
         self.filtered_offsets = cum_sum[:-1]
         self.reader.rewind()
 
-    def seek(self, offset, whence):
+    def seek(self, offset, whence=io.SEEK_SET):
         self.cur_record_contents = b''
         if whence == io.SEEK_CUR:
             offset += self.offset

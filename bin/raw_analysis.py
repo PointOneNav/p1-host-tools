@@ -28,6 +28,8 @@ READ_SIZE = 1024
 FORMAT_STRS = set(('fe', 'nmea', 'rtcm'))
 EOF_FORMAT = 'eof'
 
+def is_msm_id(msg_id):
+    return msg_id == 1005 or msg_id == 1006 or (msg_id >= 1071 and msg_id <= 1227)
 
 def get_output_file_path(input_path, postfix, output_dir=None, prefix=None):
     if output_dir is None:
@@ -175,22 +177,38 @@ def find_gaps(indexes):
 
 def generate_separated_logs(input_path, indexes, options):
     output_map = {}
+    current_base_id = -1
+    rtcm_file_idx = 0
     if 'nmea' in options.format:
         # Note need the write binary to avoid needing to decode the ascii in the for loop.
         output_map['nmea'] = open(get_output_file_path(input_path, '.nmea',
                                   output_dir=options.output_dir, prefix=options.prefix), 'wb')
     if 'rtcm' in options.format:
-        output_map['rtcm'] = open(get_output_file_path(input_path, '.rtcm3',
+        suffix = '_0.rtcm3' if options.split_rtcm_base_id else '.rtcm3'
+        output_map['rtcm'] = open(get_output_file_path(input_path, suffix,
                                   output_dir=options.output_dir, prefix=options.prefix), 'wb')
     if 'fe' in options.format:
         output_map['fe'] = open(get_output_file_path(input_path, '.p1log',
                                 output_dir=options.output_dir, prefix=options.prefix), 'wb')
 
-    with open(input_path, 'rb') as in_fd:
-        for index in indexes:
-            if index[0] in output_map:
-                in_fd.seek(index[2])
-                output_map[index[0]].write(in_fd.read(index[3]))
+    in_fd = get_fd(input_path, options)
+    for index in indexes:
+        if index[0] in output_map:
+            in_fd.seek(index[2], io.SEEK_SET)
+            data = in_fd.read(index[3])
+            if options.split_rtcm_base_id and index[0] == 'rtcm' and is_msm_id(int(index[1])):
+                # offset 36 bits, length 12 bits.
+                base_id = ((data[4] & 0xF) << 8) + data[5]
+                if base_id != current_base_id:
+                    if current_base_id != -1:
+                        output_map['rtcm'].close()
+                        rtcm_file_idx += 1
+                        output_map['rtcm'] = open(get_output_file_path(input_path, f'_{rtcm_file_idx}.rtcm3',
+                                                                    output_dir=options.output_dir, prefix=options.prefix), 'wb')
+                    _logger.info(f"Writing for base station id: {base_id}")
+
+                current_base_id = base_id
+            output_map[index[0]].write(data)
 
 
 parser = ArgumentParser(description="""\
@@ -226,13 +244,16 @@ parser.add_argument(
          "Supported types:\n%s" % '\n'.join(['- %s' % c for c in P1BinType]))
 parser.add_argument('-f', '--format', type=str, action=CSVAction,
                     help="An optional list of message formats to search for. May be specified "
-                    "multiple times (-f nmea -f rtcm), or as a comma-separated list (-m nmea,rtcm). All matches are"
+                    "multiple times (-f nmea -f rtcm), or as a comma-separated list (-m nmea,rtcm). All matches are "
                     "case-insensitive.\n"
                     "\n"
                     "Supported types:\n%s" % '\n'.join(['- %s' % c for c in FORMAT_STRS]))
 parser.add_argument('-e',
                     '--extract', action=ExtendedBooleanAction,
                     help="If set, separate the contents of each format type into their own files.")
+parser.add_argument('--split-rtcm-base-id', action=ExtendedBooleanAction,
+                    help="If set, separate the RTCM contents into separate files each time the base station changes. "
+                         "The file names will end with '_N.rtcm' where N is the the count of base stations seen.")
 parser.add_argument('--check-gaps', action=ExtendedBooleanAction, default=True,
                     help="If set, separate the contents of each format type into their own files.")
 parser.add_argument('log',
