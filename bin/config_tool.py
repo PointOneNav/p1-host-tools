@@ -227,8 +227,8 @@ def _args_to_wheel_config(cls, args, config_interface):
     if args.wheel_update_interval is not None:
         new_values['wheel_update_interval_sec'] = args.wheel_update_interval
 
-    if args.wheel_output_tick_interval is not None:
-        new_values['wheel_tick_output_interval_sec'] = args.wheel_output_tick_interval
+    if args.wheel_tick_output_interval is not None:
+        new_values['wheel_tick_output_interval_sec'] = args.wheel_tick_output_interval
 
     if args.meters_per_tick is not None:
         new_values['wheel_ticks_to_m'] = args.meters_per_tick
@@ -1354,7 +1354,7 @@ using their existing values.''')
     wheel_config_parser.add_argument('--wheel-update-interval', type=float,
                                      help='The nominal rate at which wheel speed/tick measurements will be input (in '
                                           'seconds).')
-    wheel_config_parser.add_argument('--wheel-tick--output-interval', type=float,
+    wheel_config_parser.add_argument('--wheel-tick-output-interval', type=float,
                                      help='Override the rate at which the device will calculate wheel speed values '
                                           'from incoming wheel tick data (in seconds). By default, the device will '
                                           'select the best value automatically based on the tick quanitzation '
