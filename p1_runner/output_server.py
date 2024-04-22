@@ -203,9 +203,13 @@ class OutputServer(object):
                         'Unexpected error from TCP socket:\r%s' % traceback.format_exc())
                 break
 
-            data = client.recv(1024)
-            if data and self.incoming_data_callback is not None:
-                self.incoming_data_callback(data)
+            try:
+                data = client.recv(1024)
+                if data and self.incoming_data_callback is not None:
+                    self.incoming_data_callback(data)
+            except (BrokenPipeError, ConnectionResetError):
+                self.logger.error('Connection reset by peer.')
+                continue
 
         self.logger.debug('TCP thread finished.')
 
