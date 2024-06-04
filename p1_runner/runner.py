@@ -590,10 +590,11 @@ Are you using the correct UART/COM port (--device-port)?
             device_type = DeviceType.UNKNOWN
             self.logger.warning('Could not deduce device type from version string.')
 
-        self.log_manager.update_manifest([
-            ('device_type', device_type),
-            ('sw_version', sw_version),
-        ])
+        if self.log_manager is not None:
+            self.log_manager.update_manifest([
+                ('device_type', device_type),
+                ('sw_version', sw_version),
+            ])
 
         self.updated_manifest_with_version = True
 
