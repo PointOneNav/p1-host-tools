@@ -208,7 +208,7 @@ class OutputServer(object):
                 if data and self.incoming_data_callback is not None:
                     self.incoming_data_callback(data)
             except (BrokenPipeError, ConnectionResetError):
-                self.logger.error('Reconnecting tcp://'+str(addr[0])+':'+str(addr[1]))
+                self.logger.info('Output client tcp://%s:%d disconnected.' % (addr[0], addr[1]))
                 continue
 
         self.logger.debug('TCP thread finished.')
