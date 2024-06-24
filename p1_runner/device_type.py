@@ -10,6 +10,8 @@ class DeviceType(Enum):
     LC29H = auto()
     ATLAS = auto()
     STANDALONE_GNSS = auto()
+    STANDALONE_GNSS_SEPTENTRIO = auto()
+    STANDALONE_GNSS_MAVIC = auto()
     GRAYBOX = auto()
     EXO = auto()
     BEAM2K = auto()

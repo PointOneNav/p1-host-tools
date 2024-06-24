@@ -1,3 +1,4 @@
+import argparse
 import os
 import signal
 import sys
@@ -84,6 +85,8 @@ Forward NMEA output from the receiver to an application on TCP port 1234:
         help="An ID string used to identify this device in the recorded log data. Set to the value of the P1_DEVICE_ID "
              "environment variable if set. Defaults to '%s' if not specified." %
              P1Runner.DEFAULT_DEVICE_ID)
+    device_group.add_argument(
+        '--device-type', default=None, help=argparse.SUPPRESS)
 
     device_group.add_argument(
         '--device-port', '--port', default="auto",
@@ -131,14 +134,29 @@ Forward NMEA output from the receiver to an application on TCP port 1234:
         help="A comma-separated string specifying a geodetic position (in degrees/meters) to be sent to the NTRIP "
              "server instead of the position reported by the receiver.")
 
+    corr_group.add_argument(
+        '--aux-ntrip', metavar='HOSTNAME[:PORT],MOUNTPOINT[,USERNAME[,PASSWORD]]',
+        help="The hostname/port and credentials for an auxiliary NTRIP server to use as a source of ephemeris data. If "
+             "omitted, PORT defaults to 2101. Set to 'polaris' to use the Polaris ephemeris stream.")
+    corr_group.add_argument(
+        '--aux-ntrip-tls', action='store_true',
+        help="Use TLS when connecting to the NTRIP service (not enabled by default; ignored if --aux-ntrip is not "
+             "specified).")
+    corr_group.add_argument(
+        '--aux-ntrip-version', type=int,
+        help="The NTRIP version to use for this connection: 1 (default) or 2.")
+
     corr_sel_group.add_argument(
         '--polaris', metavar='[USERNAME,]PASSWORD',
         help="The username and password to use when receiving RTK corrections from Point One the Polaris network. "
              "--ntrip and --ntrip-tls will be ignored if --polaris is specified. If username is omitted, it will be "
              "set to the device ID (--device-id).")
-    corr_sel_group.add_argument(
+    corr_group.add_argument(
         '--polaris-hostname', metavar='HOSTNAME', default='polaris.pointonenav.com',
         help="The hostname used to access the Point One Polaris network.")
+    corr_group.add_argument(
+        '--polaris-mountpoint', metavar='NAME', default='POLARIS',
+        help="The NTRIP moutnpoint to access on the Point One Polaris network.")
 
     corr_group.add_argument(
         '--polaris-tls', action='store_true', default=True,
@@ -146,6 +164,10 @@ Forward NMEA output from the receiver to an application on TCP port 1234:
     corr_group.add_argument(
         '--no-polaris-tls', action='store_false', dest='polaris_tls',
         help="Do not use TLS (i.e., use an unsecure connection) when connecting to the Polaris NTRIP service.")
+    corr_group.add_argument(
+        '--polaris-port', metavar='PORT', default=None, type=int,
+        help="Use the specified port when connecting to Polaris. By default, the port will be selected automatically "
+             "based on the --polaris-tls setting.")
 
     logging_group = parser.add_argument_group('Logging/Output')
 
@@ -345,7 +367,8 @@ Forward NMEA output from the receiver to an application on TCP port 1234:
 
     logger = logging.getLogger('point_one.p1_runner.__main__')
 
-    runner = P1Runner(device_id=device_id, reset_type=options.reset_type, wait_for_reset=options.wait_for_reset,
+    runner = P1Runner(device_id=device_id, device_type=options.device_type,
+                      reset_type=options.reset_type, wait_for_reset=options.wait_for_reset,
                       device_port=options.device_port, device_baudrate=options.device_baud,
                       corrections_port=options.corrections_port, corrections_baudrate=options.corrections_baud,
                       external_port=options.external_port, external_baudrate=options.external_baud,
@@ -380,9 +403,11 @@ Forward NMEA output from the receiver to an application on TCP port 1234:
 
     if options.polaris is not None:
         if options.polaris_tls:
-            url = f'https://{options.polaris_hostname}:2102'
+            port = 2102 if options.polaris_port is None else options.polaris_port
+            url = f'https://{options.polaris_hostname}:{port}'
         else:
-            url = f'http://{options.polaris_hostname}:2101'
+            port = 2101 if options.polaris_port is None else options.polaris_port
+            url = f'http://{options.polaris_hostname}:{port}'
 
         parts = options.polaris.split(",")
         if len(parts) == 1:
@@ -397,7 +422,7 @@ Forward NMEA output from the receiver to an application on TCP port 1234:
         # Default to NTRIP v2 for Polaris connections.
         ntrip_version = options.ntrip_version if options.ntrip_version is not None else 2
 
-        runner.connect_to_ntrip(url=url, mountpoint='POLARIS', username=username, password=password,
+        runner.connect_to_ntrip(url=url, mountpoint=options.polaris_mountpoint, username=username, password=password,
                                 version=ntrip_version)
     elif options.ntrip is not None:
         parts = options.ntrip.split(",")
@@ -424,6 +449,41 @@ Forward NMEA output from the receiver to an application on TCP port 1234:
             url = '%s://%s' % (scheme, url)
         runner.connect_to_ntrip(url=url, mountpoint=mountpoint, username=username, password=password,
                                 version=ntrip_version)
+
+    # Configure an auxiliary NTRIP ephemeris source.
+    if options.aux_ntrip is not None:
+        if options.aux_ntrip == 'polaris':
+            url = 'http://polaris.pointonenav.com:2101'
+            mountpoint = 'EPHEM'
+            username = None
+            password = None
+            ntrip_version = 1
+        else:
+            parts = options.aux_ntrip.split(",")
+            if len(parts) < 2:
+                logger.error('You must specify a valid URL and mountpoint for NTRIP connections.')
+                sys.exit(1)
+
+            url = parts[0]
+            mountpoint = parts[1]
+            if len(parts) > 2:
+                username = parts[2]
+            else:
+                username = None
+            if len(parts) > 3:
+                password = parts[3]
+            else:
+                password = None
+
+            # Default to NTRIP v1 for normal NTRIP connections.
+            ntrip_version = options.aux_ntrip_version if options.aux_ntrip_version is not None else 1
+
+            if parse_url(url).scheme is None:
+                scheme = 'https' if options.aux_ntrip_tls else 'http'
+                url = '%s://%s' % (scheme, url)
+
+        runner.connect_to_ntrip(url=url, mountpoint=mountpoint, username=username, password=password,
+                                version=ntrip_version, stream='aux')
 
     # Start the runner.
     logger.debug('Starting runner...')

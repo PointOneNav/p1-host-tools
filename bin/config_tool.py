@@ -156,7 +156,8 @@ def _str_to_tick_direction(tick_direction_str):
 _iono_delay_model_map = {
     "auto": IonoDelayModel.AUTO,
     "off": IonoDelayModel.OFF,
-    "klobuchar": IonoDelayModel.KLOBUCHAR
+    "klobuchar": IonoDelayModel.KLOBUCHAR,
+    "sbas": IonoDelayModel.SBAS
 }
 
 
@@ -371,16 +372,46 @@ def _args_to_int_gen(arg_name):
 def _args_to_bool(cls, args, config_interface):
     return cls(args.enabled)
 
+
 def _args_to_id(cls, args, config_interface):
     if len(args.device_id) > 32:
         raise RuntimeError('User device ID must have length less than or equal to 32 characters.')
     return cls(args.device_id)
 
+
+def _args_to_address(cls, args, config_interface):
+    if len(args.remote_address) > 64:
+        raise RuntimeError('Address must have length less than or equal to 64 characters.')
+    return cls(args.remote_address)
+
+
 def _args_to_float(cls, args, config_interface):
     return cls(float(args.x))
 
+
 def _args_to_interface_config(cls, args, config_interface):
     return []
+
+
+_transport_direction_map = {
+    'server': TransportDirection.SERVER,
+    'client': TransportDirection.CLIENT,
+}
+
+
+def _str_to_transport_direction(key):
+    return _transport_direction_map.get(key, "")
+
+
+_socket_type_map = {
+    'stream': SocketType.STREAM,
+    'datagram': SocketType.DATAGRAM,
+    'sequence': SocketType.SEQPACKET,
+}
+
+
+def _str_to_socket_type(key):
+    return _socket_type_map.get(key, "")
 
 
 PARAM_DEFINITION = {
@@ -415,6 +446,11 @@ PARAM_DEFINITION = {
 
 INTERFACE_PARAM_DEFINITION = {
     'baud_rate': {'format': InterfaceBaudRateConfig, 'arg_parse': _args_to_int_gen('baud_rate')},
+    'port': {'format': InterfacePortConfig, 'arg_parse': _args_to_int_gen('port')},
+    'remote_address': {'format': InterfaceRemoteAddressConfig, 'arg_parse': _args_to_address},
+    'enabled': {'format': InterfaceEnabledConfig, 'arg_parse': _args_to_bool},
+    'direction': {'format': InterfaceDirectionConfig, 'arg_parse': _str_to_transport_direction},
+    'socket_type': {'format': InterfaceDirectionConfig, 'arg_parse': _str_to_socket_type},
     'diagnostics_enabled': {'format': InterfaceDiagnosticMessagesEnabled, 'arg_parse': _args_to_bool},
     'message_rate': {'format': list, 'arg_parse': message_rate_args_to_output_interface},
 }
@@ -776,7 +812,11 @@ def request_reset(config_interface: DeviceInterface, args):
 
 
 def request_shutdown(config_interface: DeviceInterface, args):
-    config_interface.send_message(ShutdownRequest())
+    flags = {
+        'engine': ShutdownRequest.STOP_ENGINE,
+        'log': ShutdownRequest.STOP_CURRENT_LOG,
+    }[args.type]
+    config_interface.send_message(ShutdownRequest(flags))
 
     resp = config_interface.wait_for_message(CommandResponseMessage.MESSAGE_TYPE)
     if resp is None:
@@ -786,7 +826,26 @@ def request_shutdown(config_interface: DeviceInterface, args):
         logger.error('Shutdown command rejected: %s (%d)' % (str(resp.response), int(resp.response)))
         return False
     else:
-        logger.info('Reset successful.')
+        logger.info('Shutdown successful.')
+        return True
+
+
+def request_startup(config_interface: DeviceInterface, args):
+    flags = {
+        'engine': StartupRequest.START_ENGINE,
+        'log': StartupRequest.START_NEW_LOG,
+    }[args.type]
+    config_interface.send_message(StartupRequest(flags))
+
+    resp = config_interface.wait_for_message(CommandResponseMessage.MESSAGE_TYPE)
+    if resp is None:
+        logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
+        return False
+    elif resp.response != Response.OK:
+        logger.error('Startup command rejected: %s (%d)' % (str(resp.response), int(resp.response)))
+        return False
+    else:
+        logger.info('Startup successful.')
         return True
 
 
@@ -825,8 +884,13 @@ def request_export(config_interface: DeviceInterface, args):
 
     for data_type in data_types:
         export_msg = ExportDataMessage(data_type)
-        if data_type == DataType.USER_CONFIG and args.export_saved_config:
-            export_msg.source = ConfigurationSource.SAVED
+        if data_type == DataType.USER_CONFIG:
+            if args.export_source.lower() == 'default':
+                export_msg.source = ConfigurationSource.DEFAULT
+            elif args.export_source.lower() == 'saved':
+                export_msg.source = ConfigurationSource.SAVED
+            else:
+                export_msg.source = ConfigurationSource.ACTIVE
 
         while True:
             config_interface.send_message(export_msg)
@@ -985,6 +1049,9 @@ def request_fault(config_interface: DeviceInterface, args):
     elif args.fault == 'quectel_test':
         logger.info(f'{"Enabling" if args.enabled else "Disabling"} Quectel test mode.')
         payload = FaultControlMessage.QuectelTest(args.enabled)
+    elif args.fault == "integrity_status":
+        logger.info('Sending a navigation engine integrity status fault command.')
+        payload = FaultControlMessage.IntegrityStatus(args.type)
     else:
         logger.error('Unrecognized fault type.')
         return False
@@ -1433,7 +1500,7 @@ using their existing values.''')
         help='Set the user device ID (max 32 characters).')
 
     INTERFACES_WITH_EXPLICIT_ENUM = ['current', 'uart1', 'uart2']
-    for interface_name, interface_id in INTERFACE_MAP.items():
+    for interface_name, interface_id in sorted(INTERFACE_MAP.items()):
         supported_fe_messages = '\n'.join([
             f'  - {message_type_to_class[m].__name__} ({int(m)})'
             for m in MessageType
@@ -1597,13 +1664,39 @@ NMEA message types:
         diagnostics_enabled_parser.add_argument(
             'enabled', action=ExtendedBooleanAction, help='Enable/disable diagnostic messages.')
 
-        if interface_id.type == TransportType.SERIAL or interface_id.type == TransportType.CURRENT:
+        # config_tool.py apply INTERFACE_NAME enabled
+        help = 'Configure if the interface is enabled.'
+        read_interface_config_type_parsers.add_parser('enabled', help=help, description=help)
+        baud_rate_parser = apply_interface_config_type_parsers.add_parser('enabled', help=help, description=help)
+        baud_rate_parser.add_argument('enabled', action=ExtendedBooleanAction,
+                                      help='Configure if the interface is enabled.')
+
+        if interface_id.type in (TransportType.SERIAL, TransportType.CURRENT):
             # config_tool.py apply INTERFACE_NAME baud_rate
             help = 'Configure the serial baud rate.'
             read_interface_config_type_parsers.add_parser('baud_rate', help=help, description=help)
             baud_rate_parser = apply_interface_config_type_parsers.add_parser('baud_rate', help=help, description=help)
-            baud_rate_parser.add_argument('baud_rate', type=float,
+            baud_rate_parser.add_argument('baud_rate', type=int,
                                           help='The desired baud rate (in bits/second).')
+
+        if interface_id.type in (TransportType.UDP, TransportType.TCP, TransportType.CURRENT):
+            # config_tool.py apply INTERFACE_NAME port
+            help = 'Configure the network port.'
+            read_interface_config_type_parsers.add_parser(
+                'port', help=help, description=help)
+            baud_rate_parser = apply_interface_config_type_parsers.add_parser(
+                'port', help=help, description=help)
+            baud_rate_parser.add_argument('port', type=int,
+                                          help='The desired network port.')
+
+        if interface_id.type in (TransportType.UDP, TransportType.UNIX, TransportType.CURRENT):
+            # config_tool.py apply INTERFACE_NAME remote_address
+            help = 'Configure the remote hostname or IP address, or the socket file path for UNIX domain sockets.'
+            read_interface_config_type_parsers.add_parser('remote_address', help=help, description=help)
+            baud_rate_parser = apply_interface_config_type_parsers.add_parser('remote_address', help=help,
+                                                                              description=help)
+            baud_rate_parser.add_argument('remote_address', type=str,
+                                          help='The address to connect to.')
 
     # config_tool.py copy_message_config
     help = 'Copy the output message configuration from one interface to another.'
@@ -1630,10 +1723,10 @@ Example usage:
         help="If set, save the new configuration to persistent storage.")
     copy_parser.add_argument(
         'source',
-        help='The name of the source interface: %s' % ', '.join(INTERFACE_MAP.keys()))
+        help='The name of the source interface: %s' % ', '.join(sorted(INTERFACE_MAP.keys())))
     copy_parser.add_argument(
         'dest',
-        help='The name of the destination interface: %s' % ', '.join(INTERFACE_MAP.keys()))
+        help='The name of the destination interface: %s' % ', '.join(sorted(INTERFACE_MAP.keys())))
 
     # config_tool.py fault
     help = 'Apply system fault controls.'
@@ -1686,6 +1779,11 @@ Example usage:
     quectel_test_parser.add_argument(
         'enabled', action=ExtendedBooleanAction,
         help='Enable/disable Quectel test mode.')
+
+    integrity_status_parser = type_parser.add_parser(
+        'integrity_status',
+        help="Simulate a navigation engine integrity failure.")
+    integrity_status_parser.add_argument('type', type=int, help='Type of integrity failure.')
 
     # config_tool.py reset
     help = 'Issue a device reset request.'
@@ -1744,9 +1842,10 @@ diagnostic log reset:
         default='p1nvm',
         help="The format for the exported file. json is only supported for user_config export.")
     export_parser.add_argument(
-        '--export-saved-config',
-        action=ExtendedBooleanAction,
-        help="When exporting the user_config, export the saved values instead of the active values.")
+        '--export-source',
+        choices=['active','saved', 'default'],
+        default='active',
+        help="When exporting the user_config, should the exported data come from the active configuration, the value saved to storage, or the device defaults.")
 
     # config_tool.py import
     help = 'Import data from a local file to the device.'
@@ -1791,11 +1890,42 @@ the JSON will be set to their default values.""")
         help="The file containing the exported data.")
 
     # config_tool.py shutdown
-    help = 'Issue a device shutdown request.'
+    help = 'Issue a navigation engine shutdown request.'
     shutdown_parser = command_subparsers.add_parser(
         'shutdown',
         help=help,
         description=help)
+    choices = {
+        'engine': 'Shutdown the engine',
+        'log': 'Stop the current log',
+    }
+    newline = '\n'
+    shutdown_parser.add_argument(
+        'type', metavar='TYPE',
+        nargs='?',
+        choices=choices.keys(),
+        default='engine',
+        help=f"""\
+The type of shutdown to be performed: {''.join([f'{newline}- {k} - {v}' for k, v in choices.items()])}""")
+
+    # config_tool.py startup
+    help = 'Issue a navigation engine startup request.'
+    startup_parser = command_subparsers.add_parser(
+        'startup',
+        help=help,
+        description=help)
+    choices = {
+        'engine': 'Startup the engine',
+        'log': 'Start a new log',
+    }
+    newline = '\n'
+    startup_parser.add_argument(
+        'type', metavar='TYPE',
+        choices=choices.keys(),
+        nargs='?',
+        default='engine',
+        help=f"""\
+The type of startup to be performed: {''.join([f'{newline}- {k} - {v}' for k, v in choices.items()])}""")
 
     # config_tool.py save
     help = 'Save the active config so the values to persist through power cycle.'
@@ -1908,7 +2038,8 @@ the JSON will be set to their default values.""")
         # Note: We intentionally use the Enhanced port here, whereas p1_runner uses Standard port. That way users can
         # issue configuration requests while the device is active and p1_runner is operating. If the user explicitly
         # sets --device-port, we'll use that port regardless of type.
-        device_port = find_serial_device(port_name=args.device_port, port_type=PortType.ENHANCED)
+        device_port = find_serial_device(port_name=args.device_port, port_type=PortType.ENHANCED,
+                                         on_wrong_type='none')
         logger.info('Connecting to device using serial port %s.' % device_port)
         serial_port = serial.Serial(port=device_port, baudrate=args.device_baud, timeout=SERIAL_TIMEOUT)
         data_source = SerialDataSource(serial_port)
@@ -1938,6 +2069,8 @@ the JSON will be set to their default values.""")
         passed = request_reset(config_interface, args)
     elif args.command == "shutdown":
         passed = request_shutdown(config_interface, args)
+    elif args.command == "startup":
+        passed = request_startup(config_interface, args)
     elif args.command == "fault":
         passed = request_fault(config_interface, args)
     elif args.command == "export":

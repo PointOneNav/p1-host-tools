@@ -64,6 +64,10 @@ class DeviceInterface:
         req_cmd.request_source = source
         message = self.fe_encoder.encode_message(req_cmd)
         logger.debug('Requesting config. [size=%d B]' % len(message))
+        # We flush the serial RX buffer before we send the request in an attempt to avoid the response timing out as we
+        # process the backlog of data. This only a concern when running on a lower CPU power system like a Raspi that
+        # may not be able to keep up with the byte-by-byte processing for a high data rate interface.
+        self.data_source.flush_rx()
         self.data_source.write(message)
 
     def get_message_rate(self, source: ConfigurationSource, config_object):
@@ -71,6 +75,10 @@ class DeviceInterface:
         req_cmd = GetMessageRate(*config_object)
         message = self.fe_encoder.encode_message(req_cmd)
         logger.debug('Querying message rate. [size=%d B]' % len(message))
+        # We flush the serial RX buffer before we send the request in an attempt to avoid the response timing out as we
+        # process the backlog of data. This only a concern when running on a lower CPU power system like a Raspi that
+        # may not be able to keep up with the byte-by-byte processing for a high data rate interface.
+        self.data_source.flush_rx()
         self.data_source.write(message)
 
     def set_message_rate(self, config_object):

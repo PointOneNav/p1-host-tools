@@ -18,7 +18,14 @@ logger = logging.getLogger('point_one.config_tool')
 INTERFACE_MAP = {
     'current': InterfaceID(TransportType.CURRENT, 0),
     'uart1': InterfaceID(TransportType.SERIAL, 1),
-    'uart2': InterfaceID(TransportType.SERIAL, 2)
+    'uart2': InterfaceID(TransportType.SERIAL, 2),
+    'udp1': InterfaceID(TransportType.UDP, 1),
+    'udp2': InterfaceID(TransportType.UDP, 2),
+    'tcp1': InterfaceID(TransportType.TCP, 1),
+    'tcp2': InterfaceID(TransportType.TCP, 2),
+    'file': InterfaceID(TransportType.FILE, 1),
+    'unix1': InterfaceID(TransportType.UNIX, 1),
+    'unix2': InterfaceID(TransportType.UNIX, 2),
 }
 
 PROTOCOL_MAP = {

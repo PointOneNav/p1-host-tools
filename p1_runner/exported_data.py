@@ -1,3 +1,4 @@
+from enum import Enum, auto
 import json
 import logging
 import os
@@ -8,21 +9,47 @@ from datetime import datetime
 from typing import IO, List, NamedTuple, Optional, Tuple
 from zipfile import ZipFile
 
-from fusion_engine_client.messages import DataType, DataVersion, ImportDataMessage, PlatformStorageDataMessage, Response, VersionInfoMessage
+from fusion_engine_client.messages import DataType, DataVersion, ImportDataMessage, PlatformStorageDataMessage, Response, VersionInfoMessage, DeviceType
 
-# If this running in the development repo, try updating the UserConfig definitions.
+# If this running in the development repo, try updating the UserConfig
+# definitions. This will generate separate quectel_user_config_loader.py and
+# atlas_user_config_loader.py to support the different configuration structs.
 update_user_config_script = os.path.normpath(
     os.path.join(os.path.dirname(__file__),
                  '../../scripts/update_user_config_loader.sh'))
 if os.path.exists(update_user_config_script):
     subprocess.run(update_user_config_script)
 
+
+class ConfigType(Enum):
+    QUECTEL = auto()
+    ATLAS = auto()
+
+
 try:
     repo_root = os.path.normpath(os.path.join(os.path.dirname(__file__), '..'))
     sys.path.append(repo_root)
-    from user_config_loader import UserConfig
+
+    from user_config_loader.quectel_user_config_loader import UserConfig as QuectelUserConfig
+    from user_config_loader.atlas_user_config_loader import UserConfig as AtlasUserConfig
+
+    _CONFIG_CLASSES = {
+        ConfigType.QUECTEL: QuectelUserConfig,
+        ConfigType.ATLAS: AtlasUserConfig,
+    }
+
+    # The configuration structs can be identified by the size of their binary
+    # serialized data.
+    _CONFIG_SIZES = {v.get_serialized_size(): k for k,
+                     v in _CONFIG_CLASSES.items()}
+
+    # Modify the classes so that they will include the correct ConfigType when
+    # serializing to JSON.
+    for k, v in _CONFIG_CLASSES.items():
+        v.EXTRA_JSON_DATA['__device'] = k.name
+
     __has_user_config_loader = True
-    __user_config_version = DataVersion(*UserConfig.get_version())
+    __user_config_version = DataVersion(*QuectelUserConfig.get_version())
 except:
     __has_user_config_loader = False
 
@@ -51,11 +78,17 @@ def user_config_from_platform_storage(storage: PlatformStorageDataMessage) -> Op
                 "UserConfig Python library version %s doesn't match exported data %s. Skipping JSON for UserConfig export.",
                 __user_config_version, storage.data_version)
         else:
-            try:
-                user_config = UserConfig.deserialize(storage.data)
-                return user_config
-            except Exception as e:
-                logger.warning("Problem loading UserConfig: %s", str(e))
+            config_type = _CONFIG_SIZES.get(len(storage.data))
+            if config_type is not None:
+                ConfigClass = _CONFIG_CLASSES[config_type]
+                try:
+                    user_config = ConfigClass.deserialize(storage.data)
+                    return user_config
+                except Exception as e:
+                    logger.warning("Problem loading UserConfig: %s", str(e))
+            else:
+                logger.warning(
+                    f"Storage size did not match known configuration. [size={len(storage.data)} known={_CONFIG_SIZES}]")
     else:
         logger.warning("Storage type was not UserConfig.")
     return None
@@ -85,7 +118,8 @@ def add_to_exported_data(save_file: str, exported_data: PlatformStorageDataMessa
             if user_config:
                 logger.info('Creating JSON save of exported %s',
                             exported_data.data_type.name)
-                export_zip.writestr(file_prefix + '.json', user_config.to_json())
+                export_zip.writestr(file_prefix + '.json',
+                                    user_config.to_json())
 
         logger.info('Creating binary save of exported %s',
                     exported_data.data_type.name)
@@ -107,7 +141,12 @@ def _find_match(exported_data: List[_ExportInfo], type: DataType, encoding: str)
     return None
 
 
-def load_json_user_config_data(json_fd: IO, default_data: Optional[PlatformStorageDataMessage] = None) -> Optional[bytes]:
+def load_json_user_config_data(json_fd: IO, config_type: Optional[ConfigType] = None, default_data: Optional[PlatformStorageDataMessage] = None) -> Optional[bytes]:
+    if not __has_user_config_loader:
+        logger.error(
+            "No UserConfig Python library available. Skipping JSON for UserConfig import.")
+        return None
+
     try:
         json_data = json.load(json_fd)
         if "__version" in json_data:
@@ -119,13 +158,27 @@ def load_json_user_config_data(json_fd: IO, default_data: Optional[PlatformStora
                                " that matches the file Version.", file_version, __user_config_version)
                 return None
 
+        if config_type is None:
+            if "__device" in json_data:
+                try:
+                    config_type = ConfigType[json_data["__device"]]
+                except KeyError:
+                    logger.warning(
+                        f'Invalid ConfigType{json_data["__device"]}.')
+            else:
+                logger.warning(
+                    f"JSON was exported by an unspecified device type. Assuming it was generated by a Quectel device. To specify the device, add a '__device' key to the JSON with the ConfigType.")
+                config_type = ConfigType.QUECTEL
+
+        ConfigClass = _CONFIG_CLASSES[config_type]
+
         if default_data:
-            loaded_config = UserConfig.deserialize(default_data.data)
+            loaded_config = ConfigClass.deserialize(default_data.data)
             # Try to merge lists containing complex types (e.g. IMU configuration).
-            loaded_config.update(json_data, True)
+            loaded_config.update(json_data)
         else:
-            loaded_config = UserConfig.from_dict(json_data)
-        return UserConfig.serialize(loaded_config)
+            loaded_config = ConfigClass.from_dict(json_data)
+        return ConfigClass.serialize(loaded_config)
     except Exception as e:
         logger.warning("Problem loading UserConfig: %s", str(e))
         return None
@@ -150,6 +203,7 @@ def load_saved_json(save_file: str, data_type: DataType, default_data: Optional[
                             data_version=__user_config_version, data=data), Response.OK))
 
     return imports
+
 
 def load_saved_data(save_file: str, types: List[DataType]) -> List[Tuple[ImportDataMessage, Response]]:
     imports = []

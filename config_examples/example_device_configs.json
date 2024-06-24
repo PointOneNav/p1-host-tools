@@ -1,0 +1,339 @@
+{
+  "shared": {
+    "modified_settings": {
+      "comm_interfaces": {
+        "udp_sockets": [
+          {
+            "interface_config": {
+              "enable": true,
+              "hostname": "192.168.32.106"
+            },
+            "output_rates": {
+              "fusion_engine_rates": {
+                "imu_output": "ON_CHANGE",
+                "raw_imu_output": "ON_CHANGE"
+              }
+            }
+          }
+        ]
+      },
+      "vehicle": {
+        "can": {
+          "id_whitelist": [
+            37,
+            170,
+            295
+          ]
+        },
+        "front_track_width_m": 1.52,
+        "rear_track_width_m": 1.52,
+        "steering_ratio": 14.6,
+        "steering_type": "FRONT",
+        "vehicle_model": "LEXUS_CT200H",
+        "wheel_sensor_type": "WHEEL_SPEED"
+      },
+      "navigation": {
+        "r_b_bo": {
+          "x": 0.26,
+          "y": 0,
+          "z": 1.1
+        }
+      },
+      "sensors": {
+        "external_pose": [
+          {
+            "r_b_bp": {
+              "x": 0.26,
+              "y": 0,
+              "z": 1.1
+            }
+          }
+        ],
+        "gps_receivers": [
+          {
+            "r_b_bg": {
+              "x": 0.26,
+              "y": 0,
+              "z": 1.1
+            }
+          }
+        ],
+        "imus": [
+          {
+            // Rack Atlas are rotated 180 deg around Z
+            "c_ds": {
+              "values": [
+                -1.0,
+                0.0,
+                0.0,
+                0.0,
+                -1.0,
+                0.0,
+                0.0,
+                0.0,
+                1.0
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "expected_engine_version": "v2.0.0-rc3-1801-g1e3814d4ff-dirty"
+  },
+  "devices": [
+    {
+      "name": "p1-lexus-v3-st-develop",
+      "tcp_address": "192.168.32.103",
+      //"tcp_address": "localhost",
+      "expected_fw_version": "1[.]10",
+      "modified_settings": {
+        "comm_interfaces": {
+          "udp_sockets": [
+            {
+              "interface_config": {
+                "port": 30400
+              }
+            }
+          ]
+        },
+        "system_controls": {
+          "device_id": "p1-lexus-v3-st-develop"
+        },
+        "sensors": {
+          "imus": [
+            {
+              "r_b_bs": {
+                "x": -0.25,
+                "y": 0.0,
+                "z": 0.32
+              },
+              "c_ds": {
+                "values": [
+                  1.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  1.0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  1.0
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "p1-lexus-rack-1",
+      "tcp_address": "192.168.32.114",
+      "expected_fw_version": "1[.]10",
+      "modified_settings": {
+        "comm_interfaces": {
+          "udp_sockets": [
+            {
+              "interface_config": {
+                "port": 30401
+              }
+            }
+          ]
+        },
+        "system_controls": {
+          "device_id": "p1-lexus-rack-1"
+        },
+        "sensors": {
+          "imus": [
+            {
+              "r_b_bs": {
+                "x": -0.25,
+                "y": 0.38,
+                "z": 0.44
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "p1-lexus-rack-2",
+      "tcp_address": "192.168.32.110",
+      "expected_fw_version": "1[.]10",
+      "modified_settings": {
+        "comm_interfaces": {
+          "udp_sockets": [
+            {
+              "interface_config": {
+                "port": 30402
+              }
+            }
+          ]
+        },
+        "system_controls": {
+          "device_id": "p1-lexus-rack-2"
+        },
+        "sensors": {
+          "imus": [
+            {
+              "r_b_bs": {
+                "x": -0.25,
+                "y": 0.28,
+                "z": 0.44
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "p1-lexus-rack-3",
+      "tcp_address": "192.168.32.113",
+      "expected_fw_version": "1[.]10",
+      "modified_settings": {
+        "comm_interfaces": {
+          "udp_sockets": [
+            {
+              "interface_config": {
+                "port": 30403
+              }
+            }
+          ]
+        },
+        "system_controls": {
+          "device_id": "p1-lexus-rack-3"
+        },
+        "sensors": {
+          "imus": [
+            {
+              "r_b_bs": {
+                "x": -0.25,
+                "y": 0.18,
+                "z": 0.44
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "p1-lexus-rack-4",
+      "tcp_address": "192.168.32.116",
+      "expected_fw_version": "1[.]10",
+      "modified_settings": {
+        "comm_interfaces": {
+          "udp_sockets": [
+            {
+              "interface_config": {
+                "port": 30404
+              }
+            }
+          ]
+        },
+        "system_controls": {
+          "device_id": "p1-lexus-rack-4"
+        },
+        "sensors": {
+          "imus": [
+            {
+              "r_b_bs": {
+                "x": -0.25,
+                "y": -0.04,
+                "z": 0.44
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "p1-lexus-rack-5",
+      "tcp_address": "192.168.32.112",
+      "expected_fw_version": "1[.]9",
+      "modified_settings": {
+        "comm_interfaces": {
+          "udp_sockets": [
+            {
+              "interface_config": {
+                "port": 30405
+              }
+            }
+          ]
+        },
+        "system_controls": {
+          "device_id": "p1-lexus-rack-5"
+        },
+        "sensors": {
+          "imus": [
+            {
+              "r_b_bs": {
+                "x": -0.25,
+                "y": -0.14,
+                "z": 0.44
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "p1-lexus-rack-6",
+      "tcp_address": "192.168.32.115",
+      "expected_fw_version": "1[.]9",
+      "modified_settings": {
+        "comm_interfaces": {
+          "udp_sockets": [
+            {
+              "interface_config": {
+                "port": 30406
+              }
+            }
+          ]
+        },
+        "system_controls": {
+          "device_id": "p1-lexus-rack-6"
+        },
+        "sensors": {
+          "imus": [
+            {
+              "r_b_bs": {
+                "x": -0.25,
+                "y": -0.24,
+                "z": 0.44
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "p1-lexus-rack-7",
+      "tcp_address": "192.168.32.117",
+      "expected_fw_version": "1[.]9",
+      "modified_settings": {
+        "comm_interfaces": {
+          "udp_sockets": [
+            {
+              "interface_config": {
+                "port": 30407
+              }
+            }
+          ]
+        },
+        "system_controls": {
+          "device_id": "p1-lexus-rack-7"
+        },
+        "sensors": {
+          "imus": [
+            {
+              "r_b_bs": {
+                "x": -0.25,
+                "y": -0.34,
+                "z": 0.44
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

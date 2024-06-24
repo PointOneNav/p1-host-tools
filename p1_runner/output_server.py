@@ -203,10 +203,13 @@ class OutputServer(object):
                         'Unexpected error from TCP socket:\r%s' % traceback.format_exc())
                 break
 
-            data = client.recv(1024)
-            if data and self.incoming_data_callback is not None:
-                self.incoming_data_callback(data)
-
+            try:
+                data = client.recv(1024)
+                if data and self.incoming_data_callback is not None:
+                    self.incoming_data_callback(data)
+            except (BrokenPipeError, ConnectionResetError):
+                self.logger.info('Output client tcp://%s:%d disconnected.' % (addr[0], addr[1]))
+                continue
         self.logger.debug('TCP thread finished.')
 
     def register_incoming_data_callback(self, callback):
