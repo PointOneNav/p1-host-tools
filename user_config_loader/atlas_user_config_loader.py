@@ -233,6 +233,7 @@ class VehicleModel(IntOrStrEnum):
     PEUGEOT_206 = 120
     MAN_TGX = 140
     FACTION = 160
+    FACTION_V2 = 161
     LINCOLN_MKZ = 180
     BMW_7 = 200
     BMW_MOTORRAD = 201

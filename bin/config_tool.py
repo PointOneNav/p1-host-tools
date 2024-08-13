@@ -85,6 +85,7 @@ _vehicle_model_map = {
     "peugeot_206": VehicleModel.PEUGEOT_206,
     "man_tgx": VehicleModel.MAN_TGX,
     "faction": VehicleModel.FACTION,
+    "faction_v2": VehicleModel.FACTION_V2,
     "lincoln_mkz": VehicleModel.LINCOLN_MKZ,
     "bmw_7": VehicleModel.BMW_7
 }
