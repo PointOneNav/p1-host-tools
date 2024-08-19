@@ -1789,10 +1789,10 @@ the JSON will be set to their default values.""")
         'file', metavar='FILE',
         help="The file containing the exported data.")
 
-    # config_tool.py shutdown
-    help = 'Issue a device shutdown request.'
+    # config_tool.py stop
+    help = 'Issue a navigation engine shutdown request.'
     shutdown_parser = command_subparsers.add_parser(
-        'shutdown',
+        'stop', aliases=['shutdown'],
         help=help,
         description=help)
 
