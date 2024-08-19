@@ -45,8 +45,7 @@ def _args_to_heading_bias(cls, args, config_interface):
 
 SERIAL_TIMEOUT = 5
 
-
-DEFAULT_TCP_PORT = 2332
+DEFAULT_TCP_PORT = 30200
 
 
 _orientation_map = {
