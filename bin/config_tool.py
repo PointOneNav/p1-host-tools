@@ -1153,7 +1153,7 @@ Disable GNSS for dead reckoning performance testing.
 
 Export the device's user configuration to a local file.
     %(command)s export user_config
-""" % {'command': execute_command})
+""" % {'command': f'{execute_command} --device=...'})
 
     parser.add_argument('-d', '--device',
                         help="""\
