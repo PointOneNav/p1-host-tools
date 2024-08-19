@@ -1876,7 +1876,7 @@ the JSON will be set to their default values.""")
 
     if args.device_websocket_address is not None:
         if websocket_connect is None:
-            logger.error('Websocket support not available.')
+            logger.error('Websocket support not available. Install with `pip install websockets`.')
             sys.exit(1)
         else:
             try:
