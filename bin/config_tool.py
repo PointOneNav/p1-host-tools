@@ -1425,7 +1425,7 @@ using their existing values.''')
     wheel_config_parser.add_argument('--wheel-tick-output-interval', type=float,
                                      help='Override the rate at which the device will calculate wheel speed values '
                                           'from incoming wheel tick data (in seconds). By default, the device will '
-                                          'select the best value automatically based on the tick quanitzation '
+                                          'select the best value automatically based on the tick quantization '
                                           '(meters/tick scale factor). We do _not_ recommend setting this value for '
                                           'most configurations.')
     wheel_config_parser.add_argument('--steering-ratio', type=float,
