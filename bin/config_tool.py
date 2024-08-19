@@ -1889,10 +1889,10 @@ the JSON will be set to their default values.""")
         'file', metavar='FILE',
         help="The file containing the exported data.")
 
-    # config_tool.py shutdown
+    # config_tool.py stop
     help = 'Issue a navigation engine shutdown request.'
     shutdown_parser = command_subparsers.add_parser(
-        'shutdown',
+        'stop', aliases=['shutdown'],
         help=help,
         description=help)
     choices = {
@@ -1908,10 +1908,10 @@ the JSON will be set to their default values.""")
         help=f"""\
 The type of shutdown to be performed: {''.join([f'{newline}- {k} - {v}' for k, v in choices.items()])}""")
 
-    # config_tool.py startup
+    # config_tool.py start
     help = 'Issue a navigation engine startup request.'
     startup_parser = command_subparsers.add_parser(
-        'startup',
+        'start', aliases=['startup'],
         help=help,
         description=help)
     choices = {
