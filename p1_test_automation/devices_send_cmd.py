@@ -114,14 +114,25 @@ def send_cmd_function(device_config: DeviceConfig, args: Namespace, balena: Opti
             if device_config.balena.pinned_release:
                 # See https://docs.balena.io/reference/sdk/python-sdk/#releasetype
                 target_release = balena.models.release.get(device_config.balena.pinned_release)
-                logger.debug(target_release)
-                print(
-                    f"Device matches pinned release: {target_release['id'] == balena_device['should_be_running__release']['__id']}"
-                )
+                if target_release:
+                    logger.debug(target_release)
+                    if balena_device['should_be_running__release']:
+                        print(
+                            f"Device matches pinned release: {target_release['id'] == balena_device['should_be_running__release']['__id']}"
+                        )
+                    else:
+                        print(
+                            f"Device not currently pinned to release."
+                        )
+                else:
+                    print(
+                        f"Target release '{device_config.balena.pinned_release}' not found."
+                    )
             print(f"Device online: {balena_device['is_online']}")
-            print(
-                f"Is Updating: {balena_device['should_be_running__release']['__id'] != balena_device['is_running__release']['__id']}"
-            )
+            if balena_device['should_be_running__release']:
+                print(
+                    f"Is Updating: {balena_device['should_be_running__release']['__id'] != balena_device['is_running__release']['__id']}"
+                )
         else:
             logger.info(f'No balena release specified for {device_config.name}.')
 
@@ -311,6 +322,7 @@ NONE - Leave logs on device until this setting is changed to FULL_LOG or device 
             all_successes &= future.result()
         except Exception as exc:
             logger.error(f'Sending command to {device_config.name} generated an exception: {exc}')
+            all_successes = False
 
 
     if all_successes:
