@@ -1105,7 +1105,7 @@ Specify the connection details for the target device:
                         help="[Deprecated: Use --device instead.] The serial device to use when communicating with the"
                              "device.  If 'auto', the serial port will be located automatically by searching for a"
                              "connected device.")
-    parser.add_argument('--device-baud', '--baud', type=int, default=460800,
+    parser.add_argument('--device-baud', '--baud', type=int, default=DEFAULT_SERIAL_BAUD,
                         help="[Deprecated: Use --device instead.] The baud rate used by the device serial port "
                              "(--device-port).")
 
