@@ -8,7 +8,7 @@ requirements = [
     "argparse-formatter>=1.4",
     "colorama>=0.4.4",
     "construct~=2.10.67",
-    "fusion-engine-client==1.23.4",
+    "fusion-engine-client==1.23.5",
     "psutil>=5.9.4",
     "pynmea2~=1.18.0",
     "pyserial~=3.5",
