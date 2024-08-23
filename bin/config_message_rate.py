@@ -236,11 +236,14 @@ def read_message_rate_config(config_interface: DeviceInterface,
             for rate in resp.rates:
                 modified_str = ''
                 effective_str = ''
-                if rate.protocol == ProtocolType.FUSION_ENGINE:
-                    message_id_str = f'{MessageType(rate.message_id)} ({rate.message_id})'
-                elif rate.protocol == ProtocolType.NMEA:
-                    message_id_str = f'{NmeaMessageType(rate.message_id)} ({rate.message_id})'
-                else:
+                try:
+                    if rate.protocol == ProtocolType.FUSION_ENGINE:
+                        message_id_str = f'{MessageType(rate.message_id)} ({rate.message_id})'
+                    elif rate.protocol == ProtocolType.NMEA:
+                        message_id_str = f'{NmeaMessageType(rate.message_id)} ({rate.message_id})'
+                    else:
+                        message_id_str = f'{rate.message_id}'
+                except ValueError:
                     message_id_str = f'{rate.message_id}'
 
                 if isinstance(interface_input, str):
