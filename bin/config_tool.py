@@ -4,6 +4,8 @@ from datetime import datetime
 import os
 import socket
 import sys
+import re
+from urllib.parse import urlparse
 
 try:
     from websockets.sync.client import connect as websocket_connect
@@ -45,8 +47,8 @@ def _args_to_heading_bias(cls, args, config_interface):
 
 SERIAL_TIMEOUT = 5
 
-
-DEFAULT_TCP_PORT = 2332
+DEFAULT_TCP_PORT = 30200
+DEFAULT_SERIAL_BAUD = 460800
 
 
 _orientation_map = {
@@ -1083,20 +1085,30 @@ Disable GNSS for dead reckoning performance testing.
 
 Export the device's user configuration to a local file.
     %(command)s export user_config
-""" % {'command': execute_command})
 
-    parser.add_argument('--device-port', '--port', default="auto",
-                        help="The serial device to use when communicating with the device.  If 'auto', the serial port "
-                             "will be located automatically by searching for a connected device.")
+Start capturing a diagnostic log on the device's local disk.
+    %(command)s start log
+""" % {'command': f'{execute_command} --device=...'})
 
-    parser.add_argument('--device-tcp-address',
-                        help="The address to use when communicating with the device over TCP. The address can be "
-                             "specified with a port like 'address:port' to use a non-default port.")
-    parser.add_argument('--device-websocket-address',
-                        help="The address to use when communicating with the device over a websocket. The address can be "
-                             "specified with a port like 'address:port' to use a non-default port.")
-    parser.add_argument('--device-baud', '--baud', type=int, default=460800,
-                        help="The baud rate used by the device serial port (--device-port).")
+    parser.add_argument('-d', '--device',
+                        help="""\
+Specify the connection details for the target device:
+- Serial: [(serial|tty)://]/path/to/device[:baud] (e.g., /dev/ttyUSB1:460800, tty:///dev/ttyUSB0, COM3:115200)
+  - The leading serial:// or tty:// prefix is optional for serial ports
+  - Default baud rate: %d bits/sec
+  - Set the path to `auto` to attempt to automatically detect the serial port
+- TCP: tcp://hostname[:port] (e.g., tcp://192.168.0.6:30200)
+  - Default TCP port: %d
+- WebSocket: ws://hostname:port (e.g., ws://192.168.0.6:30300)""" % (DEFAULT_SERIAL_BAUD, DEFAULT_TCP_PORT))
+
+    parser.add_argument('--device-port', '--port',
+                        help="[Deprecated: Use --device instead.] The serial device to use when communicating with the"
+                             "device.  If 'auto', the serial port will be located automatically by searching for a"
+                             "connected device.")
+    parser.add_argument('--device-baud', '--baud', type=int, default=DEFAULT_SERIAL_BAUD,
+                        help="[Deprecated: Use --device instead.] The baud rate used by the device serial port "
+                             "(--device-port).")
+
     parser.add_argument('-v', '--verbose', action='count', default=0,
                         help="Print verbose/trace debugging messages. May be specified multiple times to increase "
                              "verbosity.")
@@ -1357,7 +1369,7 @@ using their existing values.''')
     wheel_config_parser.add_argument('--wheel-tick-output-interval', type=float,
                                      help='Override the rate at which the device will calculate wheel speed values '
                                           'from incoming wheel tick data (in seconds). By default, the device will '
-                                          'select the best value automatically based on the tick quanitzation '
+                                          'select the best value automatically based on the tick quantization '
                                           '(meters/tick scale factor). We do _not_ recommend setting this value for '
                                           'most configurations.')
     wheel_config_parser.add_argument('--steering-ratio', type=float,
@@ -1790,10 +1802,10 @@ the JSON will be set to their default values.""")
         'file', metavar='FILE',
         help="The file containing the exported data.")
 
-    # config_tool.py shutdown
-    help = 'Issue a device shutdown request.'
+    # config_tool.py stop
+    help = 'Issue a navigation engine shutdown request.'
     shutdown_parser = command_subparsers.add_parser(
-        'shutdown',
+        'stop', aliases=['shutdown'],
         help=help,
         description=help)
 
@@ -1874,28 +1886,38 @@ the JSON will be set to their default values.""")
         parser.print_help()
         sys.exit(1)
 
-    if args.device_websocket_address is not None:
+    # Parse the device connection details.
+    if args.device_port is not None:
+        if args.device is None:
+            args.device = f'tty://{args.device_port}:{args.device_baud}'
+        else:
+            logger.error('You cannot specify both --device and --device-port.\n')
+            parser.print_help()
+            sys.exit(1)
+
+    if args.device is None:
+        logger.error('You must specify --device.\n')
+        parser.print_help()
+        sys.exit(1)
+    elif args.device.startswith('ws://'):
         if websocket_connect is None:
-            logger.error('Websocket support not available.')
+            logger.error('Websocket support not available. Install with `pip install websockets`.')
             sys.exit(1)
         else:
             try:
-                websocket = websocket_connect('ws://' + args.device_websocket_address)
+                websocket = websocket_connect(args.device)
             except Exception as e:
                 logger.error("Problem connecting to Websocket address '%s': %s." %
-                             (args.device_websocket_address, str(e)))
+                             (args.device, str(e)))
                 sys.exit(1)
             data_source = WebSocketDataSource(websocket)
-    elif args.device_tcp_address is not None:
+    elif args.device.startswith('tcp://'):
         try:
-            parts = args.device_tcp_address.split(':')
-            address = parts[0]
-            if len(parts) == 1:
-                port = DEFAULT_TCP_PORT
-            elif len(parts) == 2:
-                port = int(parts[1])
-            else:
-                logger.error('Invalid websocket address.')
+            parts = urlparse(args.device)
+            address = parts.hostname
+            port = parts.port if parts.port is not None else DEFAULT_TCP_PORT
+            if address is None:
+                logger.error('TCP hostname/IP address not specified.')
                 sys.exit(1)
 
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -1904,15 +1926,21 @@ the JSON will be set to their default values.""")
             logger.error("Problem connecting to TCP address '%s': %s." % (args.device_tcp_address, str(e)))
             sys.exit(1)
         data_source = SocketDataSource(s)
-    else:
+    elif (m := re.match(r'^(?:(?:tty|serial)://)?([\w/\-.]+)(?::(\d+))?$', args.device)):
+        device_port = m.group(1)
+        device_baud = int(m.group(2)) if m.group(2) else DEFAULT_SERIAL_BAUD
+
         # Note: We intentionally use the Enhanced port here, whereas p1_runner uses Standard port. That way users can
         # issue configuration requests while the device is active and p1_runner is operating. If the user explicitly
         # sets --device-port, we'll use that port regardless of type.
-        device_port = find_serial_device(port_name=args.device_port, port_type=PortType.ENHANCED)
+        device_port = find_serial_device(port_name=device_port, port_type=PortType.ENHANCED)
         logger.info('Connecting to device using serial port %s.' % device_port)
-        serial_port = serial.Serial(port=device_port, baudrate=args.device_baud, timeout=SERIAL_TIMEOUT)
+        serial_port = serial.Serial(port=device_port, baudrate=device_baud, timeout=SERIAL_TIMEOUT)
         data_source = SerialDataSource(serial_port)
         data_source.start_read_thread()
+    else:
+        logger.error('Unrecognized/invalid --device specifier.\n')
+        sys.exit(1)
 
     config_interface = DeviceInterface(data_source)
 
