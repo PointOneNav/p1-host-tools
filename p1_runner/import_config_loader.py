@@ -41,23 +41,46 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from typing import Type, TYPE_CHECKING
 import zipfile
 from pathlib import Path
 
 import boto3
 import botocore.exceptions
-from fusion_engine_client.messages import DataVersion
 
 # Add the parent directory to the search path to enable p1_runner package imports when not installed in Python.
-repo_root = os.path.normpath(os.path.join(os.path.dirname(__file__), '..'))
-default_nautilus_dir = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
-sys.path.append(repo_root)
+repo_root = Path(__file__).parents[1].resolve()
+default_nautilus_dir = Path(__file__).parents[2].resolve()
+sys.path.append(str(repo_root))
 
 from p1_runner import trace as logging
 from p1_runner.argument_parser import (Action, ArgumentError, ArgumentParser,
                                        Namespace)
 
 logger = logging.getLogger('point_one.import_config_loader')
+
+
+"""
+THIS IS JUST FOR TYPE HINTING!!!!!
+DO NOT USE AS A RUNTIME CLASS!!!!!
+
+Need to first run `python p1_runner/import_config_loader.py` to download reference UserConfig files.
+
+For VSCode add the settings:
+
+'''
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/.mypy_cache/"
+  ]
+'''
+"""
+_USER_CONFIG_TYPE_HINT_VERSION='v2.1.0'
+_USER_CONFIG_TYPE_HINT_DIR= repo_root / '.mypy_cache'
+if TYPE_CHECKING:
+  from user_config_loader.user_config_loader import UserConfig as UserConfigType
+else:
+  class UserConfigType:
+    pass
 
 
 _BUILD_TYPE_ARGS = {
@@ -67,7 +90,6 @@ _BUILD_TYPE_ARGS = {
 
 
 _BUILD_TYPES = [v for v in _BUILD_TYPE_ARGS.keys()]
-
 
 class _ValidateLoaderSource(Action):
     def __call__(self, parser, namespace, values, option_string=None):
@@ -89,7 +111,7 @@ class _ValidateLoaderSource(Action):
         setattr(namespace, self.dest, values)
 
 
-def get_class_from_path(load_path: Path, tmp_dir: Path) -> type:
+def get_class_from_path(load_path: Path, tmp_dir: Path) -> Type[UserConfigType]:
     MODULE_NAME = 'user_config_loader'
     if not os.path.isdir(load_path):
         new_path = tmp_dir / MODULE_NAME
@@ -102,8 +124,10 @@ def get_class_from_path(load_path: Path, tmp_dir: Path) -> type:
         load_path = new_path
 
     # Import the UserConfig class.
+    if not load_path.is_dir():
+        load_path = load_path.parent
     logger.debug(f'Loading user_config_loader from {load_path}.')
-    parent_dir = os.path.dirname(load_path.parent)
+    parent_dir = os.path.dirname(load_path)
     module_name = os.path.basename(load_path)
     sys.path.insert(0, parent_dir)
     module = importlib.import_module(f'{module_name}.user_config_loader', module_name)
@@ -142,7 +166,7 @@ Where to load the definitions for the user config data. This data is device and 
     )
 
 
-def get_config_loader_class(args: Namespace, device_version: str) -> type:
+def get_config_loader_class(args: Namespace, device_version: str) -> Type[UserConfigType]:
     source_parts = args.user_config_loader_source.split(":")
     if source_parts[0] == 'none':
         raise ValueError('UserConfig loader disabled by --user-config-loader-source.')
@@ -210,7 +234,9 @@ def build_local_config_loader(build_type: str, repo_path: str) -> Path:
     result = subprocess.run(
         BAZEL_GET_BIN_DIR_CMD, cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
     )
-    result.check_returncode()
+    if result.returncode != 0:
+        raise RuntimeError(f'Bazel info failed. Is "{repo_path}" a valid nautilus repo?\n{result.args}:\n{result.stderr}')
+
     bazel_bin_path = Path(result.stdout.strip())
 
     build_args = _BUILD_TYPE_ARGS[build_type]
@@ -221,8 +247,9 @@ def build_local_config_loader(build_type: str, repo_path: str) -> Path:
         + ['//point_one/system_config/generator/system_config_gen/user_config_loader:zip_user_config_loader']
     )
 
-    result = subprocess.run(bazel_build_cmd, cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    result.check_returncode()
+    result = subprocess.run(bazel_build_cmd, cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f'Bazel build failed.\n{result.args}:\n{result.stdout}')
 
     return (
         bazel_bin_path
@@ -230,14 +257,15 @@ def build_local_config_loader(build_type: str, repo_path: str) -> Path:
     )
 
 
-def test_main():
+def download_type_hint():
     logging.basicConfig(level=logging.INFO, format='%(message)s', stream=sys.stdout)
     logger.setLevel(logging.DEBUG)
     parser = ArgumentParser()
     add_config_loader_args(parser)
     args = parser.parse_args()
-    get_config_loader_class(args, 'v2.1.0')
+    args.user_config_loader_cache_dir = _USER_CONFIG_TYPE_HINT_DIR
+    get_config_loader_class(args, _USER_CONFIG_TYPE_HINT_VERSION)
 
 
 if __name__ == '__main__':
-    test_main()
+    download_type_hint()
