@@ -13,11 +13,12 @@ logger = logging.getLogger('point_one.config_loader_helper')
 
 def user_config_from_platform_storage(storage: PlatformStorageDataMessage, UserConfig: Type[UserConfigType]) -> Optional[UserConfigType]:
     if storage.data_type == DataType.USER_CONFIG:
-        if not UserConfig.get_version == storage.data_version:
+        if not UserConfig.get_version() == storage.data_version:
             logger.warning(
                 "UserConfig Python library version %s doesn't match exported data %s. Skipping JSON for UserConfig export.",
-                UserConfig.get_version, storage.data_version)
-        elif len(storage.data) != UserConfig.get_serialized_size():
+                UserConfig.get_version(), storage.data_version)
+        # get_serialized_size wasn't present in early versions of UserConfig.
+        elif hasattr(UserConfig, 'get_serialized_size') and len(storage.data) != UserConfig.get_serialized_size():
             logger.warning(
                 f"Storage size did not match known configuration. [size={len(storage.data)} known={UserConfig.get_serialized_size()}]")
         else:

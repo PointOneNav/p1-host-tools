@@ -27,6 +27,7 @@ from bin.config_tool import query_fe_version, request_export, request_import
 from p1_runner import trace as logging
 from p1_runner.argument_parser import ArgumentParser, ExtendedBooleanAction
 from p1_runner.device_interface import DeviceInterface
+from p1_runner.import_config_loader import add_config_loader_args
 from p1_runner.config_loader_helpers import get_config_loader_for_device, user_config_from_platform_storage
 
 logger = logging.getLogger('point_one.test_automation.manage_configs')
@@ -113,7 +114,7 @@ def check_version(device_interface: DeviceInterface, device_config: DeviceConfig
 
 
 def check_storage(
-    device_interface: DeviceInterface, device_config: DeviceConfig, shared_config: SharedConfig, update_prompt: str
+    device_interface: DeviceInterface, device_config: DeviceConfig, shared_config: SharedConfig, options: Namespace
 ) -> bool:
     """!
     @brief Checks the calibration and UserConfig saved on the device matches the @ref TestConfig.
@@ -127,7 +128,7 @@ def check_storage(
         tmp_path = os.path.join(tmp, 'dummy.p1nvm')
 
         logger.debug("Getting UserConfig loader.")
-        UserConfig = get_config_loader_for_device(device_interface)
+        UserConfig = get_config_loader_for_device(device_interface, options)
         if UserConfig is None:
             return False
 
@@ -203,6 +204,7 @@ def check_storage(
 
         expected_conf = copy.deepcopy(default_conf)
         unused = expected_conf.update(shared_config.modified_settings)
+        # update return None instead of unused in early versions of UserConfig.
         if unused is not None and len(unused) > 0:
             logger.error(f'Invalid shared_config modified_settings: {unused}')
             return False
@@ -223,10 +225,10 @@ def check_storage(
         if len(conf_diff) > 0:
             pprint(conf_diff, indent=2)
 
-            if update_prompt == 'fail':
+            if options.update_prompt == 'fail':
                 return False
 
-            if update_prompt == 'ask':
+            if options.update_prompt == 'ask':
                 while True:
                     resp = input('Update device to expected config?\n"u"=update, "s"=skip, "e"=exit: ').lower()
                     if resp == 's':
@@ -302,6 +304,8 @@ The action to take if the configuration doesn't match the expected values.
  - "fail" - Consider a configuration miss match an error and don't try to modify the device.""",
     )
 
+    add_config_loader_args(parser)
+
     args = parser.parse_args()
 
     if args.verbose == 0:
@@ -342,7 +346,7 @@ The action to take if the configuration doesn't match the expected values.
         if (
             device_interface is not None
             and check_version(device_interface, device, config.shared)
-            and check_storage(device_interface, device, config.shared, args.update_prompt)
+            and check_storage(device_interface, device, config.shared, args)
         ):
             logger.info('######## Completed checking configuration for %s. ########' % (device.name))
         else:
