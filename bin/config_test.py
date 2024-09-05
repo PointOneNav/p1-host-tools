@@ -18,6 +18,7 @@ from fusion_engine_client.messages import (ConfigResponseMessage, DataType,
                                            GnssLeverArmConfig, InterfaceID,
                                            MessageRate, MessageRateResponse,
                                            NmeaMessageType,
+                                           UserDeviceID,
                                            PlatformStorageDataMessage,
                                            PoseMessage, Response,
                                            TransportType, VersionInfoMessage)
@@ -35,6 +36,7 @@ from bin.config_tool import (PARAM_DEFINITION, apply_config, query_fe_version,
                              save_config)
 from p1_runner import trace as logging
 from p1_runner.argument_parser import ArgumentParser, ExtendedBooleanAction
+from p1_runner.config_loader_helpers import device_import_user_config, get_config_loader_for_device
 from p1_runner.data_source import SerialDataSource
 from p1_runner.device_interface import DeviceInterface
 from p1_runner.exported_data import load_saved_data
@@ -231,7 +233,7 @@ def test_expected_storage(state: TestState) -> None:
     active_config_path = state.test_logger.get_abs_file_path('active_config.p1nvm')
 
     logger.debug("Reading active UserConfig on device.")
-    args = Namespace(type='user_config', format="p1nvm", export_file=active_config_path, export_source='active')
+    args = Namespace(type='user_config', export_file=active_config_path, export_source='active')
     active_storage: Optional[List[PlatformStorageDataMessage]] = request_export(state.device_interface, args)
     active_config = None
     if active_storage is None:
@@ -243,7 +245,7 @@ def test_expected_storage(state: TestState) -> None:
 
     full_save_path = state.test_logger.get_abs_file_path('full_save.p1nvm')
     logger.debug("Reading all saved storage on device.")
-    args = Namespace(type='all', format="p1nvm", export_file=full_save_path, export_source='saved')
+    args = Namespace(type='all', export_file=full_save_path, export_source='saved')
     saved_storage: Optional[List[PlatformStorageDataMessage]] = request_export(state.device_interface, args)
     saved_config = None
     saved_calibration = None
@@ -286,6 +288,78 @@ def test_expected_storage(state: TestState) -> None:
             else:
                 logger.error("Couldn't load expected state.config %s.", state.config.expected_config_save)
                 state.passed = False
+
+
+def test_config_loader(state: TestState) -> None:
+    """!
+    @brief Checks the calibration and UserConfig saved on the device matches the @ref TestConfig.
+
+    This test does:
+     - Load the active UserConfig from the device
+     - Deserialize it to a Python object
+     - Modify a value and import the new serialized config
+     - Check the device setting was changed as expected by the import
+     - Restore the original value and check the config dump matches the original data
+    """
+    active_config_path = state.test_logger.get_abs_file_path('active_config.p1nvm')
+    TEST_ID = "__CONFIG_TEST__"
+
+    logger.debug("Getting UserConfig loader for device.")
+    UserConfig = get_config_loader_for_device(state.device_interface)
+    if UserConfig is None:
+        logger.error('Load failed.')
+        state.passed = False
+        return
+
+    logger.debug("Reading active UserConfig on device.")
+    args = Namespace(type='user_config', export_file=active_config_path, export_source='active')
+    active_storage: Optional[List[PlatformStorageDataMessage]] = request_export(state.device_interface, args)
+    if active_storage is None:
+        logger.error('Request failed.')
+        state.passed = False
+        return
+
+    logger.debug("Modify device id.")
+    original_data = active_storage[0].data
+    user_config = UserConfig.deserialize(original_data)
+    original_device_id = user_config.system_controls.device_id
+    user_config.system_controls.device_id = TEST_ID
+    if not device_import_user_config(state.device_interface, user_config):
+        logger.error('Request failed.')
+        state.passed = False
+        return
+
+    logger.debug(f"Check device id.")
+    args = Namespace(type='active', param='user_device_id')
+    resp_read: Optional[List[ConfigResponseMessage]] = read_config(state.device_interface, args)
+    if resp_read is None or len(resp_read) != 1 or resp_read[0].response != Response.OK:
+        logger.error('Request failed.')
+        state.passed = False
+        return
+
+    if resp_read[0].config_object.value != TEST_ID:
+        logger.error('Value not updated.')
+        state.passed = False
+        return
+
+    logger.debug("Check restoring original values.")
+    user_config.system_controls.device_id = original_device_id
+    if not device_import_user_config(state.device_interface, user_config):
+        logger.error('Request failed.')
+        state.passed = False
+        return
+
+    args = Namespace(type='user_config', export_file=active_config_path, export_source='active')
+    active_storage: Optional[List[PlatformStorageDataMessage]] = request_export(state.device_interface, args)
+    if active_storage is None:
+        logger.error('Request failed.')
+        state.passed = False
+        return
+
+    if original_data != active_storage[0].data:
+        logger.error("Restored config doesn't match original.")
+        state.passed = False
+        return
 
 
 def test_msg_rates(state: TestState) -> None:
@@ -706,7 +780,7 @@ def test_factory_reset(state: TestState) -> None:
     # Export storage
     full_save_path = state.test_logger.get_abs_file_path('full_save.p1nvm')
     logger.info("Exporting saved storage on device.")
-    args = Namespace(type='all', format="p1nvm", export_file=full_save_path, export_source='saved')
+    args = Namespace(type='all', export_file=full_save_path, export_source='saved')
     saved_storage: Optional[List[PlatformStorageDataMessage]] = request_export(state.device_interface, args)
     if saved_storage is None:
         logger.error('Storage export request failed.')

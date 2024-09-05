@@ -21,19 +21,18 @@ repo_root = os.path.normpath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(repo_root)
 sys.path.append(os.path.dirname(__file__))
 
+from p1_runner import trace as logging
+from p1_runner.argument_parser import ArgumentParser, ExtendedBooleanAction, TriStateBooleanAction
+from p1_runner.data_source import SerialDataSource, SocketDataSource, WebSocketDataSource
+from p1_runner.device_interface import DeviceInterface, RESPONSE_TIMEOUT
+from p1_runner.exported_data import (add_to_exported_data,
+                                     create_exported_data,
+                                     is_export_valid,
+                                     load_saved_data)
+from p1_runner.find_serial_device import find_serial_device, PortType
+
 from config_message_rate import *
 
-from p1_runner import trace as logging
-from p1_runner.argument_parser import (ArgumentParser, ExtendedBooleanAction,
-                                       TriStateBooleanAction)
-from p1_runner.data_source import (SerialDataSource, SocketDataSource,
-                                   WebSocketDataSource)
-from p1_runner.device_interface import RESPONSE_TIMEOUT, DeviceInterface
-from p1_runner.exported_data import (add_to_exported_data,
-                                     create_exported_data, is_export_valid,
-                                     load_saved_data, load_saved_json,
-                                     user_config_from_platform_storage)
-from p1_runner.find_serial_device import PortType, find_serial_device
 
 logger = logging.getLogger('point_one.config_tool')
 
@@ -280,7 +279,7 @@ def _args_to_hardware_tick_config(cls, args, config_interface):
 def _args_to_enabled_gnss_systems(cls, args, config_interface):
     # Construct a bitmask based on the user settings.
     systems = [s.strip() for s in args.systems.split(',')]
-    mask = SatelliteTypeMask.to_bit_mask(systems)
+    mask = SatelliteTypeMask.to_bitmask(systems)
 
     # If the user requested 'only', enable the specified systems and disable all others by doing a set config with the
     # mask from above.
@@ -309,7 +308,7 @@ def _args_to_enabled_gnss_systems(cls, args, config_interface):
 def _args_to_enabled_gnss_frequencies(cls, args, config_interface):
     # Construct a bitmask based on the user settings.
     frequency_bands = [s.strip() for s in args.frequencies.split(',')]
-    mask = FrequencyBandMask.to_bit_mask(frequency_bands)
+    mask = FrequencyBandMask.to_bitmask(frequency_bands)
 
     # If the user requested 'only', enable the specified bands and disable all others by doing a set config with the
     # mask from above.
@@ -526,7 +525,7 @@ def read_config(config_interface: DeviceInterface, args):
             resp = config_interface.wait_for_message(ConfigResponseMessage.MESSAGE_TYPE)
 
             # Check if the response timed out.
-            if resp is None:
+            if not isinstance(resp, ConfigResponseMessage):
                 logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
                 return None
 
@@ -594,7 +593,7 @@ def revert_config(config_interface: DeviceInterface, args):
             resp = config_interface.wait_for_message(CommandResponseMessage.MESSAGE_TYPE)
 
             # Check if the response timed out.
-            if resp is None:
+            if not isinstance(resp, CommandResponseMessage):
                 logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
                 return None
 
@@ -635,7 +634,7 @@ def apply_config(config_interface: DeviceInterface, args):
         interface_id = INTERFACE_MAP[interface] if interface else None
         config_interface.set_config(config_object, save=args.save, interface=interface_id)
         resp = config_interface.wait_for_message(CommandResponseMessage.MESSAGE_TYPE)
-        if resp is None:
+        if not isinstance(resp, CommandResponseMessage):
             logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
             return False
         elif resp.response != Response.OK:
@@ -658,7 +657,7 @@ def save_config(config_interface: DeviceInterface, args):
     config_interface.send_save(action)
 
     resp = config_interface.wait_for_message(CommandResponseMessage.MESSAGE_TYPE)
-    if resp is None:
+    if not isinstance(resp, CommandResponseMessage):
         logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
         return False
     elif resp.response != Response.OK:
@@ -712,16 +711,17 @@ def query_version(config_interface: DeviceInterface, args):
         return query_fe_version(config_interface, args)
 
 
-def query_fe_version(config_interface: DeviceInterface, args):
+def query_fe_version(config_interface: DeviceInterface, args) -> Optional[VersionInfoMessage]:
     logger.debug('Querying version info.')
     config_interface.send_message(MessageRequest(MessageType.VERSION_INFO))
 
     resp = config_interface.wait_for_message(VersionInfoMessage.MESSAGE_TYPE)
-    if resp is None:
-        logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
-    else:
+    if isinstance(resp, VersionInfoMessage):
         logger.info(str(resp))
-    return resp
+        return resp
+    else:
+        logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
+        return None
 
 
 def query_nmea_versions(config_interface: DeviceInterface, args):
@@ -807,7 +807,7 @@ def request_reset(config_interface: DeviceInterface, args):
     config_interface.send_message(ResetRequest(mask))
 
     resp = config_interface.wait_for_message(CommandResponseMessage.MESSAGE_TYPE)
-    if resp is None:
+    if not isinstance(resp, CommandResponseMessage):
         logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
         return False
     elif resp.response != Response.OK:
@@ -826,7 +826,7 @@ def request_shutdown(config_interface: DeviceInterface, args):
     config_interface.send_message(ShutdownRequest(flags))
 
     resp = config_interface.wait_for_message(CommandResponseMessage.MESSAGE_TYPE)
-    if resp is None:
+    if not isinstance(resp, CommandResponseMessage):
         logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
         return False
     elif resp.response != Response.OK:
@@ -845,7 +845,7 @@ def request_startup(config_interface: DeviceInterface, args):
     config_interface.send_message(StartupRequest(flags))
 
     resp = config_interface.wait_for_message(CommandResponseMessage.MESSAGE_TYPE)
-    if resp is None:
+    if not isinstance(resp, CommandResponseMessage):
         logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
         return False
     elif resp.response != Response.OK:
@@ -860,14 +860,6 @@ def request_export(config_interface: DeviceInterface, args):
     data_types = _data_types_map[args.type]
     responses = []
 
-    if args.format == 'json':
-        if args.type == 'all':
-            logger.info('JSON export only valid for user_config.')
-            data_types = [DataType.USER_CONFIG]
-        elif args.type != 'user_config':
-            logger.error('JSON export only valid for user_config. Use `--type=user_config`.')
-            return None
-
     # Query device for version to save with metadata.
     config_interface.send_message(MessageRequest(MessageType.VERSION_INFO))
     version_resp = config_interface.wait_for_message(VersionInfoMessage.MESSAGE_TYPE)
@@ -880,14 +872,10 @@ def request_export(config_interface: DeviceInterface, args):
     if export_file is None:
         timestr = datetime.now().strftime("%y%m%d_%H%M%S")
         device_type = '-'.join(version_resp.engine_version_str.split('-')[:2])
-        if args.format == 'json':
-            export_file = device_type + '.user_config.' + timestr + '.json'
-        else:
-            export_file = device_type + '.' + timestr + '.p1nvm'
+        export_file = device_type + '.' + timestr + '.p1nvm'
     logger.info('Exporting to %s', export_file)
 
-    if args.format == 'p1nvm':
-        create_exported_data(export_file, version_resp)
+    create_exported_data(export_file, version_resp)
 
     for data_type in data_types:
         export_msg = ExportDataMessage(data_type)
@@ -920,60 +908,21 @@ def request_export(config_interface: DeviceInterface, args):
 
         responses.append(data_msg)
 
-        if args.format == 'p1nvm':
-            add_to_exported_data(export_file, data_msg)
-        else:
-            with open(export_file, 'w') as fd:
-                user_config = user_config_from_platform_storage(data_msg)
-                if user_config:
-                    fd.write(user_config.to_json())
-                else:
-                    return None
+        add_to_exported_data(export_file, data_msg)
+
 
     logger.info('Exports successful.')
     return responses
 
 
 def request_import(config_interface: DeviceInterface, args):
-    file_extension = args.file.split('.')[-1].lower()
     data_types = _data_types_map[args.type]
 
-    if file_extension == 'json':
-        if args.type != 'user_config':
-            logger.error('JSON import only valid for user_config. Use `--type=user_config`.')
-            return False
-
-        default_data = None
-        # To preserve the current configuration and only override the values set in the JSON, first
-        # load the current configuration from the device.
-        if args.preserve_unspecified:
-            logger.info('Reading current settings to preserve if unspecified.')
-            while True:
-                export_msg = ExportDataMessage(DataType.USER_CONFIG)
-                config_interface.send_message(export_msg)
-                data_msg = config_interface.wait_for_message(MessageType.PLATFORM_STORAGE_DATA)
-                if data_msg is None or not isinstance(data_msg, PlatformStorageDataMessage):
-                    logger.error('Device did not respond to export request.')
-                    return False
-                # Check the response has the expected data type to avoid handling the periodic PlatformStorageDataMessage
-                # output.
-                if DataType.USER_CONFIG == data_msg.data_type:
-                    break
-            if data_msg.response != Response.NO_DATA_STORED and data_msg.response != Response.OK:
-                logger.warning('Export USER_CONFIG error: "%s"', data_msg.response.name)
-                return False
-            else:
-                default_data = data_msg
-        import_cmds = load_saved_json(args.file, DataType.USER_CONFIG, default_data)
+    if not is_export_valid(args.file):
+        logger.error('%s is not a valid data export.', args.file)
+        return False
     else:
-        if args.preserve_unspecified:
-            logger.error('`--preserve-unspecified` is only valid for JSON files.')
-            return False
-        elif not is_export_valid(args.file):
-            logger.error('%s is not a valid data export.', args.file)
-            return False
-        else:
-            import_cmds = load_saved_data(args.file, data_types)
+        import_cmds = load_saved_data(args.file, data_types)
 
     if len(import_cmds) == 0:
         logger.error('None of the data types %s found in %s.', [t.name for t in data_types], args.file)
@@ -1067,7 +1016,7 @@ def request_fault(config_interface: DeviceInterface, args):
 
     if expect_response:
         resp = config_interface.wait_for_message(CommandResponseMessage.MESSAGE_TYPE)
-        if resp is None:
+        if not isinstance(resp, CommandResponseMessage):
             logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
             return False
         elif resp.response != Response.OK:
@@ -1754,7 +1703,7 @@ Example usage:
 
     type_parser = fault_parser.add_subparsers(dest='fault', help="The type of fault to be applied.")
 
-    crash_parser = type_parser.add_parser(
+    clear_parser = type_parser.add_parser(
         'clear',
         help='Clear existing faults.')
 
@@ -1854,11 +1803,6 @@ diagnostic log reset:
         default='all',
         help="The type of data to export to a local file: %s" % ', '.join(_data_types_map.keys()))
     export_parser.add_argument(
-        '--format',
-        choices=['json', 'p1nvm'],
-        default='p1nvm',
-        help="The format for the exported file. json is only supported for user_config export.")
-    export_parser.add_argument(
         '--export-source',
         choices=['active', 'saved', 'default'],
         default='active',
@@ -1880,12 +1824,6 @@ diagnostic log reset:
     import_parser.add_argument(
         '-f', '--force', action=ExtendedBooleanAction,
         help="If set, the user will not be prompted to confirm any actions.")
-    import_parser.add_argument(
-        '--preserve-unspecified', action=ExtendedBooleanAction,
-        help="""\
-If set, only modify the values specified in the JSON. This flag is only valid
-when importing a JSON file. If this is flag isn't specified, values not set in
-the JSON will be set to their default values.""")
     import_parser.add_argument(
         '--type',
         choices=_data_types_map.keys(),

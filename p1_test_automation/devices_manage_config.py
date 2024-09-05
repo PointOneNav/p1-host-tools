@@ -27,19 +27,7 @@ from bin.config_tool import query_fe_version, request_export, request_import
 from p1_runner import trace as logging
 from p1_runner.argument_parser import ArgumentParser, ExtendedBooleanAction
 from p1_runner.device_interface import DeviceInterface
-from p1_test_automation.devices_config import (DeviceConfig, SharedConfig,
-                                               load_config_set,
-                                               open_data_source)
-
-# isort: split
-from p1_runner.exported_data import __has_user_config_loader
-
-if not __has_user_config_loader:
-    print('This tool requires the user_config_loader libray. See p1_runner/exported_data.py')
-    exit(1)
-from p1_runner.exported_data import (__user_config_version,
-                                     user_config_from_platform_storage)
-from user_config_loader.loader_utilities import update_dataclass_contents
+from p1_runner.config_loader_helpers import get_config_loader_for_device, user_config_from_platform_storage
 
 logger = logging.getLogger('point_one.test_automation.manage_configs')
 
@@ -138,6 +126,11 @@ def check_storage(
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = os.path.join(tmp, 'dummy.p1nvm')
 
+        logger.debug("Getting UserConfig loader.")
+        UserConfig = get_config_loader_for_device(device_interface)
+        if UserConfig is None:
+            return False
+
         logger.debug("Reading active UserConfig on device.")
         args = Namespace(type='user_config', format="p1nvm", export_file=tmp_path, export_source='active')
         active_storage: Optional[List[PlatformStorageDataMessage]] = request_export(device_interface, args)
@@ -193,14 +186,6 @@ def check_storage(
         else:
             logger.info('No calibration saves on device.')
 
-        if saved_config.data_version != __user_config_version:
-            logger.error(
-                "UserConfig Python library version %s doesn't match exported data %s. Skipping JSON for UserConfig export.",
-                __user_config_version,
-                saved_config.data_version,
-            )
-            return False
-
         logger.debug('Load device defaults.')
         args = Namespace(type='user_config', format="p1nvm", export_file=tmp_path, export_source='default')
         default_storage: Optional[List[PlatformStorageDataMessage]] = request_export(device_interface, args)
@@ -211,16 +196,18 @@ def check_storage(
         else:
             default_config = default_storage[0]
 
-        default_conf = user_config_from_platform_storage(default_config)
-        saved_conf = user_config_from_platform_storage(saved_config)
+        default_conf = user_config_from_platform_storage(default_config, UserConfig)
+        saved_conf = user_config_from_platform_storage(saved_config, UserConfig)
+        if default_conf is None or saved_conf is None:
+            return False
 
         expected_conf = copy.deepcopy(default_conf)
-        unused = update_dataclass_contents(expected_conf, shared_config.modified_settings)
-        if len(unused) > 0:
+        unused = expected_conf.update(shared_config.modified_settings)
+        if unused is not None and len(unused) > 0:
             logger.error(f'Invalid shared_config modified_settings: {unused}')
             return False
-        unused = update_dataclass_contents(expected_conf, device_config.modified_settings)
-        if len(unused) > 0:
+        unused = expected_conf.update(device_config.modified_settings)
+        if unused is not None and len(unused) > 0:
             logger.error(f'Invalid device modified_settings: {unused}')
             return False
 
