@@ -47,7 +47,7 @@ class DeviceConfig(NamedTuple):
     name: str
 
     # The UserConfig settings that have been changed from their defaults.
-    modified_settings: Dict[str, Any]
+    modified_settings: Dict[str, Any] = {}
 
     # The interface for the device. Must specify either a TCP address or a
     # serial port. You cannot specify both.

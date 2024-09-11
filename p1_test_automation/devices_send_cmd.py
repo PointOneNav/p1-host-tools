@@ -7,8 +7,6 @@ import time
 from argparse import Namespace
 from typing import List, Optional
 
-from balena import Balena
-
 # Add the parent directory to the search path to enable p1_runner package imports when not installed in Python.
 repo_root = os.path.normpath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(repo_root)
@@ -20,8 +18,9 @@ from p1_runner.argument_parser import (ArgumentParser, ExtendedBooleanAction,
                                        TriStateBooleanAction)
 from p1_runner.device_interface import DeviceInterface
 from p1_test_automation.atlas_device_ctrl import (
-    CrashLogAction, LoggingCmd, enable_rolling_logs, restart_application,
-    send_logging_cmd_to_legacy_atlas, set_crash_log_action)
+    AtlasBalenaController, CrashLogAction, LoggingCmd, enable_rolling_logs,
+    restart_application, send_logging_cmd_to_legacy_atlas,
+    set_crash_log_action)
 from p1_test_automation.devices_config import (DeviceConfig, TruthType,
                                                load_config_set,
                                                open_data_source)
@@ -67,7 +66,7 @@ def stop_logging(device_config: DeviceConfig, args):
     return True
 
 
-def send_cmd_function(device_config: DeviceConfig, args: Namespace, balena: Optional[Balena]) -> bool:
+def send_cmd_function(device_config: DeviceConfig, args: Namespace, balena: Optional[AtlasBalenaController]) -> bool:
     command_successful = True
     if args.command == "log":
         namespace_args = Namespace()
@@ -94,8 +93,8 @@ def send_cmd_function(device_config: DeviceConfig, args: Namespace, balena: Opti
     elif args.command == "reset":
         command_successful = send_reset(device_config, args)
     elif args.command == "balena_pin_release":
-        if device_config.balena is not None and device_config.balena.pinned_release is not None:
-            balena.models.device.pin_to_release(device_config.balena.uuid, device_config.balena.pinned_release)
+        if device_config.balena is not None and device_config.balena.pinned_release is not None and balena is not None:
+            balena.pin_release(device_config.balena.uuid, device_config.balena.pinned_release)
         else:
             logger.info(f'No balena release specified for {device_config.name}.')
     elif args.command == "set_crash_log_action":
@@ -105,33 +104,14 @@ def send_cmd_function(device_config: DeviceConfig, args: Namespace, balena: Opti
         else:
             command_successful = set_crash_log_action(device_config.tcp_address, action)
     elif args.command == "balena_get_status":
-        if device_config.balena is not None:
+        if device_config.balena is not None and balena is not None:
             # See https://docs.balena.io/reference/sdk/python-sdk/#typedevice
-            balena_device = balena.models.device.get(device_config.balena.uuid)
-            logger.debug(balena_device)
-            print(f"Balena name: {balena_device['device_name']}")
-            if device_config.balena.pinned_release:
-                # See https://docs.balena.io/reference/sdk/python-sdk/#releasetype
-                target_release = balena.models.release.get(device_config.balena.pinned_release)
-                if target_release:
-                    logger.debug(target_release)
-                    if balena_device['should_be_running__release']:
-                        print(
-                            f"Device matches pinned release: {target_release['id'] == balena_device['should_be_running__release']['__id']}"
-                        )
-                    else:
-                        print(
-                            f"Device not currently pinned to release."
-                        )
-                else:
-                    print(
-                        f"Target release '{device_config.balena.pinned_release}' not found."
-                    )
-            print(f"Device online: {balena_device['is_online']}")
-            if balena_device['should_be_running__release']:
-                print(
-                    f"Is Updating: {balena_device['should_be_running__release']['__id'] != balena_device['is_running__release']['__id']}"
-                )
+            balena_status = balena.get_status(device_config.balena.uuid)
+            print(f"Balena name: {balena_status.name}")
+            print(f'Configured release: {device_config.balena.pinned_release}')
+            print(f'Pinned release: {balena_status.target_release}')
+            print(f'Current release: {balena_status.current_release}')
+            print(f"Device online: {balena_status.is_online}")
         else:
             logger.info(f'No balena release specified for {device_config.name}.')
 
@@ -142,17 +122,14 @@ def send_cmd_function(device_config: DeviceConfig, args: Namespace, balena: Opti
         logger.info("Command successful for device %s." % device_config.name)
 
     if args.command == "balena_pin_release" and args.wait:
-        if device_config.balena is not None and device_config.balena.pinned_release:
+        if device_config.balena is not None and device_config.balena.pinned_release and balena is not None:
             while True:
-                balena_device = balena.models.device.get(device_config.balena.uuid)
-                if not balena_device['is_online']:
+                balena_status = balena.get_status(device_config.balena.uuid)
+                if not balena_status.is_online:
                     logger.info(f'Skipping {device_config.name} since it is offline.')
                     break
                 else:
-                    if (
-                        balena_device['should_be_running__release']['__id']
-                        == balena_device['is_running__release']['__id']
-                    ):
+                    if balena_status.target_release == balena_status.current_release:
                         logger.info(f'{device_config.name} finished updating.')
                         break
                     else:
@@ -281,12 +258,7 @@ NONE - Leave logs on device until this setting is changed to FULL_LOG or device 
     command_successful = False
 
     if 'balena' in args.command:
-        balena = Balena()
-        token = balena.auth.get_token()
-        if token is None:
-            logger.error("Can't load Balena token.")
-            exit(1)
-        balena.auth.login_with_token(token)
+        balena = AtlasBalenaController()
     else:
         balena = None
 
