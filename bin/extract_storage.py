@@ -9,11 +9,11 @@ import zipfile
 
 import boto3
 import botocore.exceptions
-
-from fusion_engine_client.utils.log import DEFAULT_LOG_BASE_DIR, locate_log
-from fusion_engine_client.messages import (DataType, DataVersion, PlatformStorageDataMessage, Response,
-                                           VersionInfoMessage)
+from fusion_engine_client.messages import (DataType, DataVersion,
+                                           PlatformStorageDataMessage,
+                                           Response, VersionInfoMessage)
 from fusion_engine_client.parsers import MixedLogReader
+from fusion_engine_client.utils.log import DEFAULT_LOG_BASE_DIR, locate_log
 
 # Add the parent directory to the search path to enable p1_runner package imports when not installed in Python.
 repo_root = os.path.normpath(os.path.join(os.path.dirname(__file__), '..'))

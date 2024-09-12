@@ -29,10 +29,10 @@ repo_root = os.path.normpath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(repo_root)
 
 from bin.config_message_rate import get_current_interface
-from bin.config_tool import (apply_config, query_fe_version,
+from bin.config_tool import (PARAM_DEFINITION, apply_config, query_fe_version,
                              query_nmea_versions, read_config, request_export,
                              request_fault, request_import, request_reset,
-                             save_config, PARAM_DEFINITION)
+                             save_config)
 from p1_runner import trace as logging
 from p1_runner.argument_parser import ArgumentParser, ExtendedBooleanAction
 from p1_runner.data_source import SerialDataSource
@@ -550,7 +550,8 @@ def test_set_config(state: TestState, test_save=False, use_import=False) -> None
     # Test restoring it.
     if use_import:
         logger.debug(f"Check restoring value from export.")
-        args = Namespace(type='user_config', preserve_unspecified=False, file=export_path, dry_run=False, force=True, dont_save_config=True)
+        args = Namespace(type='user_config', preserve_unspecified=False, file=export_path,
+                         dry_run=False, force=True, dont_save_config=True)
         if not request_import(state.device_interface, args):
             logger.error('Request failed.')
             state.passed = False
@@ -731,7 +732,7 @@ def test_factory_reset(state: TestState) -> None:
             state.passed = False
             check_exit(state)
 
-        #TODO: Make this check more complex, where it checks the entirety of the user config from platform storage.
+        # TODO: Make this check more complex, where it checks the entirety of the user config from platform storage.
         # Check GNSS lever arm.
         gnss_config = resp_read[0].config_object
         if not isinstance(gnss_config, GnssLeverArmConfig):
@@ -739,7 +740,7 @@ def test_factory_reset(state: TestState) -> None:
             factory_reset_verified = False
             raise Exception('Failed to read GNSSLeverArmConfig')
         if not math.isclose(gnss_config.x, 0.0, rel_tol=1e-5) or not math.isclose(gnss_config.y, 0.0, rel_tol=1e-5) \
-            or not math.isclose(gnss_config.z, 0.0, rel_tol=1e-5):
+                or not math.isclose(gnss_config.z, 0.0, rel_tol=1e-5):
             state.passed = False
             factory_reset_verified = False
             raise Exception("GNSS lever arm didn't match expected value after change.")
@@ -758,7 +759,7 @@ def test_factory_reset(state: TestState) -> None:
             factory_reset_verified = False
             raise Exception('Failed to read DeviceLeverArmConfig')
         if not math.isclose(imu_config.x, 0.0, rel_tol=1e-5) or not math.isclose(imu_config.y, 0.0, rel_tol=1e-5) \
-            or not math.isclose(imu_config.z, 0.0, rel_tol=1e-5):
+                or not math.isclose(imu_config.z, 0.0, rel_tol=1e-5):
             state.passed = False
             factory_reset_verified = False
             raise Exception("Device lever arm didn't match expected value after change.")
@@ -767,7 +768,8 @@ def test_factory_reset(state: TestState) -> None:
 
     # Import storage
     logger.info("Re-importing saved storage on device.")
-    args = Namespace(file=full_save_path, preserve_unspecified=False, type='all', dry_run=False, force=True, dont_save_config=False)
+    args = Namespace(file=full_save_path, preserve_unspecified=False, type='all',
+                     dry_run=False, force=True, dont_save_config=False)
     if not request_import(state.device_interface, args):
         logger.error('Storage import request failed.')
         state.passed = False

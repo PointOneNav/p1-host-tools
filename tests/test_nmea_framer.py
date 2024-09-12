@@ -1,8 +1,8 @@
+import logging
 import sys
 
 from p1_runner.nmea_framer import NMEAFramer
 
-import logging
 logging.getLogger('point_one').setLevel(logging.TRACE)
 
 
@@ -15,6 +15,7 @@ def test_single_message():
     input = message[0]
     framer = NMEAFramer()
     count = [0,]
+
     def _callback(data):
         assert data == message[count[0]]
         count[0] += 1
@@ -40,6 +41,7 @@ def test_partial_message():
 
     # Test message framing.
     count = [0,]
+
     def _callback(data):
         assert data == message[count[0]]
         count[0] += 1
@@ -70,6 +72,7 @@ def test_multi_message():
     input = message[0] + message[1]
     framer = NMEAFramer()
     count = [0,]
+
     def _callback(data):
         assert data == message[count[0]]
         count[0] += 1
@@ -97,6 +100,7 @@ def test_bytes():
     input = message[0].encode()
     framer = NMEAFramer()
     count = [0,]
+
     def _callback(data):
         assert not isinstance(data, bytes)
         assert data == message[count[0]]
@@ -117,6 +121,7 @@ def test_misaligned():
     input = message[0] + "abcd\r\n" + message[1]
     framer = NMEAFramer()
     count = [0,]
+
     def _callback(data):
         assert data == message[count[0]]
         count[0] += 1
@@ -136,6 +141,7 @@ def test_missing_star():
     input = ''.join(message)
     framer = NMEAFramer()
     count = [0,]
+
     def _callback(data):
         assert count[0] < 1
         assert data == message[count[0] + 1]
@@ -156,6 +162,7 @@ def test_extra_cr():
     input = ''.join(message)
     framer = NMEAFramer()
     count = [0,]
+
     def _callback(data):
         assert data == message[count[0]]
         count[0] += 1
@@ -175,6 +182,7 @@ def test_lf():
     input = ''.join(message)
     framer = NMEAFramer()
     count = [0,]
+
     def _callback(data):
         assert count[0] < 1
         assert data == message[count[0] + 1]
@@ -189,13 +197,14 @@ def test_checksum_failure():
     message = [
         "$GPGGA,000000.000,3746.37327400,N,12224.26599800,W,2,13,2.1,3.260,M,34.210,M,11.1,0234*5B\r\n",
         "$GPGGA,180532.000,3745.90318740,N,12226.18945360,W,2,26,0.5,83.332,M,-25.332,M,3.0,0131*7A\r\n",
-        "$GPGSV,3,1,09,02,80,082,50,05,18,150,45,06,43,047,48,12,70,332,48*AB\r\n", # <-- Incorrect checksum
+        "$GPGSV,3,1,09,02,80,082,50,05,18,150,45,06,43,047,48,12,70,332,48*AB\r\n",  # <-- Incorrect checksum
         "$GPGSV,3,2,09,17,05,072,44,19,21,064,45,24,35,216,45,25,38,314,45*70\r\n",
     ]
 
     input = ''.join(message)
     framer = NMEAFramer()
     count = [0,]
+
     def _callback(data):
         index = count[0] if count[0] < 2 else count[0] + 1
         assert data == message[index]
@@ -216,6 +225,7 @@ def test_resynchronization():
     input = "$bogus" + ''.join(message)
     framer = NMEAFramer()
     count = [0,]
+
     def _callback(data):
         assert data == message[count[0]]
         count[0] += 1
@@ -253,6 +263,7 @@ def test_bogus_characters():
     input = "$\001\040" + ''.join(message)
     framer = NMEAFramer()
     count = [0,]
+
     def _callback(data):
         assert data == message[count[0]]
         count[0] += 1
@@ -281,6 +292,7 @@ def test_displayable_chars():
     input = message[0] + message[1]
     framer = NMEAFramer()
     count = [0,]
+
     def _callback(data):
         assert data == message[count[0]]
         count[0] += 1

@@ -1,21 +1,21 @@
-from bisect import bisect_right
 import copy
-from datetime import datetime
 import io
 import os
 import sys
+from bisect import bisect_right
+from datetime import datetime
 from typing import Dict, Iterable, Optional, Union
 
 import numpy as np
-from construct import Struct, Int32ul, Int8ul, Switch, Padding, Const, Int16ul, Bytes, this, StreamError
-
+from construct import (Bytes, Const, Int8ul, Int16ul, Int32ul, Padding,
+                       StreamError, Struct, Switch, this)
 from fusion_engine_client.messages.defs import MessagePayload, Timestamp
 from fusion_engine_client.parsers import file_index
-from fusion_engine_client.utils.time_range import TimeRange
 from fusion_engine_client.utils.construct_utils import AutoEnum
+from fusion_engine_client.utils.time_range import TimeRange
 
 from . import trace as logging
-from .p1bin_type import P1BinType, P1BinRecord
+from .p1bin_type import P1BinRecord, P1BinType
 
 _p1bin_timestamp = Struct(
     "time_seconds" / Int32ul,
@@ -566,6 +566,7 @@ class P1BinFileStream:
     """!
     @brief Class to access the contents of a p1bin file for a certain @ref P1BinType as if it were a continuous file.
     """
+
     def __init__(self, file_path, p1bin_type, ignore_index=False, show_read_progress=False):
         self.filtered_offsets = np.array([], dtype=np.uint64)
         self.filtered_size_bytes = 0

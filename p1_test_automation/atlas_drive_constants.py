@@ -1,5 +1,5 @@
-from pathlib import Path
 import os
+from pathlib import Path
 
 DRIVE_TEST_TMP_DIR = Path('/tmp/atlas_drive_test')
 DRIVE_DIR = Path('/logs/drive_tests')

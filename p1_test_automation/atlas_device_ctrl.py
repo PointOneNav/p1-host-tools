@@ -63,7 +63,7 @@ def get_log_key(tcp_address: str, log_guid: str) -> Optional[str]:
                         f'Log path does not start with expected "{EXPECTED_START_PATH}" instead was "{log["path"]}".'
                     )
                 else:
-                    return log['path'][len(EXPECTED_START_PATH) :]
+                    return log['path'][len(EXPECTED_START_PATH):]
 
     return None
 

@@ -3,14 +3,16 @@
 import os
 import sys
 import time
-from typing import Any, cast, Dict, List, NamedTuple, Optional
+from typing import Any, Dict, List, NamedTuple, Optional, cast
 
 import remi.gui as gui
 from remi import App, start
 
 # isort: split
-from fusion_engine_client.messages import CalibrationStage, CalibrationStatus, PoseMessage, SolutionType
-from fusion_engine_client.parsers.decoder import FusionEngineDecoder, MessageTuple
+from fusion_engine_client.messages import (CalibrationStage, CalibrationStatus,
+                                           PoseMessage, SolutionType)
+from fusion_engine_client.parsers.decoder import (FusionEngineDecoder,
+                                                  MessageTuple)
 
 # Add the parent directory to the search path to enable p1_runner package imports when not installed in Python.
 repo_root = os.path.normpath(os.path.join(os.path.dirname(__file__), '..'))
@@ -20,7 +22,9 @@ sys.path.append(repo_root)
 # isort: split
 from p1_runner import trace as logging
 from p1_runner.argument_parser import ArgumentParser
-from p1_test_automation.devices_config import DataSource, DeviceConfig, load_config_set, open_data_source
+from p1_test_automation.devices_config import (DataSource, DeviceConfig,
+                                               load_config_set,
+                                               open_data_source)
 
 logger = logging.getLogger('point_one.test_automation.device_dashboard')
 

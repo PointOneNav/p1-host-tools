@@ -15,7 +15,9 @@ import construct
 from deepdiff import DeepDiff
 
 # isort: split
-from fusion_engine_client.messages import DataType, PlatformStorageDataMessage, Response, VersionInfoMessage
+from fusion_engine_client.messages import (DataType,
+                                           PlatformStorageDataMessage,
+                                           Response, VersionInfoMessage)
 
 # Add the parent directory to the search path to enable p1_runner package imports when not installed in Python.
 repo_root = os.path.normpath(os.path.join(os.path.dirname(__file__), '..'))
@@ -24,8 +26,10 @@ sys.path.append(repo_root)
 from bin.config_tool import query_fe_version, request_export, request_import
 from p1_runner import trace as logging
 from p1_runner.argument_parser import ArgumentParser, ExtendedBooleanAction
-from p1_test_automation.devices_config import DeviceConfig, SharedConfig, load_config_set, open_data_source
 from p1_runner.device_interface import DeviceInterface
+from p1_test_automation.devices_config import (DeviceConfig, SharedConfig,
+                                               load_config_set,
+                                               open_data_source)
 
 # isort: split
 from p1_runner.exported_data import __has_user_config_loader
@@ -33,7 +37,8 @@ from p1_runner.exported_data import __has_user_config_loader
 if not __has_user_config_loader:
     print('This tool requires the user_config_loader libray. See p1_runner/exported_data.py')
     exit(1)
-from p1_runner.exported_data import __user_config_version, user_config_from_platform_storage
+from p1_runner.exported_data import (__user_config_version,
+                                     user_config_from_platform_storage)
 from user_config_loader.loader_utilities import update_dataclass_contents
 
 logger = logging.getLogger('point_one.test_automation.manage_configs')

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
-from datetime import datetime
 import os
 import re
 import signal
 import socket
 import sys
 import threading
+from datetime import datetime
 
 import serial
 import serial.threaded
@@ -340,6 +340,7 @@ clients and serial device /dev/ttyUSB0:
         device_b = _open_connection(options.device_b)
 
         start_time = datetime.now()
+
         def _print_status():
             logger.info('[elapsed: %d sec, sent: %d B -> %s (A), %d bytes -> %s (B)]' %
                         ((datetime.now() - start_time).total_seconds(),

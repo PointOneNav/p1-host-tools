@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
-from datetime import datetime
 import os
+import re
 import socket
 import sys
-import re
+from datetime import datetime
 from urllib.parse import urlparse
 
 try:
@@ -13,7 +13,6 @@ except ImportError:
     websocket_connect = None
 
 import serial
-
 from fusion_engine_client.messages import *
 from fusion_engine_client.utils.log import DEFAULT_LOG_BASE_DIR
 
@@ -22,19 +21,19 @@ repo_root = os.path.normpath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(repo_root)
 sys.path.append(os.path.dirname(__file__))
 
-from p1_runner import trace as logging
-from p1_runner.argument_parser import ArgumentParser, ExtendedBooleanAction, TriStateBooleanAction
-from p1_runner.data_source import SerialDataSource, SocketDataSource, WebSocketDataSource
-from p1_runner.device_interface import DeviceInterface, RESPONSE_TIMEOUT
-from p1_runner.exported_data import (add_to_exported_data,
-                                     create_exported_data,
-                                     is_export_valid,
-                                     load_saved_json,
-                                     load_saved_data,
-                                     user_config_from_platform_storage)
-from p1_runner.find_serial_device import find_serial_device, PortType
-
 from config_message_rate import *
+
+from p1_runner import trace as logging
+from p1_runner.argument_parser import (ArgumentParser, ExtendedBooleanAction,
+                                       TriStateBooleanAction)
+from p1_runner.data_source import (SerialDataSource, SocketDataSource,
+                                   WebSocketDataSource)
+from p1_runner.device_interface import RESPONSE_TIMEOUT, DeviceInterface
+from p1_runner.exported_data import (add_to_exported_data,
+                                     create_exported_data, is_export_valid,
+                                     load_saved_data, load_saved_json,
+                                     user_config_from_platform_storage)
+from p1_runner.find_serial_device import PortType, find_serial_device
 
 logger = logging.getLogger('point_one.config_tool')
 
@@ -42,8 +41,10 @@ logger = logging.getLogger('point_one.config_tool')
 def _args_to_point3f(cls, args, config_interface):
     return cls(args.x, args.y, args.z)
 
+
 def _args_to_heading_bias(cls, args, config_interface):
     return cls(args.horizontal, args.vertical)
+
 
 SERIAL_TIMEOUT = 5
 
@@ -424,8 +425,8 @@ PARAM_DEFINITION = {
     'output': {'format': OutputLeverArmConfig, 'arg_parse': _args_to_point3f},
     'heading_bias': {'format': HeadingBias, 'arg_parse': _args_to_heading_bias},
 
-    'gnss_systems':  {'format': EnabledGNSSSystemsConfig, 'arg_parse': _args_to_enabled_gnss_systems},
-    'gnss_frequencies':  {'format': EnabledGNSSFrequencyBandsConfig, 'arg_parse': _args_to_enabled_gnss_frequencies},
+    'gnss_systems': {'format': EnabledGNSSSystemsConfig, 'arg_parse': _args_to_enabled_gnss_systems},
+    'gnss_frequencies': {'format': EnabledGNSSFrequencyBandsConfig, 'arg_parse': _args_to_enabled_gnss_frequencies},
     'leap_second': {'format': LeapSecondConfig, 'arg_parse': _args_to_int_gen('value')},
     'gps_week_rollover': {'format': GPSWeekRolloverConfig, 'arg_parse': _args_to_int_gen('value')},
     'ionosphere_config': {'format': IonosphereConfig, 'arg_parse': _args_to_ionosphere_config},
@@ -679,6 +680,7 @@ def copy_interface_message_config(config_interface: DeviceInterface, args):
         # copy_message_config() will print an error.
         return False
 
+
 def query_system_status(config_interface: DeviceInterface, args):
     logger.debug('Querying system status info.')
     config_interface.send_message(MessageRequest(MessageType.SYSTEM_STATUS))
@@ -690,6 +692,7 @@ def query_system_status(config_interface: DeviceInterface, args):
         logger.info(str(resp))
     return resp
 
+
 def query_device_id(config_interface: DeviceInterface, args):
     logger.debug('Querying Device ID info.')
     config_interface.send_message(MessageRequest(MessageType.DEVICE_ID))
@@ -700,6 +703,7 @@ def query_device_id(config_interface: DeviceInterface, args):
     else:
         logger.info(str(resp))
     return resp
+
 
 def query_version(config_interface: DeviceInterface, args):
     if args.type == 'nmea':
@@ -1396,10 +1400,10 @@ other sources (non-GPS signals, modernized GPS navigation messages, etc.).
     help = 'Set the tropospheric delay model.'
     param_parser.add_parser('troposphere_config', help=help, description=help)
     troposphere_config_parser = apply_param_parser.add_parser('troposphere_config',
-                                                                    help=help, description=help)
+                                                              help=help, description=help)
     troposphere_config_parser.add_argument('--tropo-delay-model', '--tropo-model',
-                                                 choices=_tropo_delay_model_map.keys(),
-                                                 help='The tropospheric delay model to be used.')
+                                           choices=_tropo_delay_model_map.keys(),
+                                           help='The tropospheric delay model to be used.')
 
     # config_tool.py apply -- vehicle details
     help = 'Set vehicle model and dimensions.'
@@ -1856,7 +1860,7 @@ diagnostic log reset:
         help="The format for the exported file. json is only supported for user_config export.")
     export_parser.add_argument(
         '--export-source',
-        choices=['active','saved', 'default'],
+        choices=['active', 'saved', 'default'],
         default='active',
         help="When exporting the user_config, should the exported data come from the active configuration, the value saved to storage, or the device defaults.")
 

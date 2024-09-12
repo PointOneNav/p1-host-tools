@@ -259,7 +259,7 @@ class RTCMFramer(object):
             elif self.message_length is None:
                 self.header = rtcm3_header.parse(self.buffer)
                 self.logger.debug('Received RTCM %d message header. Waiting for payload. [payload_size=%d B]' %
-                                (self.header.message_id, self.header.info.payload_length))
+                                  (self.header.message_id, self.header.info.payload_length))
                 self.message_length = RTCM3_HEADER_LENGTH + self.header.info.payload_length + RTCM3_CRC_LENGTH
 
             # Collect the payload and CRC.

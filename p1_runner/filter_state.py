@@ -1,8 +1,7 @@
 import json
 
-from construct import Struct, Array, Padding, Float64l, Int8ul
 import numpy as np
-
+from construct import Array, Float64l, Int8ul, Padding, Struct
 from fusion_engine_client.messages import DataVersion, PackedDataToBuffer
 from fusion_engine_client.utils.construct_utils import NumpyAdapter
 
@@ -178,7 +177,7 @@ class WheelScaleFactorState:
         self.cov[:] = np.nan
         self.cov[:num_states, :num_states] = \
             np.array(data.get('cov', [np.nan] * num_elements)[:num_elements], dtype=float) \
-                .reshape((num_states, num_states), order='C')
+            .reshape((num_states, num_states), order='C')
         return True
 
     def from_construct(self, contents):

@@ -16,6 +16,7 @@ from p1_test_automation.devices_config import load_config_set
 
 DRIVE_TEST_TMP_DIR = '/tmp/atlas_drive_test'
 
+
 def main():
     parser = ArgumentParser()
     parser.add_argument(

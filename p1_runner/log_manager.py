@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 import os
 import queue
 import struct
@@ -7,6 +6,7 @@ import sys
 import threading
 import time
 import uuid
+from datetime import datetime, timezone
 
 from . import trace as logging
 from .log_manifest import DeviceType, LogManifest
@@ -136,7 +136,7 @@ class LogManager(threading.Thread):
                     timestamp = time.time()
                     if timestamp_file and timestamp - self.last_timestamp > 0.001:
                         # This will rollover after about about 50 days.
-                        milliseconds = int(round((timestamp - self.start_time) * 1000.))  % 2**32
+                        milliseconds = int(round((timestamp - self.start_time) * 1000.)) % 2**32
                         # This will rollover after about about 26 hours of full rate 460800 baud data.
                         offset = bin_file.tell() % 2**32
                         data = struct.pack('II', milliseconds, offset)
