@@ -50,6 +50,10 @@ def main():
         build_type = BuildType.get_build_type_from_version(env_args.HITL_DUT_VERSION)
         if build_type is None:
             exit(1)
+        elif build_type != env_args.HITL_BUILD_TYPE:
+            logger.error(
+                f'BuildType {build_type} inferred from HITL_DUT_VERSION {env_args.HITL_DUT_VERSION} does not match expected BuildType {env_args.HITL_BUILD_TYPE}.')
+            exit(1)
         elif build_type == BuildType.ATLAS:
             device_init = AtlasInit()
         else:

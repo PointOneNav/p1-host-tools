@@ -45,10 +45,10 @@ class HiltEnvArgs(NamedTuple):
     HITL_NAUTILUS_PATH: str
     # The HITL test set to perform.
     HITL_TEST_TYPE: TestType
+    # The @ref BuildType being tested.
+    HITL_BUILD_TYPE: BuildType
     # A nautilus "commit-ish" to checkout and build if needed.
     HITL_BUILD_COMMIT: Optional[str] = None
-    # The @ref BuildType being tested.
-    HITL_BUILD_TYPE: Optional[BuildType] = None
     # The version string for the build to run on the device.
     HITL_DUT_VERSION: Optional[str] = None
     # Only for Atlas Tests
