@@ -1,14 +1,8 @@
 #!/usr/bin/env python3
 
-import importlib
 import os
-import re
 import sys
-import tempfile
-import zipfile
 
-import boto3
-import botocore.exceptions
 from fusion_engine_client.messages import (DataType, DataVersion,
                                            PlatformStorageDataMessage,
                                            Response, VersionInfoMessage)
@@ -23,47 +17,11 @@ from p1_runner import trace as logging
 from p1_runner.argument_parser import ArgumentParser, CSVAction
 from p1_runner.calibration_state import CalibrationState
 from p1_runner.filter_state import TightEsrifFilterState
+from p1_runner.import_config_loader import (add_config_loader_args,
+                                            get_config_loader_class)
 from p1_runner.trace import HighlightFormatter
 
 logger = logging.getLogger('point_one.extract_storage')
-
-
-def import_config_loader(version):
-    # Determine path to the auto-generated config loading code on S3.
-    if re.match(r'^lg69t-(ap|am|ah)-.*', version):
-        remote_path = f'nautilus/quectel/{version}/zip_user_config_loader.zip'
-    elif re.match(r'^v\d+\.\d+\.\d+.*', version):
-        remote_path = f'nautilus/atlas/{version}/zip_user_config_loader.zip'
-    else:
-        raise RuntimeError(f'Remote path not known for specified device type ({version}).')
-
-    # Setup an S3 session.
-    session = boto3.Session()
-    credentials = session.get_credentials()
-    s3 = session.resource('s3', region_name='us-west-1')
-    bucket = s3.Bucket('pointone-build-artifacts')
-
-    logger.info(f'Downloading configuration support code for software version {version}.')
-    with tempfile.NamedTemporaryFile() as f, tempfile.TemporaryDirectory() as d:
-        # Try to download the zip file from S3.
-        try:
-            bucket.download_file(remote_path, f.name)
-        except botocore.exceptions.ClientError as e:
-            error = e.response['Error']
-            logger.error(f'Error downloading configuration support code for software version {version}: '
-                         f'{error["Message"]} ({error["Code"]})')
-            raise e
-
-        # Extract the zip into the /tmp directory.
-        with zipfile.ZipFile(f.name, 'r') as zip:
-            zip.extractall(d)
-
-        # Import the UserConfig class.
-        parent_dir = os.path.dirname(d)
-        module_name = os.path.basename(d)
-        sys.path.insert(0, parent_dir)
-        module = importlib.import_module(f'{module_name}.user_config_loader')
-        globals()['UserConfig'] = module.UserConfig
 
 
 def main():
@@ -95,7 +53,7 @@ state, and calibration state data found in the log:
 One or more storage components to be extracted. By default, all available components will be extracted.
 
 May be specified multiple times, or options may be specified as a comma-separated list.
-             
+
 Options include:
 - calibration - Extract device calibration parameters
 - filter_state - Extract the navigation engine state data
@@ -127,6 +85,7 @@ May be specified multiple times, or options may be specified as a comma-separate
              "- The path to a FusionEngine log directory\n"
              "- A pattern matching a FusionEngine log directory under the specified base directory "
              "(see find_fusion_engine_log() and --log-base-dir)")
+    add_config_loader_args(parser)
 
     options = parser.parse_args()
 
@@ -148,9 +107,13 @@ May be specified multiple times, or options may be specified as a comma-separate
         options.format = ('binary', 'json')
 
     # Locate the input file and set the output directory.
-    input_path, output_dir, log_id = locate_log(input_path=options.log, log_base_dir=options.log_base_dir,
-                                                return_output_dir=True, return_log_id=True,
-                                                load_original=True)
+    # When using internal FE repo, add `load_original=True`.
+    try:
+        input_path, output_dir, log_id = locate_log(input_path=options.log, log_base_dir=options.log_base_dir,
+                                                    return_output_dir=True, return_log_id=True, load_original=True)
+    except TypeError:
+        input_path, output_dir, log_id = locate_log(input_path=options.log, log_base_dir=options.log_base_dir,
+                                                    return_output_dir=True, return_log_id=True)
     if input_path is None:
         # locate_log() will log an error.
         sys.exit(1)
@@ -168,12 +131,10 @@ May be specified multiple times, or options may be specified as a comma-separate
     reader = MixedLogReader(input_path, message_types=(VersionInfoMessage,), return_header=False, return_bytes=True)
     try:
         version_info, _ = reader.read_next()
-        import_config_loader(version_info.engine_version_str)
+        UserConfig = get_config_loader_class(options, version_info.engine_version_str)
     except StopIteration:
         logger.error('Unable to determine software version.')
         sys.exit(2)
-    except botocore.exceptions.ClientError:
-        sys.exit(3)
 
     # Now extract data for each requested component.
     if not os.path.exists(options.output_dir):
