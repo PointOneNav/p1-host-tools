@@ -129,7 +129,7 @@ venv.bak/
 /site
 
 # mypy
-.mypy_cache/
+.p1_type_cache/
 .dmypy.json
 dmypy.json
 

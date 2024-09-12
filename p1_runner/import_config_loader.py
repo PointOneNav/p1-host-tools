@@ -41,9 +41,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from typing import Type, TYPE_CHECKING
 import zipfile
 from pathlib import Path
+from typing import TYPE_CHECKING, Type
 
 import boto3
 import botocore.exceptions
@@ -70,17 +70,18 @@ For VSCode add the settings:
 
 '''
   "python.analysis.extraPaths": [
-    "${workspaceFolder}/.mypy_cache/"
+    "${workspaceFolder}/.p1_type_cache/"
   ]
 '''
 """
-_USER_CONFIG_TYPE_HINT_VERSION='v2.1.0'
-_USER_CONFIG_TYPE_HINT_DIR= repo_root / '.mypy_cache'
+_USER_CONFIG_TYPE_HINT_VERSION = 'v2.1.0'
+_USER_CONFIG_TYPE_HINT_DIR = repo_root / '.p1_type_cache'
 if TYPE_CHECKING:
-  from user_config_loader.user_config_loader import UserConfig as UserConfigType
+    from user_config_loader.user_config_loader import \
+        UserConfig as UserConfigType
 else:
-  class UserConfigType:
-    pass
+    class UserConfigType:
+        pass
 
 
 _BUILD_TYPE_ARGS = {
@@ -90,6 +91,7 @@ _BUILD_TYPE_ARGS = {
 
 
 _BUILD_TYPES = [v for v in _BUILD_TYPE_ARGS.keys()]
+
 
 class _ValidateLoaderSource(Action):
     def __call__(self, parser, namespace, values, option_string=None):
@@ -113,7 +115,7 @@ class _ValidateLoaderSource(Action):
 
 def get_class_from_path(load_path: Path, tmp_dir: Path) -> Type[UserConfigType]:
     MODULE_NAME = 'user_config_loader'
-    if not os.path.isdir(load_path):
+    if not load_path.is_dir():
         new_path = tmp_dir / MODULE_NAME
         logger.debug(f'Unzipping {load_path} to {new_path}.')
         os.makedirs(new_path, exist_ok=True)
@@ -124,8 +126,6 @@ def get_class_from_path(load_path: Path, tmp_dir: Path) -> Type[UserConfigType]:
         load_path = new_path
 
     # Import the UserConfig class.
-    if not load_path.is_dir():
-        load_path = load_path.parent
     logger.debug(f'Loading user_config_loader from {load_path}.')
     parent_dir = os.path.dirname(load_path)
     module_name = os.path.basename(load_path)
@@ -156,12 +156,16 @@ def add_config_loader_args(parser: ArgumentParser):
         default="infer",
         action=_ValidateLoaderSource,
         help=f"""\
-Where to load the definitions for the user config data. This data is device and version specific. This value can be:
-  * infer - Select the library from the version information from the device. The inferred library will be downloaded.
+Where to load the definitions for the user config data. This data is device and
+version specific. This value can be:
+  * infer - Select the library from the version information from the device. The
+            inferred library will be downloaded.
   * none - Don't use user config loader. Throw exception if attempted.
-  * build:$BUILD_TYPE - Use user config loader built from local nautilus repo. Supported build types {_BUILD_TYPES}.
-  * load:$PATH - Use the loader (directory or zip) at this path.
-  * download:$VERSION_STR - Explicitly specify the version string for the release to download.
+  * build:<BUILD_TYPE> - Use user config loader built from local nautilus repo.
+                         Supported build types: {_BUILD_TYPES}.
+  * load:<PATH> - Use the loader (directory or zip) at this path.
+  * download:<VERSION_STR> - Explicitly specify the version string for the
+                             release to download.
 """,
     )
 
@@ -206,17 +210,16 @@ def download_config_loader_class(
         s3 = session.resource('s3', region_name='us-west-1')
         bucket = s3.Bucket(BUCKET_NAME)
         os.makedirs(local_path.parent, exist_ok=True)
-        with tempfile.NamedTemporaryFile() as f, tempfile.TemporaryDirectory() as d:
-            # Try to download the zip file from S3.
-            try:
-                bucket.download_file(remote_path, local_path)
-            except botocore.exceptions.ClientError as e:
-                error = e.response['Error']
-                logger.error(
-                    f'Error downloading configuration support code for software version {version}: '
-                    f'{error["Message"]} ({error["Code"]})'
-                )
-                raise
+        # Try to download the zip file from S3.
+        try:
+            bucket.download_file(remote_path, local_path)
+        except botocore.exceptions.ClientError as e:
+            error = e.response['Error']
+            logger.error(
+                f'Error downloading configuration support code for software version {version}: '
+                f'{error["Message"]} ({error["Code"]})'
+            )
+            raise
     else:
         logger.info(f'Using cached {local_path}')
 
@@ -235,7 +238,8 @@ def build_local_config_loader(build_type: str, repo_path: str) -> Path:
         BAZEL_GET_BIN_DIR_CMD, cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
     )
     if result.returncode != 0:
-        raise RuntimeError(f'Bazel info failed. Is "{repo_path}" a valid nautilus repo?\n{result.args}:\n{result.stderr}')
+        raise RuntimeError(
+            f'Bazel info failed. Is "{repo_path}" a valid nautilus repo?\n{result.args}:\n{result.stderr}')
 
     bazel_bin_path = Path(result.stdout.strip())
 
