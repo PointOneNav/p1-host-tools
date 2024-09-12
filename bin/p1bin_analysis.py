@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 
-from p1_runner.p1bin_type import find_matching_p1bin_types
-from p1_runner.p1bin_reader import P1BinReader, P1BinType
-from fusion_engine_client.utils.log import DEFAULT_LOG_BASE_DIR, find_log_file
-from fusion_engine_client.utils.argument_parser import ArgumentParser
 import os
 import sys
 
+from fusion_engine_client.utils.argument_parser import ArgumentParser
+from fusion_engine_client.utils.log import DEFAULT_LOG_BASE_DIR, find_log_file
+
 from p1_runner import trace as logging
+from p1_runner.p1bin_reader import P1BinReader, P1BinType
+from p1_runner.p1bin_type import find_matching_p1bin_types
 
 _logger = logging.getLogger('point_one.p1bin_analysis')
 

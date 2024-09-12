@@ -1,9 +1,9 @@
-from enum import IntEnum
 import socket
 import threading
+from enum import IntEnum
 
-from fusion_engine_client.parsers import FusionEngineDecoder
 from fusion_engine_client.messages import *
+from fusion_engine_client.parsers import FusionEngineDecoder
 
 from . import trace as logging
 

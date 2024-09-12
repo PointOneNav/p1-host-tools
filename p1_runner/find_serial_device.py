@@ -1,11 +1,10 @@
-from typing import List, Optional, Tuple
-
-from enum import Enum
 import logging
 import os
 import pathlib
 import re
 import sys
+from enum import Enum
+from typing import List, Optional, Tuple
 
 import serial
 from serial.tools.list_ports import comports
@@ -171,7 +170,7 @@ def find_serial_device(port_name: str = 'auto', port_type: Optional[PortType] = 
                             pass
                         else:
                             message = "Serial device %s matches CP210x type %s, not requested type %s." % \
-                                    (port.device, str(actual_type).title(), str(port_type).title())
+                                (port.device, str(actual_type).title(), str(port_type).title())
                             if on_wrong_type == 'raise':
                                 raise ValueError(message)
                             elif on_wrong_type == 'warn':

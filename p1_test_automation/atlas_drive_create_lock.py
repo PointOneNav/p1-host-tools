@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
-from datetime import datetime
 import json
 import os
 import sys
+from datetime import datetime
 
 # isort: split
 
@@ -15,10 +15,12 @@ sys.path.append(repo_root)
 from p1_runner import trace as logging
 from p1_runner.argument_parser import ArgumentParser
 from p1_test_automation.atlas_device_ctrl import get_log_started_at
-from p1_test_automation.atlas_drive_constants import create_dirs, LOCK_FILE
-from p1_test_automation.devices_config import load_config_set, load_json_with_comments
+from p1_test_automation.atlas_drive_constants import LOCK_FILE, create_dirs
+from p1_test_automation.devices_config import (load_config_set,
+                                               load_json_with_comments)
 
 logger = logging.getLogger('point_one.test_automation.record-log-uuids')
+
 
 def main():
     '''!
@@ -73,6 +75,7 @@ def main():
 
     with open(LOCK_FILE, 'w') as fd:
         json.dump(metadata, fd, indent=2)
+
 
 if __name__ == "__main__":
     main()

@@ -6,9 +6,8 @@ from fusion_engine_client.parsers import (FusionEngineDecoder,
                                           FusionEngineEncoder)
 
 import p1_runner.trace as logging
+from p1_runner.data_source import RESPONSE_TIMEOUT, DataSource
 from p1_runner.nmea_framer import NMEAFramer
-
-from p1_runner.data_source import DataSource, RESPONSE_TIMEOUT
 
 logger = logging.getLogger('point_one.device_interface')
 
@@ -18,12 +17,14 @@ REBOOT_MAX_TIME = 5
 
 MAX_FE_MSG_SIZE = 16 * 1024
 
+
 class DeviceInterface:
     '''!
     @brief Class to simplify command and configuration communication with a device over serial.
 
     In order to use this class to receive data from the device, @ref start_rx_thread() must be called before anything else.
     '''
+
     def __init__(self, data_source: DataSource):
         '''!
         @param serial_out An open serial port class to use for sending data.

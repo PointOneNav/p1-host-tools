@@ -9,6 +9,5 @@ sys.path.append(repo_root)
 
 from bin.raw_analysis import extract_format
 
-
 if __name__ == "__main__":
     extract_format('rtcm')

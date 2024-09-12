@@ -14,13 +14,11 @@ sys.path.append(repo_root)
 # Put imports that rely on this in their own indent block to avoid linter reordering.
 # isort: split
 from p1_runner import trace as logging
-from p1_test_automation.atlas_drive_constants import (
-    DRIVE_DIR,
-    DRIVE_TEST_TMP_DIR,
-    LOCK_FILE,
-    METADATA_FILENAME,
-    TCP_DUMP_FILENAME,
-)
+from p1_test_automation.atlas_drive_constants import (DRIVE_DIR,
+                                                      DRIVE_TEST_TMP_DIR,
+                                                      LOCK_FILE,
+                                                      METADATA_FILENAME,
+                                                      TCP_DUMP_FILENAME)
 from p1_test_automation.devices_config import load_config_set_dict
 
 logger = logging.getLogger('point_one.test_automation.atlas_drive_package_logs')

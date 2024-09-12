@@ -13,7 +13,6 @@ sys.path.append(repo_root)
 from p1_runner import trace as logging
 from p1_runner.argument_parser import ArgumentParser, ExtendedBooleanAction
 
-
 logger = logging.getLogger('point_one.tcp_to_websocket_broadcaster')
 CLIENTS = set()
 

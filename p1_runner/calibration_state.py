@@ -1,8 +1,7 @@
 import json
 
-from construct import Struct, Array, Padding, Float32l, Int8ul
 import numpy as np
-
+from construct import Array, Float32l, Int8ul, Padding, Struct
 from fusion_engine_client.messages import DataVersion, PackedDataToBuffer
 from fusion_engine_client.utils.construct_utils import AutoEnum
 from fusion_engine_client.utils.enum_utils import IntEnum

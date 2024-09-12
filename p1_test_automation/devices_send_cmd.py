@@ -5,7 +5,7 @@ import os
 import sys
 import time
 from argparse import Namespace
-from typing import Optional, List
+from typing import List, Optional
 
 from balena import Balena
 
@@ -14,23 +14,22 @@ repo_root = os.path.normpath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(repo_root)
 # Put imports that rely on this in their own indent block to avoid linter reordering.
 # isort: split
-from bin.config_tool import request_shutdown, request_startup, request_reset
+from bin.config_tool import request_reset, request_shutdown, request_startup
 from p1_runner import trace as logging
-from p1_runner.argument_parser import ArgumentParser, ExtendedBooleanAction, TriStateBooleanAction
+from p1_runner.argument_parser import (ArgumentParser, ExtendedBooleanAction,
+                                       TriStateBooleanAction)
 from p1_runner.device_interface import DeviceInterface
 from p1_test_automation.atlas_device_ctrl import (
-    CrashLogAction,
-    LoggingCmd,
-    enable_rolling_logs,
-    restart_application,
-    send_logging_cmd_to_legacy_atlas,
-    set_crash_log_action,
-)
-from p1_test_automation.devices_config import TruthType, DeviceConfig, load_config_set, open_data_source
+    CrashLogAction, LoggingCmd, enable_rolling_logs, restart_application,
+    send_logging_cmd_to_legacy_atlas, set_crash_log_action)
+from p1_test_automation.devices_config import (DeviceConfig, TruthType,
+                                               load_config_set,
+                                               open_data_source)
 
 logger = logging.getLogger('point_one.test_automation.devices_send_cmd')
 
 MAX_THREADS = 32
+
 
 def get_interface(device_config: DeviceConfig) -> Optional[DeviceInterface]:
     # Open data source.
@@ -323,7 +322,6 @@ NONE - Leave logs on device until this setting is changed to FULL_LOG or device 
         except Exception as exc:
             logger.error(f'Sending command to {device_config.name} generated an exception: {exc}')
             all_successes = False
-
 
     if all_successes:
         exit(0)

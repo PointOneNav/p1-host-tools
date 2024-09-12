@@ -1,5 +1,5 @@
 import re
-from typing import NamedTuple, List, Set, Union
+from typing import List, NamedTuple, Set, Union
 
 from fusion_engine_client.utils.enum_utils import IntEnum
 

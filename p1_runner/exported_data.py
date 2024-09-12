@@ -1,4 +1,3 @@
-from enum import Enum, auto
 import json
 import logging
 import os
@@ -6,10 +5,14 @@ import re
 import subprocess
 import sys
 from datetime import datetime
+from enum import Enum, auto
 from typing import IO, List, NamedTuple, Optional, Tuple
 from zipfile import ZipFile
 
-from fusion_engine_client.messages import DataType, DataVersion, ImportDataMessage, PlatformStorageDataMessage, Response, VersionInfoMessage, DeviceType
+from fusion_engine_client.messages import (DataType, DataVersion, DeviceType,
+                                           ImportDataMessage,
+                                           PlatformStorageDataMessage,
+                                           Response, VersionInfoMessage)
 
 # If this running in the development repo, try updating the UserConfig
 # definitions. This will generate separate quectel_user_config_loader.py and
@@ -30,8 +33,10 @@ try:
     repo_root = os.path.normpath(os.path.join(os.path.dirname(__file__), '..'))
     sys.path.append(repo_root)
 
-    from user_config_loader.quectel_user_config_loader import UserConfig as QuectelUserConfig
-    from user_config_loader.atlas_user_config_loader import UserConfig as AtlasUserConfig
+    from user_config_loader.atlas_user_config_loader import \
+        UserConfig as AtlasUserConfig
+    from user_config_loader.quectel_user_config_loader import \
+        UserConfig as QuectelUserConfig
 
     _CONFIG_CLASSES = {
         ConfigType.QUECTEL: QuectelUserConfig,
@@ -231,7 +236,7 @@ def load_saved_data(save_file: str, types: List[DataType]) -> List[Tuple[ImportD
             export_info = None
             if file_data_type == DataType.USER_CONFIG:
                 export_info = _find_match(
-                    file_info,  DataType.USER_CONFIG, 'json')
+                    file_info, DataType.USER_CONFIG, 'json')
                 if export_info is not None:
                     if not __has_user_config_loader:
                         logger.warning(
@@ -248,7 +253,7 @@ def load_saved_data(save_file: str, types: List[DataType]) -> List[Tuple[ImportD
 
             if data is None:
                 export_info = _find_match(
-                    file_info,  file_data_type, 'bin')
+                    file_info, file_data_type, 'bin')
                 if export_info is not None:
                     if export_info.validity == Response.NO_DATA_STORED:
                         data = bytes()

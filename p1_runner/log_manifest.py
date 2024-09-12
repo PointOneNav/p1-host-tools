@@ -1,10 +1,10 @@
 import copy
-from datetime import datetime, timezone
 import json
 import os
+from datetime import datetime, timezone
 from typing import Any, Iterable, Tuple
 
-from gpstime import gpstime, LEAPDATA
+from gpstime import LEAPDATA, gpstime
 
 from .device_type import DeviceType
 

@@ -3,8 +3,8 @@ import errno
 import os
 import socket
 import threading
-from threading import Thread, Event
 import traceback
+from threading import Event, Thread
 
 from . import trace as logging
 from .eos_message import WebsocketHeader

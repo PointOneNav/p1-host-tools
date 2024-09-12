@@ -3,9 +3,9 @@ import os
 import signal
 import sys
 import threading
-from urllib3.util import parse_url
 
 from fusion_engine_client.utils.log import DEFAULT_LOG_BASE_DIR
+from urllib3.util import parse_url
 
 from . import trace as logging
 from .argument_parser import ArgumentParser, ExtendedBooleanAction
@@ -491,6 +491,7 @@ Forward NMEA output from the receiver to an application on TCP port 1234:
 
     # Wait for SIGINT (Ctrl-C) or SIGTERM and then shut down.
     shutdown = threading.Event()
+
     def signal_handler(signum, frame):
         logger.debug('Received signal %s (%d).' % (signal.Signals(signum).name, signum))
         shutdown.set()

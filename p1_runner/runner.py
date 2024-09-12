@@ -1,19 +1,20 @@
-from datetime import datetime, timezone
-from enum import IntEnum
 import math
 import os
 import threading
 import traceback
+from datetime import datetime, timezone
+from enum import IntEnum
 
-from fusion_engine_client.parsers import FusionEngineEncoder, FusionEngineDecoder
+import serial
 from fusion_engine_client.messages import *
+from fusion_engine_client.parsers import (FusionEngineDecoder,
+                                          FusionEngineEncoder)
 from fusion_engine_client.utils.log import DEFAULT_LOG_BASE_DIR
 from gpstime import gpstime
 from pynmea2 import NMEASentence
-import serial
 
 from . import trace as logging
-from .find_serial_device import find_serial_device, PortType
+from .find_serial_device import PortType, find_serial_device
 from .log_manager import LogManager
 from .log_manifest import DeviceType
 from .nmea_framer import NMEAFramer
@@ -459,7 +460,7 @@ class P1Runner(threading.Thread):
                 if self.nmea_positions_received > 10 and self.fe_positions_received == 0:
                     now = datetime.now(tz=timezone.utc)
                     if (self.last_missing_fe_warning_time is None or
-                        (now - self.last_missing_fe_warning_time).total_seconds() >= 30.0):
+                            (now - self.last_missing_fe_warning_time).total_seconds() >= 30.0):
                         self.logger.warning("""
 ////////////////////////////////////////////////////////////////////////////////
 FusionEngine data not detected on %s.
@@ -572,13 +573,13 @@ Are you using the correct UART/COM port (--device-port)?
             return
 
         if ((self.ntrip_client is None or not self.ntrip_client.is_connected()) and
-            (self.ntrip_aux_client is None or not self.ntrip_aux_client.is_connected())):
+                (self.ntrip_aux_client is None or not self.ntrip_aux_client.is_connected())):
             return
 
         # Forward the position to the NTRIP server every 60 seconds.
         now = datetime.now(tz=timezone.utc)
         if (self.last_ntrip_position_update is None or
-            (now - self.last_ntrip_position_update).total_seconds() >= 60.0):
+                (now - self.last_ntrip_position_update).total_seconds() >= 60.0):
             if self.ntrip_client is not None:
                 self.ntrip_client.send_position(lla_deg)
             if self.ntrip_aux_client is not None:
@@ -601,7 +602,7 @@ Are you using the correct UART/COM port (--device-port)?
         self.logger.info(
             'Calibration: stage=%s, gyro=%.1f%%, accel=%.1f%%, mounting_angles=%.1f%%' %
             (str(status.calibration_stage), status.gyro_bias_percent_complete, status.accel_bias_percent_complete,
-            status.mounting_angle_percent_complete))
+             status.mounting_angle_percent_complete))
         self.logger.info(
             '           : ypr=(%.1f, %.1f, %.1f) deg, ypr_std=(%.1f, %.1f, %.1f) deg, dist=%.1f km' %
             (*status.ypr_deg, *status.ypr_std_dev_deg, status.travel_distance_m * 1e-3))

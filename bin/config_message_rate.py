@@ -4,14 +4,13 @@
 # This file is meant to be used by `config_tool.py`.
 ################################################################################
 
-from typing import Dict, List, Union
-
 import fnmatch
+from typing import Dict, List, Union
 
 from fusion_engine_client.messages import *
 
 from p1_runner import trace as logging
-from p1_runner.device_interface import DeviceInterface, RESPONSE_TIMEOUT
+from p1_runner.device_interface import RESPONSE_TIMEOUT, DeviceInterface
 
 logger = logging.getLogger('point_one.config_tool')
 
