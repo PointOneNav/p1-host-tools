@@ -3,12 +3,18 @@ import json
 import logging
 import re
 import socket
+import sys
 from enum import Enum, auto
+from pathlib import Path
 from typing import Any, Dict, List, NamedTuple, Optional
 
 import serial
+from pydantic import BaseModel
 
-# isort: split
+# Add the host tool root directory and device_init to the python path.
+repo_root = Path(__file__).parents[1].resolve()
+sys.path.append(str(repo_root))
+
 from p1_runner.data_source import (DataSource, SerialDataSource,
                                    SocketDataSource)
 from p1_runner.find_serial_device import PortType, find_serial_device
@@ -19,7 +25,7 @@ logger = logging.getLogger('point_one.test_automation.device_config')
 SERIAL_TIMEOUT = 5
 
 
-class SharedConfig(NamedTuple):
+class Settings(BaseModel):
     # The UserConfig settings that have been changed from their defaults.
     modified_settings: Dict[str, Any] = {}
     # A regex to match when checking the device navigation engine version.
@@ -27,28 +33,25 @@ class SharedConfig(NamedTuple):
     # A regex to match when checking the firmware version.
     expected_fw_version: Optional[str] = None
     # Whether to check if their is a completed calibration on the device.
-    expect_calibration_done: bool = False
+    expect_calibration_done: Optional[bool] = None
+    # Raise error if unsaved changes detected.
+    expect_no_unsaved_config: Optional[bool] = None
+    # Device configuration should match this p1nvm file.
+    expected_config_save: Optional[str] = None
     # For Atlas, are rolling logs enabled in device controller.
     rolling_logs_enabled: Optional[bool] = None
-    # Whether to expect all devices to have the same SW versions.
-    expect_same_versions_on_devices: bool = False
 
 
-class BalenaConfig(NamedTuple):
+class BalenaConfig(BaseModel):
     # The Balena UUID for the device.
     uuid: str
-
     # The uuid for the release the device should be pinned to.
     pinned_release: Optional[str] = None
 
 
-class DeviceConfig(NamedTuple):
+class DeviceConfig(BaseModel):
     # Identifier for device.
     name: str
-
-    # The UserConfig settings that have been changed from their defaults.
-    modified_settings: Dict[str, Any] = {}
-
     # The interface for the device. Must specify either a TCP address or a
     # serial port. You cannot specify both.
     tcp_address: Optional[str] = None
@@ -57,25 +60,17 @@ class DeviceConfig(NamedTuple):
     serial_port: Optional[str] = None
     baud_rate: int = 460800
 
-    # For Atlas, are rolling logs enabled in device controller.
-    rolling_logs_enabled: Optional[bool] = None
-
-    # A regex to match when checking the device navigation engine version.
-    expected_engine_version: Optional[str] = None
-    # A regex to match when checking the firmware version.
-    expected_fw_version: Optional[str] = None
-    # Whether to check if their is a completed calibration on the device.
-    expect_calibration_done: bool = False
-
     # Balena configuration.
     balena: Optional[BalenaConfig] = None
+
+    settings: Settings = Settings()
 
 
 class TruthType(Enum):
     DEVELOP_ATLAS = auto()
 
 
-class TruthConfig(NamedTuple):
+class TruthConfig(BaseModel):
     # Identifier for truth device.
     name: str
 
@@ -86,7 +81,7 @@ class TruthConfig(NamedTuple):
     tcp_address: str
 
 
-class ConfigSet(NamedTuple):
+class ConfigSet(BaseModel):
     '''!
     The test configuration for a set of devices.
 
@@ -106,11 +101,14 @@ class ConfigSet(NamedTuple):
     '''
 
     # Expected configuration shared across the set of devices.
-    shared: SharedConfig
+    shared: Settings = Settings()
     # The device specific expected configuration.
     devices: List[DeviceConfig]
     # Truth configuration.
-    truth: Optional[TruthConfig]
+    truth: Optional[TruthConfig] = None
+
+    # Whether to expect all devices to have the same SW versions.
+    expect_same_versions_on_devices: bool = False
 
 
 def _check_for_lists(config: Any) -> bool:
@@ -124,12 +122,16 @@ def _check_for_lists(config: Any) -> bool:
     return False
 
 
+def strip_json_comments(json_str: str) -> str:
+    return re.sub(r"^\s*//.*", "", json_str, flags=re.MULTILINE)
+
+
 def load_json_with_comments(config_file: str) -> Dict[str, Any]:
     with open(config_file) as fd:
         json_str = fd.read()
         # Strip out comments.
         # NOTE: This won't strip comments that are after a value.
-        return json.loads(re.sub(r"^\s*//.*", "", json_str, flags=re.MULTILINE))
+        return json.loads(strip_json_comments(json_str))
 
 
 def load_config_set(config_file: str) -> ConfigSet:
@@ -140,53 +142,21 @@ def load_config_set(config_file: str) -> ConfigSet:
     return load_config_set_dict(data)
 
 
+def update_none_fields(target: BaseModel, source: BaseModel):
+    for field in type(target).model_fields.keys():
+        if getattr(target, field) is None:
+            setattr(target, field, getattr(source, field))
+
+
+def copy_shared_settings_to_devices(config: ConfigSet):
+    for device in config.devices:
+        update_none_fields(device.settings, config.shared)
+
+
 def load_config_set_dict(data: Dict[str, Any]) -> ConfigSet:
-    # Make a copy to avoid modifying original data.
-    data = copy.deepcopy(data)
-    shared_data = data.get('shared', {})
-    shared = SharedConfig(**shared_data)
-
-    truth = TruthConfig(**data['truth_source']) if 'truth_source' in data else None
-    if 'truth_source' in data:
-        truth_data = data['truth_source']
-        # Convert type to enum.
-        truth_data['type'] = TruthType[truth_data['type']]
-        truth = TruthConfig(**truth_data)
-    else:
-        truth = None
-
-    has_array_settings = _check_for_lists(shared.modified_settings)
-
-    devices = []
-    for device in data['devices']:
-        if 'tcp_address' in device and 'serial_port' in device:
-            raise KeyError("Can't specify both tcp_address and serial_port")
-        elif 'tcp_address' not in device and 'serial_port' not in device:
-            raise KeyError("Must specify either tcp_address and serial_port")
-
-        if 'balena' in device:
-            device['balena'] = BalenaConfig(**device['balena'])
-
-        # Fall back to shared value if device value not set.
-        if shared.expect_calibration_done and 'expect_calibration_done' not in device:
-            device['expect_calibration_done'] = True
-
-        if shared.rolling_logs_enabled and 'rolling_logs_enabled' not in device:
-            device['rolling_logs_enabled'] = True
-
-        devices.append(DeviceConfig(**device))
-
-        has_array_settings |= _check_for_lists(devices[-1].modified_settings)
-
-    if has_array_settings:
-        logger.info(
-            '''\
-modified_settings contain arrays.
-These replace, rather then update the existing settings. This may lead to unexpected changes.
-Consider specifying an index instead. See device_config.ConfigSet for more details.'''
-        )
-
-    return ConfigSet(shared=shared, devices=devices, truth=truth)
+    config = ConfigSet.model_validate(data)
+    copy_shared_settings_to_devices(config)
+    return config
 
 
 def open_data_source(device_config: DeviceConfig) -> Optional[DataSource]:
@@ -200,12 +170,15 @@ def open_data_source(device_config: DeviceConfig) -> Optional[DataSource]:
         except Exception as e:
             logger.error("Problem connecting to TCP address '%s': %s." % (device_config.tcp_address, str(e)))
     elif device_config.serial_port is not None:
-        # Note: We intentionally use the Enhanced port here, whereas p1_runner uses Standard port. That way users can
-        # issue configuration requests while the device is active and p1_runner is operating. If the user explicitly
-        # sets --device-port, we'll use that port regardless of type.
-        device_port = find_serial_device(port_name=device_config.serial_port, port_type=PortType.ENHANCED)
-        logger.info('Connecting to %s using serial port %s.' % (device_config.name, device_port))
-        serial_port = serial.Serial(port=device_port, baudrate=device_config.baud_rate, timeout=SERIAL_TIMEOUT)
-        data_source = SerialDataSource(serial_port)
-        data_source.start_read_thread()
+        try:
+            # Note: We intentionally use the Enhanced port here, whereas p1_runner uses Standard port. That way users can
+            # issue configuration requests while the device is active and p1_runner is operating. If the user explicitly
+            # sets --device-port, we'll use that port regardless of type.
+            device_port = find_serial_device(port_name=device_config.serial_port, port_type=PortType.ENHANCED)
+            logger.info('Connecting to %s using serial port %s.' % (device_config.name, device_port))
+            serial_port = serial.Serial(port=device_port, baudrate=device_config.baud_rate, timeout=SERIAL_TIMEOUT)
+            data_source = SerialDataSource(serial_port)
+            data_source.start_read_thread()
+        except Exception as e:
+            logger.error("Problem connecting to serial port '%s': %s." % (device_config.serial_port, str(e)))
     return data_source

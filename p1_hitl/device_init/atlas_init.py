@@ -1,13 +1,16 @@
 import logging
 import time
+from argparse import Namespace
 from typing import Any, Dict, Optional
 
+from bin.config_tool import save_config
 from p1_hitl.defs import HiltEnvArgs
-from p1_hitl.device_init import DeviceInitBase
 from p1_runner.device_interface import DeviceInterface
 from p1_test_automation.atlas_device_ctrl import AtlasBalenaController
 from p1_test_automation.devices_config import (BalenaConfig, DeviceConfig,
                                                open_data_source)
+
+from .base_init import DeviceInitBase
 
 UPDATE_TIMEOUT_SEC = 60 * 10
 
@@ -23,9 +26,8 @@ class AtlasInit(DeviceInitBase):
         else:
             balena_uuid: str = args.JENKINS_ATLAS_BALENA_UUID  # type: ignore # Already did None check.
             return DeviceConfig(name=args.HITL_NAME,
-                                modified_settings={},
                                 tcp_address=args.JENKINS_ATLAS_LAN_IP,
-                                balena=BalenaConfig(balena_uuid),
+                                balena=BalenaConfig(uuid=balena_uuid),
                                 )
 
     @staticmethod
@@ -76,10 +78,18 @@ class AtlasInit(DeviceInitBase):
                 if target_release == balena_status.current_release:
                     logger.info(f'{balena_status.name} finished updating.')
                     break
+                time.sleep(10)
 
         data_source = open_data_source(config)
         if data_source is None:
             logger.error(f"Can't open Atlas TCP interface: {config.tcp_address}.")
             return None
 
-        return DeviceInterface(data_source)
+        device_interface = DeviceInterface(data_source)
+        logger.info(f'Clearing FE settings.')
+        args = Namespace(revert_to_saved=False, revert_to_defaults=True)
+        if not save_config(device_interface, args):
+            logger.error('Clearing FE settings failed.')
+            return None
+
+        return device_interface

@@ -11,6 +11,10 @@ sys.path.append(str(repo_root))
 from p1_hitl.defs import BuildType, HiltEnvArgs, TestType
 from p1_hitl.device_init import AtlasInit
 from p1_hitl.get_build_artifacts import get_build_info
+from p1_test_automation.devices_config_test import (ConfigSet, InterfaceTests,
+                                                    TestConfig)
+from p1_test_automation.devices_config_test import \
+    run_tests as run_config_tests
 
 logger = logging.getLogger('point_one.hitl.runner')
 
@@ -33,6 +37,9 @@ def main():
             level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', stream=sys.stdout
         )
         logger.setLevel(logging.DEBUG)
+        logging.getLogger('point_one.config_test').setLevel(logging.DEBUG)
+        if args.verbose > 1:
+            logging.getLogger().setLevel(logging.DEBUG)
 
     env_args = HiltEnvArgs.get_env_args()
     if env_args is None:
@@ -67,7 +74,26 @@ def main():
 
     # TODO: Add actual testing metric processing.
     if env_args.HITL_TEST_TYPE == TestType.CONFIGURATION:
-        pass
+        # The config test exercises starting the data source as part of its test.
+        device_interface.data_source.stop()
+        interface_name = {BuildType.ATLAS: 'tcp1'}.get(build_type)
+        test_set = ["fe_version", "interface_ids", "expected_storage", "msg_rates", "set_config",
+                    "import_config", "save_config"]
+        # TODO: Figure out what to do about Atlas reboot.
+        if build_type != BuildType.ATLAS:
+            test_set += ["reboot", "watchdog_fault", "expected_storage"]
+        test_config = TestConfig(
+            config=ConfigSet(
+                devices=[device_config]
+            ),
+            tests=[
+                InterfaceTests(
+                    name=device_config.name,
+                    interface_name=interface_name,
+                    tests=test_set
+                )
+            ])
+        run_config_tests(test_config)
     else:
         raise NotImplementedError('Need to handle other HITL_TEST_TYPE values.')
 
