@@ -1,17 +1,23 @@
 from argparse import Namespace
 from typing import Optional, Type
 
-from fusion_engine_client.messages import ConfigurationSource, CommandResponseMessage, DataType, DataVersion, ImportDataMessage, PlatformStorageDataMessage, Response
+from fusion_engine_client.messages import (CommandResponseMessage,
+                                           ConfigurationSource, DataType,
+                                           DataVersion, ImportDataMessage,
+                                           PlatformStorageDataMessage,
+                                           Response)
 
 from bin.config_tool import query_fe_version
 from p1_runner import trace as logging
 from p1_runner.device_interface import DeviceInterface
-from p1_runner.import_config_loader import UserConfigType, get_config_loader_class
+from p1_runner.import_config_loader import (UserConfigType,
+                                            get_config_loader_class)
 
 logger = logging.getLogger('point_one.config_loader_helper')
 
 
-def user_config_from_platform_storage(storage: PlatformStorageDataMessage, UserConfig: Type[UserConfigType]) -> Optional[UserConfigType]:
+def user_config_from_platform_storage(storage: PlatformStorageDataMessage,
+                                      UserConfig: Type[UserConfigType]) -> Optional[UserConfigType]:
     if storage.data_type == DataType.USER_CONFIG:
         if not UserConfig.get_version() == storage.data_version:
             logger.warning(
@@ -32,7 +38,8 @@ def user_config_from_platform_storage(storage: PlatformStorageDataMessage, UserC
     return None
 
 
-def get_config_loader_for_device(config_interface: DeviceInterface, args: Optional[Namespace] = None) -> Optional[Type[UserConfigType]]:
+def get_config_loader_for_device(config_interface: DeviceInterface,
+                                 args: Optional[Namespace] = None) -> Optional[Type[UserConfigType]]:
     resp = query_fe_version(config_interface, None)
     if resp is not None:
         try:
@@ -43,7 +50,8 @@ def get_config_loader_for_device(config_interface: DeviceInterface, args: Option
     return None
 
 
-def device_import_user_config(config_interface: DeviceInterface, user_config: UserConfigType, source = ConfigurationSource.ACTIVE) -> bool:
+def device_import_user_config(config_interface: DeviceInterface, user_config: UserConfigType,
+                              source=ConfigurationSource.ACTIVE) -> bool:
     import_cmd = ImportDataMessage(data_type=DataType.USER_CONFIG, data_version=DataVersion(
         *user_config.get_version()), data=user_config.serialize(user_config), source=source)
     config_interface.send_message(import_cmd)

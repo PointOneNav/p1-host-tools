@@ -21,18 +21,18 @@ repo_root = os.path.normpath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(repo_root)
 sys.path.append(os.path.dirname(__file__))
 
-from p1_runner import trace as logging
-from p1_runner.argument_parser import ArgumentParser, ExtendedBooleanAction, TriStateBooleanAction
-from p1_runner.data_source import SerialDataSource, SocketDataSource, WebSocketDataSource
-from p1_runner.device_interface import DeviceInterface, RESPONSE_TIMEOUT
-from p1_runner.exported_data import (add_to_exported_data,
-                                     create_exported_data,
-                                     is_export_valid,
-                                     load_saved_data)
-from p1_runner.find_serial_device import find_serial_device, PortType
-
 from config_message_rate import *
 
+from p1_runner import trace as logging
+from p1_runner.argument_parser import (ArgumentParser, ExtendedBooleanAction,
+                                       TriStateBooleanAction)
+from p1_runner.data_source import (SerialDataSource, SocketDataSource,
+                                   WebSocketDataSource)
+from p1_runner.device_interface import RESPONSE_TIMEOUT, DeviceInterface
+from p1_runner.exported_data import (add_to_exported_data,
+                                     create_exported_data, is_export_valid,
+                                     load_saved_data)
+from p1_runner.find_serial_device import PortType, find_serial_device
 
 logger = logging.getLogger('point_one.config_tool')
 
@@ -909,7 +909,6 @@ def request_export(config_interface: DeviceInterface, args):
         responses.append(data_msg)
 
         add_to_exported_data(export_file, data_msg)
-
 
     logger.info('Exports successful.')
     return responses

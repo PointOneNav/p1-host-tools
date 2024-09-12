@@ -26,9 +26,10 @@ sys.path.append(repo_root)
 from bin.config_tool import query_fe_version, request_export, request_import
 from p1_runner import trace as logging
 from p1_runner.argument_parser import ArgumentParser, ExtendedBooleanAction
+from p1_runner.config_loader_helpers import (get_config_loader_for_device,
+                                             user_config_from_platform_storage)
 from p1_runner.device_interface import DeviceInterface
 from p1_runner.import_config_loader import add_config_loader_args
-from p1_runner.config_loader_helpers import get_config_loader_for_device, user_config_from_platform_storage
 
 logger = logging.getLogger('point_one.test_automation.manage_configs')
 

@@ -18,10 +18,10 @@ from fusion_engine_client.messages import (ConfigResponseMessage, DataType,
                                            GnssLeverArmConfig, InterfaceID,
                                            MessageRate, MessageRateResponse,
                                            NmeaMessageType,
-                                           UserDeviceID,
                                            PlatformStorageDataMessage,
                                            PoseMessage, Response,
-                                           TransportType, VersionInfoMessage)
+                                           TransportType, UserDeviceID,
+                                           VersionInfoMessage)
 from fusion_engine_client.parsers.mixed_log_reader import MixedLogReader
 from serial import Serial
 
@@ -36,7 +36,8 @@ from bin.config_tool import (PARAM_DEFINITION, apply_config, query_fe_version,
                              save_config)
 from p1_runner import trace as logging
 from p1_runner.argument_parser import ArgumentParser, ExtendedBooleanAction
-from p1_runner.config_loader_helpers import device_import_user_config, get_config_loader_for_device
+from p1_runner.config_loader_helpers import (device_import_user_config,
+                                             get_config_loader_for_device)
 from p1_runner.data_source import SerialDataSource
 from p1_runner.device_interface import DeviceInterface
 from p1_runner.exported_data import load_saved_data

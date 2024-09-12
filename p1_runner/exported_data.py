@@ -5,7 +5,10 @@ from datetime import datetime
 from typing import List, NamedTuple, Optional, Tuple
 from zipfile import ZipFile
 
-from fusion_engine_client.messages import DataType, DataVersion, ImportDataMessage, PlatformStorageDataMessage, Response, VersionInfoMessage
+from fusion_engine_client.messages import (DataType, DataVersion,
+                                           ImportDataMessage,
+                                           PlatformStorageDataMessage,
+                                           Response, VersionInfoMessage)
 
 logger = logging.getLogger('point_one.exported_data')
 

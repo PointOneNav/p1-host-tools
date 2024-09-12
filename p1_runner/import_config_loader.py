@@ -34,9 +34,6 @@ The $BAZEL_ARGS determine which platform is being built.
 Once the library is found it is unzipped to a tmp directory if needed and the loader class is returned.
 '''
 
-from functools import lru_cache
-from pathlib import Path
-from typing import Dict, List, Optional, Type, TYPE_CHECKING, Union
 import importlib
 import os
 import re
@@ -45,8 +42,9 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Type
+from typing import TYPE_CHECKING, Dict, List, Optional, Type, Union
 
 import boto3
 import botocore.exceptions
@@ -82,7 +80,8 @@ For VSCode add the settings:
 _USER_CONFIG_TYPE_HINT_VERSION = 'v2.1.0'
 _USER_CONFIG_TYPE_HINT_DIR = repo_root / '.mypy_cache'
 if TYPE_CHECKING:
-    from user_config_loader.user_config_loader import UserConfig as UserConfigType
+    from user_config_loader.user_config_loader import \
+        UserConfig as UserConfigType
 else:
     class UserConfigType:
         pass
@@ -175,7 +174,8 @@ version specific. This value can be:
 
 
 @lru_cache
-def _get_config_loader_class(user_config_loader_source: str, user_config_loader_cache_dir: Path,  user_config_loader_nautilus_dir: Path, device_version: Optional[str]) -> Type[UserConfigType]:
+def _get_config_loader_class(user_config_loader_source: str, user_config_loader_cache_dir: Path,
+                             user_config_loader_nautilus_dir: Path, device_version: Optional[str]) -> Type[UserConfigType]:
     source_parts = user_config_loader_source.split(":")
     if source_parts[0] == 'none':
         raise ValueError('UserConfig loader disabled by --user-config-loader-source.')
@@ -200,12 +200,14 @@ def _get_config_loader_class(user_config_loader_source: str, user_config_loader_
     return get_class_from_path(module_path, user_config_loader_cache_dir)
 
 
-def get_config_loader_class(args: Optional[Namespace] = None, device_version: Optional[str] = None) -> Type[UserConfigType]:
+def get_config_loader_class(args: Optional[Namespace] = None,
+                            device_version: Optional[str] = None) -> Type[UserConfigType]:
     user_config_loader_cache_dir = args.user_config_loader_cache_dir if args is not None and 'user_config_loader_cache_dir' in args else default_cache_dir
     user_config_loader_source = args.user_config_loader_source if args is not None and 'user_config_loader_source' in args else 'infer'
     user_config_loader_nautilus_dir = args.user_config_loader_nautilus_dir if args is not None and 'user_config_loader_nautilus_dir' in args else default_nautilus_dir
 
-    return _get_config_loader_class(user_config_loader_source, user_config_loader_cache_dir,  user_config_loader_nautilus_dir, device_version)
+    return _get_config_loader_class(user_config_loader_source, user_config_loader_cache_dir,
+                                    user_config_loader_nautilus_dir, device_version)
 
 
 def download_config_loader_class(
