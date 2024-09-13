@@ -9,7 +9,6 @@
          "tests": ["version", "uart_ids", "expected_storage", "msg_rates", "set_config", "import_config", "save_config", "reboot", "watchdog_fault", "expected_storage"]
          } ],
     "expected_version": "lg69t-(ap|am)-v0\\..+",
-    "expected_config_save": "/logs/config_test.p1nvm",
     "expect_calibration_done": false,
     "allow_unsaved_config_changes": false
 }

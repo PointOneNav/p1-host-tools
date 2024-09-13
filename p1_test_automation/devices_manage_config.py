@@ -9,13 +9,13 @@ import tempfile
 from argparse import Namespace
 from enum import IntEnum
 from pprint import pprint
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 import construct
 from deepdiff import DeepDiff
 
 # isort: split
-from fusion_engine_client.messages import (DataType,
+from fusion_engine_client.messages import (ConfigurationSource, DataType,
                                            PlatformStorageDataMessage,
                                            Response, VersionInfoMessage)
 
@@ -23,13 +23,17 @@ from fusion_engine_client.messages import (DataType,
 repo_root = os.path.normpath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(repo_root)
 # isort: split
-from bin.config_tool import query_fe_version, request_export, request_import
+from bin.config_tool import query_fe_version, request_export, save_config
 from p1_runner import trace as logging
 from p1_runner.argument_parser import ArgumentParser, ExtendedBooleanAction
-from p1_runner.config_loader_helpers import (get_config_loader_for_device,
+from p1_runner.config_loader_helpers import (device_import_user_config,
+                                             get_config_loader_for_device,
                                              user_config_from_platform_storage)
 from p1_runner.device_interface import DeviceInterface
 from p1_runner.import_config_loader import add_config_loader_args
+from p1_test_automation.devices_config import (DeviceConfig, SharedConfig,
+                                               load_config_set,
+                                               open_data_source)
 
 logger = logging.getLogger('point_one.test_automation.manage_configs')
 
@@ -48,6 +52,16 @@ def get_calibration_stage(data: bytes) -> CalibrationStage:
         return CalibrationStage.UNKNOWN
     else:
         return CalibrationStage(struct.unpack('B', data[0:1])[0])
+
+
+def revert_unsaved(device_interface: DeviceInterface) -> bool:
+    logger.debug(f"Reverting unsaved config changes.")
+    args = Namespace(revert_to_saved=True, revert_to_defaults=False)
+    if not save_config(device_interface, args):
+        logger.error('Revert request failed.')
+        return False
+    else:
+        return True
 
 
 def check_version_str(
@@ -168,7 +182,20 @@ def check_storage(
 
         if saved_config.data != active_config.data:
             logger.error('Active configuration differs from saved configuration.')
-            return False
+            if options.update_prompt == 'fail':
+                return False
+            elif options.update_prompt == 'ask':
+                while True:
+                    resp = input('Revert unsaved config changes?\n"r"=revert, "s"=skip, "e"=exit: ').lower()
+                    if resp == 's':
+                        return True
+                    elif resp == 'e':
+                        exit(1)
+                    elif resp == 'r':
+                        break
+
+            if not revert_unsaved(device_interface):
+                return False
         else:
             logger.info("Config has no unsaved changes.")
 
@@ -205,7 +232,7 @@ def check_storage(
 
         expected_conf = copy.deepcopy(default_conf)
         unused = expected_conf.update(shared_config.modified_settings)
-        # update return None instead of unused in early versions of UserConfig.
+        # update returns None instead of unused in early versions of UserConfig.
         if unused is not None and len(unused) > 0:
             logger.error(f'Invalid shared_config modified_settings: {unused}')
             return False
@@ -240,20 +267,10 @@ def check_storage(
                         break
 
             logger.info('Updating configuration to expected values.')
-            json_tmp_path = os.path.join(tmp, 'dummy.json')
-            with open(json_tmp_path, 'w') as fd:
-                fd.write(expected_conf.to_json())
-
-            args = Namespace(
-                type='user_config',
-                preserve_unspecified=False,
-                file=json_tmp_path,
-                dry_run=False,
-                force=True,
-                dont_save_config=False,
-            )
-            if not request_import(device_interface, args):
+            if not device_import_user_config(device_interface, expected_conf, ConfigurationSource.SAVED):
                 logger.error('Update failed.')
+                return False
+            if not revert_unsaved(device_interface):
                 return False
         else:
             logger.info("Device using expected configuration.")
