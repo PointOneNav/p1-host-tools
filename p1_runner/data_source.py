@@ -106,9 +106,9 @@ class WebSocketDataSource(DataSource):
 
     def stop(self):
         self.flush_rx()
-        if self.socket_in != None:
+        if self.socket_in is not None:
             self.socket_in.close()
-        if self.socket_out != None and self.socket_out != self.socket_in:
+        if self.socket_out is not None and self.socket_out != self.socket_in:
             self.socket_out.close()
 
     def flush_rx(self):
@@ -160,9 +160,9 @@ class SocketDataSource(DataSource):
 
     def stop(self):
         self.flush_rx()
-        if self.socket_in != None:
+        if self.socket_in is not None:
             self.socket_in.close()
-        if self.socket_out != None and self.socket_out != self.socket_in:
+        if self.socket_out is not None and self.socket_out != self.socket_in:
             self.socket_out.close()
 
     def flush_rx(self):

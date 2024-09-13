@@ -42,15 +42,17 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Type
+from typing import TYPE_CHECKING, Dict, List, Optional, Type, Union
 
 import boto3
 import botocore.exceptions
 
 # Add the parent directory to the search path to enable p1_runner package imports when not installed in Python.
 repo_root = Path(__file__).parents[1].resolve()
-default_nautilus_dir = Path(__file__).parents[2].resolve()
+DEFAULT_NAUTILUS_DIR = Path(__file__).parents[2].resolve()
+DEFAULT_CACHE_DIR = Path(tempfile.gettempdir() + "/p1_user_config_python_loader")
 sys.path.append(str(repo_root))
 
 from p1_runner import trace as logging
@@ -59,6 +61,7 @@ from p1_runner.argument_parser import (Action, ArgumentError, ArgumentParser,
 
 logger = logging.getLogger('point_one.import_config_loader')
 
+PathOrStr = Union[Path, str]
 
 """
 THIS IS JUST FOR TYPE HINTING!!!!!
@@ -84,7 +87,7 @@ else:
         pass
 
 
-_BUILD_TYPE_ARGS = {
+_BUILD_TYPE_ARGS: Dict[str, List[str]] = {
     'atlas': [],
     'quectel': ['--config=quectel'],
 }
@@ -142,13 +145,13 @@ def add_config_loader_args(parser: ArgumentParser):
     group.add_argument(
         "--user-config-loader-cache-dir",
         type=Path,
-        default=tempfile.gettempdir() + "/p1_user_config_python_loader",
+        default=DEFAULT_CACHE_DIR,
         help="Path to cache downloaded artifacts to.",
     )
     group.add_argument(
         "--user-config-loader-nautilus-dir",
         type=Path,
-        default=default_nautilus_dir,
+        default=DEFAULT_NAUTILUS_DIR,
         help="Path to nautilus repo for Bazel build if needed.",
     )
     group.add_argument(
@@ -170,27 +173,45 @@ version specific. This value can be:
     )
 
 
-def get_config_loader_class(args: Namespace, device_version: str) -> Type[UserConfigType]:
-    source_parts = args.user_config_loader_source.split(":")
+@lru_cache
+def _get_config_loader_class(user_config_loader_source: str, user_config_loader_cache_dir: Path,
+                             user_config_loader_nautilus_dir: Path, device_version: Optional[str]) -> Type[UserConfigType]:
+    source_parts = user_config_loader_source.split(":")
     if source_parts[0] == 'none':
         raise ValueError('UserConfig loader disabled by --user-config-loader-source.')
 
     if source_parts[0] in ['infer', 'download']:
+        version_str = ''
         if source_parts[0] == 'download':
-            device_version = source_parts[1]
-        module_path = download_config_loader_class(device_version, args.user_config_loader_cache_dir)
+            version_str = source_parts[1]
+        elif device_version is None:
+            raise ValueError(f'device_version must be specified when inferring UserConfig version.')
+        else:
+            version_str = str(device_version)
+
+        module_path = download_config_loader_class(version_str, user_config_loader_cache_dir)
     elif source_parts[0] == 'build':
-        module_path = build_local_config_loader(source_parts[1], args.user_config_loader_nautilus_dir)
+        module_path = build_local_config_loader(source_parts[1], user_config_loader_nautilus_dir)
     elif source_parts[0] == 'load':
         module_path = Path(source_parts[1])
     else:
-        raise NotImplementedError(f'Unsupported loader source {args.user_config_loader_source}')
+        raise NotImplementedError(f'Unsupported loader source {user_config_loader_source}')
 
-    return get_class_from_path(module_path, args.user_config_loader_cache_dir)
+    return get_class_from_path(module_path, user_config_loader_cache_dir)
+
+
+def get_config_loader_class(args: Optional[Namespace] = None,
+                            device_version: Optional[str] = None) -> Type[UserConfigType]:
+    user_config_loader_cache_dir = args.user_config_loader_cache_dir if args is not None and 'user_config_loader_cache_dir' in args else DEFAULT_CACHE_DIR
+    user_config_loader_source = args.user_config_loader_source if args is not None and 'user_config_loader_source' in args else 'infer'
+    user_config_loader_nautilus_dir = args.user_config_loader_nautilus_dir if args is not None and 'user_config_loader_nautilus_dir' in args else DEFAULT_NAUTILUS_DIR
+
+    return _get_config_loader_class(user_config_loader_source, user_config_loader_cache_dir,
+                                    user_config_loader_nautilus_dir, device_version)
 
 
 def download_config_loader_class(
-    version: str, temp_dir: str = tempfile.gettempdir() + "/p1_user_config_python_loader"
+    version: str, temp_dir: PathOrStr = DEFAULT_CACHE_DIR
 ) -> Path:
     # Determine path to the auto-generated config loading code on S3.
     if re.match(r'^lg69t-(ap|am|ah)-.*', version):
@@ -226,7 +247,7 @@ def download_config_loader_class(
     return local_path
 
 
-def build_local_config_loader(build_type: str, repo_path: str) -> Path:
+def build_local_config_loader(build_type: str, repo_path: PathOrStr) -> Path:
     if build_type not in _BUILD_TYPES:
         raise ValueError(f'Unsupported build type {build_type}')
 
@@ -245,11 +266,8 @@ def build_local_config_loader(build_type: str, repo_path: str) -> Path:
 
     build_args = _BUILD_TYPE_ARGS[build_type]
 
-    bazel_build_cmd = (
-        ['bazel', 'build', '-c', 'opt']
-        + build_args
-        + ['//point_one/system_config/generator/system_config_gen/user_config_loader:zip_user_config_loader']
-    )
+    bazel_build_cmd = ['bazel', 'build', '-c', 'opt'] + build_args + \
+        ['//point_one/system_config/generator/system_config_gen/user_config_loader:zip_user_config_loader']
 
     result = subprocess.run(bazel_build_cmd, cwd=repo_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     if result.returncode != 0:
