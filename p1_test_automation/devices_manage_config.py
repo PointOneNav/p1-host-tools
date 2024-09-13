@@ -76,7 +76,8 @@ def check_version_str(version_str: str, expected_version_re: Optional[str]) -> b
         return True
 
 
-def check_version(device_interface: DeviceInterface, device_config: DeviceConfig, expect_same_versions_on_devices: bool) -> bool:
+def check_version(device_interface: DeviceInterface, device_config: DeviceConfig,
+                  expect_same_versions_on_devices: bool) -> bool:
     """!
     @brief Tests that the version request messages are working.
 
