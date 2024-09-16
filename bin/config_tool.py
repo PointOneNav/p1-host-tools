@@ -378,11 +378,38 @@ def _args_to_id(cls, args, config_interface):
         raise RuntimeError('User device ID must have length less than or equal to 32 characters.')
     return cls(args.device_id)
 
+def _args_to_address(cls, args, config_interface):
+    if len(args.remote_address) > 64:
+        raise RuntimeError('Address must have length less than or equal to 64 characters.')
+    return cls(args.remote_address)
+
+
 def _args_to_float(cls, args, config_interface):
     return cls(float(args.x))
 
 def _args_to_interface_config(cls, args, config_interface):
     return []
+
+
+_transport_direction_map = {
+    'server': TransportDirection.SERVER,
+    'client': TransportDirection.CLIENT,
+}
+
+
+def _str_to_transport_direction(key):
+    return _transport_direction_map.get(key, "")
+
+
+_socket_type_map = {
+    'stream': SocketType.STREAM,
+    'datagram': SocketType.DATAGRAM,
+    'sequence': SocketType.SEQPACKET,
+}
+
+
+def _str_to_socket_type(key):
+    return _socket_type_map.get(key, "")
 
 
 PARAM_DEFINITION = {
@@ -417,9 +444,15 @@ PARAM_DEFINITION = {
 
 INTERFACE_PARAM_DEFINITION = {
     'baud_rate': {'format': InterfaceBaudRateConfig, 'arg_parse': _args_to_int_gen('baud_rate')},
+    'port': {'format': InterfacePortConfig, 'arg_parse': _args_to_int_gen('port')},
+    'remote_address': {'format': InterfaceRemoteAddressConfig, 'arg_parse': _args_to_address},
+    'enabled': {'format': InterfaceEnabledConfig, 'arg_parse': _args_to_bool},
+    'direction': {'format': InterfaceDirectionConfig, 'arg_parse': _str_to_transport_direction},
+    'socket_type': {'format': InterfaceDirectionConfig, 'arg_parse': _str_to_socket_type},
     'diagnostics_enabled': {'format': InterfaceDiagnosticMessagesEnabled, 'arg_parse': _args_to_bool},
     'message_rate': {'format': list, 'arg_parse': message_rate_args_to_output_interface},
 }
+
 
 _cocom_type = {str(e).lower(): e for e in CoComType}
 
@@ -1616,6 +1649,32 @@ NMEA message types:
             baud_rate_parser = apply_interface_config_type_parsers.add_parser('baud_rate', help=help, description=help)
             baud_rate_parser.add_argument('baud_rate', type=float,
                                           help='The desired baud rate (in bits/second).')
+
+        # config_tool.py apply INTERFACE_NAME enabled
+        help = 'Configure if the interface is enabled.'
+        read_interface_config_type_parsers.add_parser('enabled', help=help, description=help)
+        baud_rate_parser = apply_interface_config_type_parsers.add_parser('enabled', help=help, description=help)
+        baud_rate_parser.add_argument('enabled', action=ExtendedBooleanAction,
+                                      help='Configure if the interface is enabled.')
+
+        if interface_id.type in (TransportType.UDP, TransportType.TCP, TransportType.CURRENT):
+            # config_tool.py apply INTERFACE_NAME port
+            help = 'Configure the network port.'
+            read_interface_config_type_parsers.add_parser(
+                'port', help=help, description=help)
+            baud_rate_parser = apply_interface_config_type_parsers.add_parser(
+                'port', help=help, description=help)
+            baud_rate_parser.add_argument('port', type=int,
+                                          help='The desired network port.')
+
+        if interface_id.type in (TransportType.UDP, TransportType.UNIX, TransportType.CURRENT):
+            # config_tool.py apply INTERFACE_NAME remote_address
+            help = 'Configure the remote hostname or IP address, or the socket file path for UNIX domain sockets.'
+            read_interface_config_type_parsers.add_parser('remote_address', help=help, description=help)
+            baud_rate_parser = apply_interface_config_type_parsers.add_parser('remote_address', help=help,
+                                                                              description=help)
+            baud_rate_parser.add_argument('remote_address', type=str,
+                                          help='The address to connect to.')
 
     # config_tool.py copy_message_config
     help = 'Copy the output message configuration from one interface to another.'
