@@ -8,7 +8,7 @@ from pathlib import Path
 repo_root = Path(__file__).parents[1].resolve()
 sys.path.append(str(repo_root))
 
-from p1_hitl.defs import BuildType, HiltEnvArgs, TestType
+from p1_hitl.defs import BuildType, HitlEnvArgs, TestType
 from p1_hitl.device_init import AtlasInit
 from p1_hitl.get_build_artifacts import get_build_info
 from p1_test_automation.devices_config_test import (ConfigSet, InterfaceTests,
@@ -41,7 +41,7 @@ def main():
         if args.verbose > 1:
             logging.getLogger().setLevel(logging.DEBUG)
 
-    env_args = HiltEnvArgs.get_env_args()
+    env_args = HitlEnvArgs.get_env_args()
     if env_args is None:
         exit(1)
 

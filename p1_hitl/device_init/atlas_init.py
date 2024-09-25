@@ -4,7 +4,7 @@ from argparse import Namespace
 from typing import Any, Dict, Optional
 
 from bin.config_tool import save_config
-from p1_hitl.defs import HiltEnvArgs
+from p1_hitl.defs import HitlEnvArgs
 from p1_runner.device_interface import DeviceInterface
 from p1_test_automation.atlas_device_ctrl import AtlasBalenaController
 from p1_test_automation.devices_config import (BalenaConfig, DeviceConfig,
@@ -20,7 +20,7 @@ logger = logging.getLogger('point_one.hitl.atlas_init')
 
 class AtlasInit(DeviceInitBase):
     @staticmethod
-    def get_device_config(args: HiltEnvArgs) -> Optional[DeviceConfig]:
+    def get_device_config(args: HitlEnvArgs) -> Optional[DeviceConfig]:
         if not args.check_fields(['JENKINS_ATLAS_LAN_IP', 'JENKINS_ATLAS_BALENA_UUID']):
             return None
         else:

@@ -38,7 +38,7 @@ class TestType(Enum):
         return cls[val.upper()]
 
 
-class HiltEnvArgs(NamedTuple):
+class HitlEnvArgs(NamedTuple):
     # Name for device being tested.
     HITL_NAME: str
     # Path to nautilus repo. Just used to check git info.
@@ -59,16 +59,16 @@ class HiltEnvArgs(NamedTuple):
         ret = True
         for field in required_fields:
             if not hasattr(self, field):
-                raise KeyError(f'HiltEnvArgs does not contain field "{field}".')
+                raise KeyError(f'HitlEnvArgs does not contain field "{field}".')
             elif getattr(self, field) is None:
                 logger.warning(f'Environment arguments missing required field "{field}".')
                 ret = False
         return ret
 
     @classmethod
-    def get_env_args(cls) -> Optional['HiltEnvArgs']:
+    def get_env_args(cls) -> Optional['HitlEnvArgs']:
         env_dict = {}
-        for arg in HiltEnvArgs._fields:
+        for arg in HitlEnvArgs._fields:
             if arg in os.environ:
                 try:
                     if arg == 'HITL_TEST_TYPE':
@@ -81,7 +81,7 @@ class HiltEnvArgs(NamedTuple):
                     logger.error(f'Invalid value "{os.environ[arg]}" for {arg}')
                     return None
         try:
-            return HiltEnvArgs(**env_dict)
+            return HitlEnvArgs(**env_dict)
         except Exception as e:
             logger.error(f'Failure loading expected environment variables: {e}')
             return None
