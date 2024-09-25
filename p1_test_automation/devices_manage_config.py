@@ -31,7 +31,7 @@ from p1_runner.config_loader_helpers import (device_import_user_config,
                                              user_config_from_platform_storage)
 from p1_runner.device_interface import DeviceInterface
 from p1_runner.import_config_loader import add_config_loader_args
-from p1_test_automation.devices_config import (DeviceConfig, SharedConfig,
+from p1_test_automation.devices_config import (DeviceConfig, Settings,
                                                load_config_set,
                                                open_data_source)
 
@@ -64,26 +64,20 @@ def revert_unsaved(device_interface: DeviceInterface) -> bool:
         return True
 
 
-def check_version_str(
-    version_str: str, shared_expected_version_re: Optional[str], device_expected_version_re: Optional[str]
-) -> bool:
+def check_version_str(version_str: str, expected_version_re: Optional[str]) -> bool:
     # Device version check takes priority over shared check.
-    if device_expected_version_re is not None:
-        expected_version_re = device_expected_version_re
-    elif shared_expected_version_re is not None:
-        expected_version_re = shared_expected_version_re
-    else:
+    if expected_version_re is None:
         return True
 
-    m = re.match(expected_version_re, version_str)
-    if m is None:
+    if re.match(expected_version_re, version_str):
         logger.error('Version response %s did not match expected version %s.', version_str, expected_version_re)
         return False
     else:
         return True
 
 
-def check_version(device_interface: DeviceInterface, device_config: DeviceConfig, shared_config: SharedConfig) -> bool:
+def check_version(device_interface: DeviceInterface, device_config: DeviceConfig,
+                  expect_same_versions_on_devices: bool) -> bool:
     """!
     @brief Tests that the version request messages are working.
 
@@ -100,16 +94,16 @@ def check_version(device_interface: DeviceInterface, device_config: DeviceConfig
         version_str = resp.engine_version_str
         logger.info(f'Engine version: "{version_str}"')
         if not check_version_str(
-            version_str, shared_config.expected_engine_version, device_config.expected_engine_version
+            version_str, device_config.settings.expected_engine_version
         ):
             return False
 
         version_str = resp.fw_version_str
         logger.info(f'Firmware version: "{version_str}"')
-        if not check_version_str(version_str, shared_config.expected_fw_version, device_config.expected_fw_version):
+        if not check_version_str(version_str, device_config.settings.expected_fw_version):
             return False
 
-        if shared_config.expect_same_versions_on_devices:
+        if expect_same_versions_on_devices:
             if len(common_version_check_data.engine_version_str) == 0:
                 common_version_check_data.engine_version_str = resp.engine_version_str
                 common_version_check_data.fw_version_str = resp.fw_version_str
@@ -129,7 +123,7 @@ def check_version(device_interface: DeviceInterface, device_config: DeviceConfig
 
 
 def check_storage(
-    device_interface: DeviceInterface, device_config: DeviceConfig, shared_config: SharedConfig, options: Namespace
+    device_interface: DeviceInterface, device_config: DeviceConfig, shared_config: Settings, options: Namespace
 ) -> bool:
     """!
     @brief Checks the calibration and UserConfig saved on the device matches the @ref TestConfig.
@@ -148,7 +142,7 @@ def check_storage(
             return False
 
         logger.debug("Reading active UserConfig on device.")
-        args = Namespace(type='user_config', format="p1nvm", export_file=tmp_path, export_source='active')
+        args = Namespace(type='user_config', export_file=tmp_path, export_source='active')
         active_storage: Optional[List[PlatformStorageDataMessage]] = request_export(device_interface, args)
         active_config = None
         if active_storage is None:
@@ -158,7 +152,7 @@ def check_storage(
             active_config = active_storage[0]
 
         logger.debug("Reading all saved storage on device.")
-        args = Namespace(type='all', format="p1nvm", export_file=tmp_path, export_source='saved')
+        args = Namespace(type='all', export_file=tmp_path, export_source='saved')
         saved_storage: Optional[List[PlatformStorageDataMessage]] = request_export(device_interface, args)
         saved_config = None
         saved_calibration_data = None
@@ -199,7 +193,7 @@ def check_storage(
         else:
             logger.info("Config has no unsaved changes.")
 
-        if device_config.expect_calibration_done:
+        if device_config.settings.expect_calibration_done:
             logger.debug("Checking if calibration is DONE.")
             if saved_calibration_data is not None:
                 stage = get_calibration_stage(saved_calibration_data)
@@ -216,7 +210,7 @@ def check_storage(
             logger.info('No calibration saves on device.')
 
         logger.debug('Load device defaults.')
-        args = Namespace(type='user_config', format="p1nvm", export_file=tmp_path, export_source='default')
+        args = Namespace(type='user_config', export_file=tmp_path, export_source='default')
         default_storage: Optional[List[PlatformStorageDataMessage]] = request_export(device_interface, args)
         default_config = None
         if default_storage is None:
@@ -236,7 +230,7 @@ def check_storage(
         if unused is not None and len(unused) > 0:
             logger.error(f'Invalid shared_config modified_settings: {unused}')
             return False
-        unused = expected_conf.update(device_config.modified_settings)
+        unused = expected_conf.update(device_config.settings.modified_settings)
         if unused is not None and len(unused) > 0:
             logger.error(f'Invalid device modified_settings: {unused}')
             return False
@@ -247,7 +241,7 @@ def check_storage(
             ignore_nan_inequality=True,
             ignore_numeric_type_changes=True,
             math_epsilon=0.00001,
-            ignore_type_in_groups=[(list, construct.lib.containers.ListContainer)],
+            ignore_type_in_groups=[(list, construct.lib.ListContainer)],
         )
 
         if len(conf_diff) > 0:
@@ -363,7 +357,7 @@ The action to take if the configuration doesn't match the expected values.
 
         if (
             device_interface is not None
-            and check_version(device_interface, device, config.shared)
+            and check_version(device_interface, device, config.expect_same_versions_on_devices)
             and check_storage(device_interface, device, config.shared, args)
         ):
             logger.info('######## Completed checking configuration for %s. ########' % (device.name))

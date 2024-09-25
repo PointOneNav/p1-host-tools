@@ -28,6 +28,7 @@ internal_only_requirements = [
     "deepdiff>6.7",
     "remi>=2022.7.27",
     "boto3>=1.34",
+    "pydantic>=2.9.1",
 ]
 
 all_requirements = requirements + dev_requirements + internal_only_requirements

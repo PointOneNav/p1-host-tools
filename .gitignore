@@ -129,9 +129,12 @@ venv.bak/
 /site
 
 # mypy
-.p1_type_cache/
+.mypy_cache/
 .dmypy.json
 dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Cached typing helper
+.p1_type_cache/

@@ -2,9 +2,11 @@
 
 import logging
 from enum import Enum, auto
-from typing import Any, Dict, Optional
+from typing import Any, Dict, NamedTuple, Optional, Union
 
 import requests
+from balena import Balena
+from balena.models.release import ReleaseType
 
 logger = logging.getLogger('point_one.test_automation.atlas_device_ctrl')
 
@@ -256,3 +258,55 @@ def restart_application(tcp_address, log_on_startup=False) -> bool:
         return False
 
     return True
+
+
+class BalenaRelease(NamedTuple):
+    id: int
+    commit: str
+
+
+class AtlasBalenaStatus(NamedTuple):
+    name: str
+    is_online: bool
+    current_release: Optional[BalenaRelease]
+    target_release: Optional[BalenaRelease]
+
+
+class AtlasBalenaController:
+    def __init__(self):
+        self.balena_interface = Balena()
+        token = self.balena_interface.auth.get_token()
+        if token is None:
+            logger.error("Can't load Balena token.")
+            exit(1)
+        self.balena_interface.auth.login_with_token(token)
+
+    def get_status(self, balena_uuid: str) -> AtlasBalenaStatus:
+        # See https://docs.balena.io/reference/sdk/python-sdk/#typedevice
+        balena_device = self.balena_interface.models.device.get(balena_uuid)
+        logger.debug(balena_device)
+
+        def get_release(field: str) -> Optional[BalenaRelease]:
+            if balena_device[field] is None:
+                return None
+            else:
+                return self.get_release(balena_device[field]['__id'])
+
+        return AtlasBalenaStatus(
+            name=balena_device['device_name'],
+            is_online=balena_device['is_online'],
+            current_release=get_release('is_running__release'),
+            target_release=get_release('should_be_running__release'),
+        )
+
+    def pin_release(self, balena_uuid: str, pinned_release: Union[str, int]) -> None:
+        self.balena_interface.models.device.pin_to_release(balena_uuid, pinned_release)
+
+    def get_release(self, release_val: Union[str, int]) -> Optional[BalenaRelease]:
+        try:
+            # See https://docs.balena.io/reference/sdk/python-sdk/#releasetype
+            release = self.balena_interface.models.release.get(release_val)
+        except:
+            logger.warning(f'Release {release_val} not found.')
+            return None
+        return BalenaRelease(release['id'], release['commit'])
