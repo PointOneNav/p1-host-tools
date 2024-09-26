@@ -24,11 +24,14 @@ dev_requirements = [
 ]
 
 internal_only_requirements = [
-    "balena-sdk>=14.2.0",
+    # NOTE: balena-sdk==15.0.0 introduced breaking changes migrating to API v7. Need
+    # to update ~/.balena/balena.cfg as well as fix "should_be_running__release"
+    "balena-sdk==14.5.0",
     "deepdiff>6.7",
     "remi>=2022.7.27",
     "boto3>=1.34",
     "pydantic>=2.9.1",
+    "jenkinsapi>=0.3.13",
 ]
 
 all_requirements = requirements + dev_requirements + internal_only_requirements

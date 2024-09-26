@@ -17,7 +17,7 @@ wheel>=0.37.1
 https://github.com/PointOneNav/ntripstreams/archive/d2c8b8e55ae64e440e58bccf290e4d14095aa6e4.zip#egg=ntripstreams
 #ntripstreams~=0.1.12
 
-# For drive test scripts only
+# For drive and HITL test scripts only
 # NOTE: balena-sdk==15.0.0 introduced breaking changes migrating to API v7. Need
 # to update ~/.balena/balena.cfg as well as fix "should_be_running__release"
 balena-sdk==14.5.0
@@ -25,6 +25,7 @@ deepdiff>=6.7
 remi>=2022.7.27
 boto3>=1.34
 pydantic>=2.9.1
+jenkinsapi>=0.3.13
 
 # For linting
 autopep8~=2.3.1
