@@ -4,6 +4,8 @@ import sys
 from argparse import ArgumentParser
 from pathlib import Path
 
+# isort: split
+
 # Add the host tool root directory and device_init to the python path.
 repo_root = Path(__file__).parents[1].resolve()
 sys.path.append(str(repo_root))
@@ -11,6 +13,8 @@ sys.path.append(str(repo_root))
 from p1_hitl.defs import BuildType, HitlEnvArgs, TestType
 from p1_hitl.device_init import AtlasInit
 from p1_hitl.get_build_artifacts import get_build_info
+from p1_hitl.jenkins_ctrl import generate_build
+from p1_hitl.version_helper import git_describe_dut_version
 from p1_test_automation.devices_config_test import (ConfigSet, InterfaceTests,
                                                     TestConfig)
 from p1_test_automation.devices_config_test import \
@@ -46,45 +50,68 @@ def main():
         exit(1)
 
     logger.info(env_args)
-    if env_args.HITL_DUT_VERSION:
-        build_type = BuildType.get_build_type_from_version(env_args.HITL_DUT_VERSION)
-        if build_type is None:
-            exit(1)
-        elif build_type != env_args.HITL_BUILD_TYPE:
+
+    ################# Get build to provision device under test #################
+    release_str_build_type = BuildType.get_build_type_from_version(env_args.HITL_DUT_VERSION)
+    git_commitish = None
+    if release_str_build_type is None:
+        logger.info("HITL_DUT_VERSION "{env_args.HITL_DUT_VERSION}" is not a known version string. Assuming it's a git commitish")
+        git_commitish = env_args.HITL_DUT_VERSION
+        release_str = git_describe_dut_version(env_args)
+        if release_str is None:
             logger.error(
-                f'BuildType {build_type} inferred from HITL_DUT_VERSION {env_args.HITL_DUT_VERSION} does not match expected BuildType {env_args.HITL_BUILD_TYPE}.')
+                f'HITL_DUT_VERSION "{env_args.HITL_DUT_VERSION}" is not a valid version string or git commitish. Cannot determine build to load.')
             exit(1)
-        elif build_type == BuildType.ATLAS:
-            device_init = AtlasInit()
+        logger.info(f"{release_str} is the release string for git commitish {git_commitish}")
+    else:
+        logger.info(f'HITL_DUT_VERSION "{env_args.HITL_DUT_VERSION}" is being interpreted as version string for {release_str_build_type.name}')
+        if release_str_build_type != env_args.HITL_BUILD_TYPE:
+            logger.error(
+                f'BuildType {release_str_build_type} inferred from HITL_DUT_VERSION {env_args.HITL_DUT_VERSION} does not match HITL_BUILD_TYPE {env_args.HITL_BUILD_TYPE.name}.')
+            exit(1)
         else:
-            raise NotImplementedError('Need to handle other build types.')
+            release_str = env_args.HITL_DUT_VERSION
 
-        device_config = device_init.get_device_config(env_args)
-        if device_config is None:
-            logger.error('Failure configuring device for HITL testing.')
-            exit(1)
-
-        build_info = get_build_info(env_args.HITL_DUT_VERSION, build_type)
-        if build_info:
-            logger.info(f'Build found: {build_info}')
-            device_interface = device_init.init_device(device_config, build_info)
-            if device_interface is None:
-                logger.error('Failure initializing device for HITL testing.')
+    build_info = get_build_info(release_str, env_args.HITL_BUILD_TYPE)
+    if build_info:
+        logger.info(f'Build found: {build_info}')
+    else:
+        if git_commitish is not None:
+            build_info = generate_build(git_commitish, env_args.HITL_BUILD_TYPE)
+            if build_info is None:
+                logger.error(
+                    f'Could not generate build artifacts for {env_args.HITL_BUILD_TYPE.name} and git commitish {git_commitish}.')
                 exit(1)
         else:
-            logger.info('Need to run Build.')
-    else:
-        raise NotImplementedError('Need to handle only knowing HITL_BUILD_COMMIT and HITL_BUILD_TYPE')
+            logger.error(
+                f'HITL_DUT_VERSION {release_str} not found in build artifacts. Generate build artifacts, or rerun HITL with corresponding git commit to kick off build.')
+            exit(1)
 
+    ################# Setup device under test #################
+    if env_args.HITL_BUILD_TYPE == BuildType.ATLAS:
+        device_init = AtlasInit()
+    else:
+        raise NotImplementedError('Need to handle other build types.')
+
+    device_config = device_init.get_device_config(env_args)
+    if device_config is None:
+        logger.error('Failure configuring device for HITL testing.')
+        exit(1)
+    device_interface = device_init.init_device(device_config, build_info)
+    if device_interface is None:
+        logger.error('Failure initializing device for HITL testing.')
+        exit(1)
+
+    ################# Run tests #################
     # TODO: Add actual testing metric processing.
     if env_args.HITL_TEST_TYPE == TestType.CONFIGURATION:
         # The config test exercises starting the data source as part of its test.
         device_interface.data_source.stop()
-        interface_name = {BuildType.ATLAS: 'tcp1'}.get(build_type)
+        interface_name = {BuildType.ATLAS: 'tcp1'}.get(env_args.HITL_BUILD_TYPE)
         test_set = ["fe_version", "interface_ids", "expected_storage", "msg_rates", "set_config",
                     "import_config", "save_config"]
         # TODO: Figure out what to do about Atlas reboot.
-        if build_type != BuildType.ATLAS:
+        if env_args.HITL_BUILD_TYPE != BuildType.ATLAS:
             test_set += ["reboot", "watchdog_fault", "expected_storage"]
         test_config = TestConfig(
             config=ConfigSet(

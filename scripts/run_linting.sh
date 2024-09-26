@@ -21,4 +21,4 @@ get_parent_dir() {
 REPO_ROOT=$(get_parent_dir)/..
 
 python -m autopep8 -i -j 0 --recursive $REPO_ROOT --exclude '.env*,.venv*,env*,venv*,ENV,.idea'
-python -m isort $REPO_ROOT
+python -m isort $REPO_ROOT --sg '.env*' --sg '.venv*' --sg 'env*' --sg 'venv*' --sg 'ENV' --sg '.idea'
