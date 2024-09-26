@@ -55,7 +55,7 @@ def main():
     release_str_build_type = BuildType.get_build_type_from_version(env_args.HITL_DUT_VERSION)
     git_commitish = None
     if release_str_build_type is None:
-        logger.info("HITL_DUT_VERSION "{env_args.HITL_DUT_VERSION}" is not a known version string. Assuming it's a git commitish")
+        logger.info(f"HITL_DUT_VERSION '{env_args.HITL_DUT_VERSION}' is not a known version string. Assuming it's a git commitish")
         git_commitish = env_args.HITL_DUT_VERSION
         release_str = git_describe_dut_version(env_args)
         if release_str is None:
@@ -77,6 +77,7 @@ def main():
         logger.info(f'Build found: {build_info}')
     else:
         if git_commitish is not None:
+            raise NotImplementedError(f'Jenkins implementation not yet implemented. Manually run Jenkins build for {env_args.HITL_BUILD_TYPE.name} commit "{git_commitish}".')
             build_info = generate_build(git_commitish, env_args.HITL_BUILD_TYPE)
             if build_info is None:
                 logger.error(
