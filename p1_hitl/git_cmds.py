@@ -20,7 +20,6 @@ class GitWrapper:
                 f'Git fetch failed.\n{result.args}:\n{result.stderr}')
 
     def describe(self, match=None, commit=None) -> str:
-        self.fetch()
         cmd_args = ['git', 'describe', '--tags']
         if match is not None:
             cmd_args.append(f'--match={match}')
@@ -33,8 +32,9 @@ class GitWrapper:
             cmd_args, cwd=self.repo_path, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
         # This can fail if:
-        # 1. There's no --match matches
-        # 2. The commit isn't valid
+        # 1. self.repo_path isn't in a git repo
+        # 2. There's no --match matches
+        # 3. The commit isn't valid
         if result.returncode != 0:
             raise RuntimeError(
                 f'Git describe failed.\n{result.args}:\n{result.stderr}')
