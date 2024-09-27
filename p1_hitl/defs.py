@@ -47,10 +47,10 @@ class HitlEnvArgs(NamedTuple):
     HITL_TEST_TYPE: TestType
     # The @ref BuildType being tested.
     HITL_BUILD_TYPE: BuildType
-    # A nautilus "commit-ish" to checkout and build if needed.
-    HITL_BUILD_COMMIT: Optional[str] = None
-    # The version string for the build to run on the device.
-    HITL_DUT_VERSION: Optional[str] = None
+    # The version string for the build to run on the device. I can be either:
+    # 1. The version string of an existing build to provision the device with (e.x. v2.1.0-920-g6090626b66).
+    # 2. The commit-ish of the nautilus repo to get a version string from.
+    HITL_DUT_VERSION: str
     # Only for Atlas Tests
     JENKINS_ATLAS_LAN_IP: Optional[str] = None
     JENKINS_ATLAS_BALENA_UUID: Optional[str] = None

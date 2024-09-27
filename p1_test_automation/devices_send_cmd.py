@@ -292,7 +292,7 @@ NONE - Leave logs on device until this setting is changed to FULL_LOG or device 
         try:
             all_successes &= future.result()
         except Exception as exc:
-            logger.error(f'Sending command to {device_config.name} generated an exception: {exc}')
+            logger.error(f'Sending command to {device_config.name} generated an exception {type(exc).__name__}: {exc}')
             all_successes = False
 
     if all_successes:
