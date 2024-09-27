@@ -84,7 +84,7 @@ def main():
             build_info = get_build_info(release_str, env_args.HITL_BUILD_TYPE)
             if build_info is None:
                 logger.error(
-                    f'Build artifacts still missing after succesful Jenkins build.')
+                    f'Build artifacts still missing after successful Jenkins build. This may occur if several merges occurred in rapid succession and mapping of the branch to a release changed.')
                 exit(1)
         else:
             logger.error(

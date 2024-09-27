@@ -47,7 +47,7 @@ class HitlEnvArgs(NamedTuple):
     HITL_TEST_TYPE: TestType
     # The @ref BuildType being tested.
     HITL_BUILD_TYPE: BuildType
-    # The version string for the build to run on the device. I can be either:
+    # The version string for the build to run on the device. It can be either:
     # 1. The version string of an existing build to provision the device with (e.x. v2.1.0-920-g6090626b66).
     # 2. The commit-ish of the nautilus repo to get a version string from.
     HITL_DUT_VERSION: str
