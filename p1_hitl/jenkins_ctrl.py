@@ -1,7 +1,108 @@
-from typing import Dict, Optional
+import logging
+import os
+import traceback
+from typing import Dict
+
+from jenkinsapi.jenkins import Jenkins
 
 from p1_hitl.defs import BuildType
 
+logger = logging.getLogger('point_one.hitl.jenkins_ctrl')
 
-def generate_build(git_commitish: str, build_type: BuildType) -> Optional[Dict[str, str]]:
-    return None
+JENKINS_BASE_URL = 'https://build.pointonenav.com'
+
+BUILD_JOB_MAP = {
+    BuildType.ATLAS: "atlas-build-st-develop",
+    BuildType.LG69T_AM: "quectel-build",
+}
+
+QUECTEL_BUILD_TYPE_MAP = {
+    BuildType.LG69T_AM: "gnss",
+}
+
+NUM_OLD_BUILDS_TO_CHECK = 10
+
+
+def _get_build_params(git_commitish: str, build_type: BuildType) -> Dict[str, str]:
+    params = {'BRANCH': git_commitish}
+    if build_type in list(QUECTEL_BUILD_TYPE_MAP.keys()):
+        params['BUILD_TYPE'] = QUECTEL_BUILD_TYPE_MAP[build_type]
+    return params
+
+
+def run_build(git_commitish: str, build_type: BuildType) -> bool:
+    JENKINS_API_USERNAME = os.environ.get('JENKINS_API_USERNAME')
+    JENKINS_API_TOKEN = os.environ.get('JENKINS_API_TOKEN')
+
+    if JENKINS_API_USERNAME is None or JENKINS_API_TOKEN is None:
+        logger.error(f'Must set environment variables JENKINS_API_USERNAME and JENKINS_API_TOKEN to run Jenkins builds.')
+        return False
+
+    try:
+        jenkins = Jenkins(JENKINS_BASE_URL, username=JENKINS_API_USERNAME, password=JENKINS_API_TOKEN)
+
+        job_name = BUILD_JOB_MAP[build_type]
+        params = _get_build_params(git_commitish, build_type)
+
+        # Three possibilities:
+        # 1. A desired build is in the Jenkins build queue
+        # 2. A desired build is in progress
+        # 3. A build must be kicked off
+
+        tracked_queue_item = None
+        tracked_build = None
+        # See if the desired build is queued.
+        for _, item in jenkins.get_queue().iteritems():
+            if item.get_job_name() == job_name and item.get_parameters() == params:
+                logger.info(f'Found matching {job_name} in Jenkins queue.')
+                tracked_queue_item = item
+                break
+
+        # See if the desired build is running.
+        if tracked_queue_item is None:
+            job = jenkins[job_name]
+            last_build_number = job.get_last_buildnumber()
+            start_build_number = max(job.get_first_buildnumber(), last_build_number - NUM_OLD_BUILDS_TO_CHECK)
+            for number in range(last_build_number, start_build_number, -1):
+                build = job.get_build(number)
+                if build.is_running() and build.get_params() == params:
+                    logger.info(f'Found matching {job_name} in progress.')
+                    tracked_build = build
+                    break
+
+            # No job entries with matching param in progress or queue. Start new build.
+            if tracked_build is None:
+                logger.info(f'Kicking off {job_name} build.')
+                tracked_queue_item = job.invoke(build_params=params)
+
+        # Block until build is active
+        if tracked_queue_item is not None:
+            tracked_queue_item.block_until_building()
+            tracked_build = tracked_queue_item.get_build()
+            logger.info(f'Build {tracked_build} started, see: {tracked_build.get_build_url()}')
+
+        # This is just to fix Python type inference and should not be possible.
+        if tracked_build is None:
+            logger.error('Invalid Jenkins monitoring state.')
+            return False
+
+        # Block this script until build is finished
+        tracked_build.block_until_complete()
+
+        if not tracked_build.is_good():
+            logger.warning(f'Build failed, see {tracked_build.get_build_url()}')
+            return True
+        else:
+            return False
+    except Exception as e:
+        logger.error(f'Problem running Jenkins build: {traceback.format_exc()}')
+        return False
+
+
+def _main():
+    logging.basicConfig(level=logging.INFO, format='%(message)s')
+    run_build("origin/st-develop", BuildType.ATLAS)
+
+
+if __name__ == '__main__':
+    _main()
