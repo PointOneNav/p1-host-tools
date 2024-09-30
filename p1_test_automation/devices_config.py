@@ -11,7 +11,7 @@ from typing import Any, Dict, List, NamedTuple, Optional
 import serial
 from pydantic import BaseModel
 
-# Add the host tool root directory and device_init to the python path.
+# Add the host tool root directory and device_interfaces to the python path.
 repo_root = Path(__file__).parents[1].resolve()
 sys.path.append(str(repo_root))
 

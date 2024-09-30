@@ -10,7 +10,7 @@ from p1_test_automation.atlas_device_ctrl import AtlasBalenaController
 from p1_test_automation.devices_config import (BalenaConfig, DeviceConfig,
                                                open_data_source)
 
-from .base_init import DeviceInitBase
+from .base_init import DeviceInterfaceBase
 
 UPDATE_TIMEOUT_SEC = 60 * 10
 
@@ -18,7 +18,7 @@ UPDATE_TIMEOUT_SEC = 60 * 10
 logger = logging.getLogger('point_one.hitl.atlas_init')
 
 
-class AtlasInit(DeviceInitBase):
+class AtlasInterface(DeviceInterfaceBase):
     @staticmethod
     def get_device_config(args: HitlEnvArgs) -> Optional[DeviceConfig]:
         if not args.check_fields(['JENKINS_ATLAS_LAN_IP', 'JENKINS_ATLAS_BALENA_UUID']):

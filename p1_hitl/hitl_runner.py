@@ -6,12 +6,12 @@ from pathlib import Path
 
 # isort: split
 
-# Add the host tool root directory and device_init to the python path.
+# Add the host tool root directory and device_interfaces to the python path.
 repo_root = Path(__file__).parents[1].resolve()
 sys.path.append(str(repo_root))
 
 from p1_hitl.defs import BuildType, HitlEnvArgs, TestType
-from p1_hitl.device_init import AtlasInit
+from p1_hitl.device_interfaces import AtlasInterface
 from p1_hitl.get_build_artifacts import get_build_info
 from p1_hitl.jenkins_ctrl import run_build
 from p1_hitl.version_helper import git_describe_dut_version
@@ -93,15 +93,15 @@ def main():
 
     ################# Setup device under test #################
     if env_args.HITL_BUILD_TYPE == BuildType.ATLAS:
-        device_init = AtlasInit()
+        device_interfaces = AtlasInterface()
     else:
         raise NotImplementedError('Need to handle other build types.')
 
-    device_config = device_init.get_device_config(env_args)
+    device_config = device_interfaces.get_device_config(env_args)
     if device_config is None:
         logger.error('Failure configuring device for HITL testing.')
         exit(1)
-    device_interface = device_init.init_device(device_config, build_info)
+    device_interface = device_interfaces.init_device(device_config, build_info)
     if device_interface is None:
         logger.error('Failure initializing device for HITL testing.')
         exit(1)
