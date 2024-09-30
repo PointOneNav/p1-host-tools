@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 import boto3
 
 from p1_hitl.defs import BuildType
+from p1_runner.exception_utils import exception_to_str
 
 ARTIFACT_BUCKET = 'pointone-build-artifacts'
 ARTIFACT_REGION = 'us-west-1'
@@ -36,7 +37,7 @@ def get_build_info(version_str: str, build_type: BuildType) -> Optional[Dict[str
         info_obj = s3.Object(ARTIFACT_BUCKET, s3_path)
         file_content = info_obj.get()['Body'].read().decode('utf-8')
     except Exception as e:
-        logger.info(f"Couldn't find s3://{ARTIFACT_BUCKET}/{s3_path}. {type(e).__name__}: {str(e)}")
+        logger.info(f"Couldn't find s3://{ARTIFACT_BUCKET}/{s3_path}. {exception_to_str(e)}")
         return None
 
     return json.loads(file_content)
