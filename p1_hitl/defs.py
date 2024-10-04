@@ -1,7 +1,9 @@
+import json
 import logging
 import os
 import re
 from enum import Enum, auto
+from pathlib import Path
 from typing import List, NamedTuple, Optional
 
 logger = logging.getLogger('point_one.hitl.runner')
@@ -104,28 +106,43 @@ class HitlEnvArgs(NamedTuple):
         return ret
 
     @classmethod
-    def get_env_args(cls) -> Optional['HitlEnvArgs']:
+    def get_env_args(cls, env_in_dict=os.environ) -> Optional['HitlEnvArgs']:
         env_dict = {}
         for arg in HitlEnvArgs._fields:
-            if arg in os.environ:
+            if arg in env_in_dict:
                 try:
                     if arg == 'HITL_TEST_TYPE':
-                        env_dict[arg] = TestType.from_str(os.environ[arg])
+                        env_dict[arg] = TestType.from_str(env_in_dict[arg])
                     elif arg == 'HITL_BUILD_TYPE':
-                        env_dict[arg] = BuildType.from_str(os.environ[arg])
+                        env_dict[arg] = BuildType.from_str(env_in_dict[arg])
                     elif arg == 'JENKINS_ANTENNA_LOCATION':
-                        parts = os.environ[arg].split(',')
+                        parts = env_in_dict[arg].split(',')
                         if len(parts) == 3:
                             env_dict[arg] = tuple(float(v) for v in parts)
                         else:
                             raise ValueError()
                     else:
-                        env_dict[arg] = os.environ[arg]
+                        env_dict[arg] = env_in_dict[arg]
                 except (KeyError, ValueError):
-                    logger.error(f'Invalid value "{os.environ[arg]}" for {arg}')
+                    logger.error(f'Invalid value "{env_in_dict[arg]}" for {arg}')
                     return None
         try:
             return HitlEnvArgs(**env_dict)
         except Exception as e:
             logger.error(f'Failure loading expected environment variables: {e}')
             return None
+
+    @classmethod
+    def dump_env_to_json_file(cls, out_path: Path):
+        env_dict = {}
+        for arg in HitlEnvArgs._fields:
+            if arg in os.environ:
+                env_dict[arg] = os.environ[arg]
+        with open(out_path, 'w') as fd:
+            json.dump(env_dict, fd)
+
+    @classmethod
+    def load_env_json_file(cls, in_path: Path) -> Optional['HitlEnvArgs']:
+        with open(in_path, 'r') as fd:
+            env = json.load(fd)
+            return cls.get_env_args(env)

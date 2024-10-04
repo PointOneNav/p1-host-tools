@@ -1,7 +1,9 @@
+import io
 import logging
 import time
 import traceback
 from pathlib import Path
+from typing import List
 
 from p1_hitl.defs import HitlEnvArgs
 from p1_hitl.metric_analysis.metrics import (FatalMetricException,
@@ -9,9 +11,10 @@ from p1_hitl.metric_analysis.metrics import (FatalMetricException,
                                              TimeSource)
 from p1_hitl.metric_analysis.position_analysis import PositionAnalyzer
 from p1_hitl.metric_analysis.sanity_analysis import SanityAnalyzer
-from p1_runner.device_interface import DeviceInterface
+from p1_runner.device_interface import (MAX_FE_MSG_SIZE, DeviceInterface,
+                                        FusionEngineDecoder,
+                                        MessageWithBytesTuple)
 from p1_runner.exception_utils import exception_to_str
-from p1_runner.log_manager import LogManager
 
 logger = logging.getLogger('point_one.hitl.analysis')
 
@@ -36,6 +39,7 @@ metric_message_host_time_elapsed_test_stop = MaxElapsedTime(
 # TODO: Figure out way to measure message latency
 
 LOGGER_UPDATE_INTERVAL_SEC = 30
+PLAYBACK_READ_SIZE = 1024
 
 
 def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs, output_dir: Path, log_metric_values: bool) -> bool:
@@ -43,11 +47,6 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs, output_dir: 
         params = env_args.HITL_TEST_TYPE.get_test_params()
         MetricController.enable_logging(output_dir, True, log_metric_values)
         MetricController.apply_environment_config_customizations(env_args)
-
-        # Set up logger for data from device
-        logger_manager = LogManager(env_args.HITL_NAME, logs_base_dir=str(output_dir))
-        logger_manager.start()
-        interface.data_source.rx_log = logger_manager  # type: ignore
 
         analyzers = [SanityAnalyzer(), PositionAnalyzer()]
         for analyzer in analyzers:
@@ -82,9 +81,6 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs, output_dir: 
     except Exception as e:
         logger.error(f'Exception while analyzing FE messages:\n{traceback.format_exc()}')
         return False
-    finally:
-        interface.data_source.stop()
-        logger_manager.stop()
 
     MetricController.finalize()
     report = MetricController.generate_report()
@@ -98,6 +94,73 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs, output_dir: 
                 logger.info(f'[GOOD]: {k}')
         else:
             elapsed = v['failure_time'].get_max_elapsed(results['start_time'])
+            logger.warning(f'[FAIL]: {k}')
+            logger.info(v)
+
+    return True
+
+
+def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs,
+                          output_dir: Path, log_metric_values: bool) -> bool:
+    try:
+        MetricController.enable_logging(output_dir, True, log_metric_values)
+        MetricController.apply_environment_config_customizations(env_args)
+
+        metric_message_host_time_elapsed.is_disabled = True
+        metric_message_host_time_elapsed_test_stop.is_disabled = True
+
+        fe_decoder = FusionEngineDecoder(MAX_FE_MSG_SIZE, warn_on_unrecognized=False, return_bytes=True)
+
+        analyzers = [SanityAnalyzer(), PositionAnalyzer()]
+        for analyzer in analyzers:
+            analyzer.configure(env_args)
+
+        with open(playback_path, 'rb') as in_fd:
+            in_fd.seek(0, io.SEEK_END)
+            file_size = in_fd.tell()
+            in_fd.seek(0, io.SEEK_SET)
+
+            start_time = time.time()
+            logger.info(f'Playing back {playback_path} ({file_size/1024/1024} MB).')
+            msg_count = 0
+            last_logger_update = time.time()
+
+            for chunk in iter(lambda: in_fd.read(PLAYBACK_READ_SIZE), b''):
+                msgs: List[MessageWithBytesTuple] = fe_decoder.on_data(chunk)  # type: ignore
+                if time.time() - last_logger_update > LOGGER_UPDATE_INTERVAL_SEC:
+                    elapsed_sec = time.time() - start_time
+                    total_bytes_read = in_fd.tell()
+                    logger.log(logging.INFO,
+                               'Processed %d/%d bytes (%.1f%%). [elapsed=%.1f sec, rate=%.1f MB/s]' %
+                               (total_bytes_read, file_size, 100.0 * float(total_bytes_read) / file_size,
+                                elapsed_sec, total_bytes_read / elapsed_sec / 1e6))
+                    last_logger_update = time.time()
+
+                for msg in msgs:
+                    msg_count += 1
+                    MetricController.update_timestamps(msg)
+                    metric_message_host_time_elapsed.check()
+                    metric_message_host_time_elapsed_test_stop.check()
+                    for analyzer in analyzers:
+                        analyzer.update(msg)
+
+    except FatalMetricException:
+        pass
+    except Exception as e:
+        logger.error(f'Exception while analyzing FE messages:\n{traceback.format_exc()}')
+        return False
+
+    MetricController.finalize()
+    report = MetricController.generate_report()
+    results = report['results']
+
+    for k, v in results.items():
+        if v['failure_time'] is None:
+            if not v['was_checked']:
+                logger.info(f'[MISS]: {k}')
+            else:
+                logger.info(f'[GOOD]: {k}')
+        else:
             logger.warning(f'[FAIL]: {k}')
             logger.info(v)
 
