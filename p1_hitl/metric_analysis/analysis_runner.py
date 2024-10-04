@@ -1,0 +1,104 @@
+import logging
+import time
+import traceback
+from pathlib import Path
+
+from p1_hitl.defs import HitlEnvArgs
+from p1_hitl.metric_analysis.metrics import (FatalMetricException,
+                                             MaxElapsedTime, MetricController,
+                                             TimeSource)
+from p1_hitl.metric_analysis.position_analysis import PositionAnalyzer
+from p1_hitl.metric_analysis.sanity_analysis import SanityAnalyzer
+from p1_runner.device_interface import DeviceInterface
+from p1_runner.exception_utils import exception_to_str
+from p1_runner.log_manager import LogManager
+
+logger = logging.getLogger('point_one.hitl.analysis')
+
+metric_message_host_time_elapsed = MaxElapsedTime(
+    'message_host_time_elapsed',
+    'Max time to first message, and between subsequent messages.',
+    TimeSource.HOST,
+    max_time_to_first_check_sec=10,
+    max_time_between_checks_sec=0.2,
+    not_logged=True
+)
+metric_message_host_time_elapsed_test_stop = MaxElapsedTime(
+    'message_host_time_elapsed_test_stop',
+    'If no messages are received for this duration (before or after first message), stop the test.',
+    TimeSource.HOST,
+    max_time_to_first_check_sec=60,
+    max_time_between_checks_sec=60,
+    is_fatal=True,
+    not_logged=True
+)
+
+# TODO: Figure out way to measure message latency
+
+LOGGER_UPDATE_INTERVAL_SEC = 30
+
+
+def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs, output_dir: Path, log_metric_values: bool) -> bool:
+    try:
+        params = env_args.HITL_TEST_TYPE.get_test_params()
+        MetricController.enable_logging(output_dir, True, log_metric_values)
+        MetricController.apply_environment_config_customizations(env_args)
+
+        # Set up logger for data from device
+        logger_manager = LogManager(env_args.HITL_NAME, logs_base_dir=str(output_dir))
+        logger_manager.start()
+        interface.data_source.rx_log = logger_manager  # type: ignore
+
+        analyzers = [SanityAnalyzer(), PositionAnalyzer()]
+        for analyzer in analyzers:
+            analyzer.configure(env_args)
+
+        start_time = time.time()
+        logger.info(f'Monitoring device for {params.duration_sec} sec.')
+        msg_count = 0
+        last_logger_update = time.time()
+        while time.time() - start_time < params.duration_sec:
+            try:
+                msgs = interface.wait_for_any_fe_message(response_timeout=0.1)
+            except Exception as e:
+                logger.error(f'Exception collecting FusionEngine messages from device {exception_to_str(e)}')
+                return False
+            MetricController.update_host_time()
+            if time.time() - last_logger_update > LOGGER_UPDATE_INTERVAL_SEC:
+                elapsed = time.time() - start_time
+                logger.info(f'{round(elapsed)}/{params.duration_sec} elapsed. {msg_count} messages from device.')
+                last_logger_update = time.time()
+
+            for msg in msgs:
+                msg_count += 1
+                MetricController.update_timestamps(msg)
+                metric_message_host_time_elapsed.check()
+                metric_message_host_time_elapsed_test_stop.check()
+                for analyzer in analyzers:
+                    analyzer.update(msg)
+
+    except FatalMetricException:
+        pass
+    except Exception as e:
+        logger.error(f'Exception while analyzing FE messages:\n{traceback.format_exc()}')
+        return False
+    finally:
+        interface.data_source.stop()
+        logger_manager.stop()
+
+    MetricController.finalize()
+    report = MetricController.generate_report()
+    results = report['results']
+
+    for k, v in results.items():
+        if v['failure_time'] is None:
+            if not v['was_checked']:
+                logger.info(f'[MISS]: {k}')
+            else:
+                logger.info(f'[GOOD]: {k}')
+        else:
+            elapsed = v['failure_time'].get_max_elapsed(results['start_time'])
+            logger.warning(f'[FAIL]: {k}')
+            logger.info(v)
+
+    return True

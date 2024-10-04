@@ -14,6 +14,7 @@ from p1_hitl.defs import BuildType, HitlEnvArgs, TestType
 from p1_hitl.device_interfaces import AtlasInterface
 from p1_hitl.get_build_artifacts import get_build_info
 from p1_hitl.jenkins_ctrl import run_build
+from p1_hitl.metric_analysis.analysis_runner import run_analysis
 from p1_hitl.version_helper import git_describe_dut_version
 from p1_test_automation.devices_config_test import (ConfigSet, InterfaceTests,
                                                     TestConfig)
@@ -21,6 +22,11 @@ from p1_test_automation.devices_config_test import \
     run_tests as run_config_tests
 
 logger = logging.getLogger('point_one.hitl.runner')
+
+# TODO:
+# - Generate report from metrics
+# - Add wrapper to generate report with failure and console logs on failures
+# - Update configuration test to use metrics
 
 
 def main():
@@ -32,6 +38,13 @@ def main():
         default=0,
         help="Print verbose/trace debugging messages. May be specified multiple times to increase verbosity.",
     )
+    parser.add_argument(
+        '--log-metric-values', action='store_true',
+        help="Generate CSV's for each metric in the output directory.")
+    args = parser.parse_args()
+    parser.add_argument(
+        '-o', '--output-dir', type=Path, default=Path('./out/'),
+        help="Specify the directory where output files will be generated.")
     args = parser.parse_args()
 
     if args.verbose == 0:
@@ -107,7 +120,8 @@ def main():
         exit(1)
 
     ################# Run tests #################
-    # TODO: Add actual testing metric processing.
+    output_dir: Path = args.output_dir
+    output_dir.mkdir(parents=True, exist_ok=True)
     if env_args.HITL_TEST_TYPE == TestType.CONFIGURATION:
         # The config test exercises starting the data source as part of its test.
         device_interface.data_source.stop()
@@ -130,7 +144,10 @@ def main():
             ])
         run_config_tests(test_config)
     else:
-        raise NotImplementedError('Need to handle other HITL_TEST_TYPE values.')
+        if not run_analysis(device_interface, env_args, output_dir, args.log_metric_values):
+            exit(1)
+
+    exit(0)
 
 
 if __name__ == '__main__':

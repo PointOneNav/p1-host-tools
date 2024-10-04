@@ -21,7 +21,7 @@ from p1_runner.log_manager import LogManager
 logger = logging.getLogger('point_one.data_source')
 
 
-RESPONSE_TIMEOUT = 5
+RESPONSE_TIMEOUT = 5.0
 RX_BYTE_TIMEOUT = 0.1
 MAX_DATA_BUFFER_SIZE = 10 * 1024 * 1024
 DATA_BUFFER_DROP_SIZE = 1 * 1024 * 1024

@@ -10,12 +10,12 @@ from p1_test_automation.atlas_device_ctrl import AtlasBalenaController
 from p1_test_automation.devices_config import (BalenaConfig, DeviceConfig,
                                                open_data_source)
 
-from .base_init import DeviceInterfaceBase
+from .base_interfaces import DeviceInterfaceBase
 
 UPDATE_TIMEOUT_SEC = 60 * 10
 
 
-logger = logging.getLogger('point_one.hitl.atlas_init')
+logger = logging.getLogger('point_one.hitl.atlas_interface')
 
 
 class AtlasInterface(DeviceInterfaceBase):

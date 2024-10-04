@@ -26,16 +26,50 @@ class BuildType(Enum):
         elif re.match(r'v\d+\.\d+\.\d+', version_str):
             return BuildType.ATLAS
         else:
-            logger.error(f'Unable to infer BuildType from version_str ({version_str}).')
             return None
 
 
+class TestParams(NamedTuple):
+    '''!
+    @brief The parameters of the test that might effect which analysis to run, or what metric thresholds to use.
+    '''
+    # How long should the test run for.
+    duration_sec: float
+    # Should the position output be analyzed.
+    check_position: bool
+    # Will the device be expected to generate corrected solutions.
+    has_corrections: bool
+
+
 class TestType(Enum):
+    # Special test that exercises configuration functionality.
+    # - Does not use normal device runner since the test needs to interact with the device.
+    # - May modify device settings
     CONFIGURATION = auto()
+    # Check if device starts up and generates expected messages.
+    SANITY = auto()
+    # Check for positioning performance with stationary clear sky.
+    ROOF_15_MIN = auto()
+    # Check for positioning performance with stationary clear sky with corrections disabled.
+    ROOF_NO_CORRECTIONS_15_MIN = auto()
 
     @classmethod
     def from_str(cls, val: str):
         return cls[val.upper()]
+
+    def get_test_params(self) -> TestParams:
+        if self == TestType.CONFIGURATION:
+            # This test doesn't have a fixed duration. The duration is determined by
+            # how long the device takes to respond to commands.
+            return TestParams(0, False, False)
+        elif self == TestType.SANITY:
+            return TestParams(5 * 60, False, False)
+        elif self == TestType.ROOF_15_MIN:
+            return TestParams(1 * 60, True, True)
+        elif self == TestType.ROOF_NO_CORRECTIONS_15_MIN:
+            return TestParams(15 * 60, True, False)
+        else:
+            raise NotImplementedError(f'Metric configuration for {self.name} is not implemented.')
 
 
 class HitlEnvArgs(NamedTuple):
@@ -51,6 +85,10 @@ class HitlEnvArgs(NamedTuple):
     # 1. The version string of an existing build to provision the device with (e.x. v2.1.0-920-g6090626b66).
     # 2. The commit-ish of the nautilus repo to get a version string from.
     HITL_DUT_VERSION: str
+    # The truth location of the device antenna. It is specified as a the
+    # geodetic latitude, longitude, and altitude (in degrees/degrees/meters),
+    # expressed using the WGS-84 reference ellipsoid.
+    JENKINS_ANTENNA_LOCATION: Optional[tuple[float, float, float]] = None
     # Only for Atlas Tests
     JENKINS_ATLAS_LAN_IP: Optional[str] = None
     JENKINS_ATLAS_BALENA_UUID: Optional[str] = None
@@ -75,9 +113,15 @@ class HitlEnvArgs(NamedTuple):
                         env_dict[arg] = TestType.from_str(os.environ[arg])
                     elif arg == 'HITL_BUILD_TYPE':
                         env_dict[arg] = BuildType.from_str(os.environ[arg])
+                    elif arg == 'JENKINS_ANTENNA_LOCATION':
+                        parts = os.environ[arg].split(',')
+                        if len(parts) == 3:
+                            env_dict[arg] = tuple(float(v) for v in parts)
+                        else:
+                            raise ValueError()
                     else:
                         env_dict[arg] = os.environ[arg]
-                except KeyError:
+                except (KeyError, ValueError):
                     logger.error(f'Invalid value "{os.environ[arg]}" for {arg}')
                     return None
         try:
