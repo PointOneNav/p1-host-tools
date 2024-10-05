@@ -158,7 +158,7 @@ class MetricController:
     def get_metrics_in_this_file(cls):
         # Go up 1 frames to the caller
         frame = inspect.stack()[1]
-        caller_path = Path(frame[1])
+        caller_path = Path(frame.filename)
         return [m for m in cls._metrics.values() if m.code_location.file == caller_path]
 
     @classmethod
@@ -206,9 +206,16 @@ class Metric:
         else:
             MetricController._metrics[self.name] = self
 
-        # Go up 2 frames to actual declaration.
-        frame = inspect.stack()[2]
-        self.code_location = CodeLocation(Path(frame[1]), frame[2])
+        # Go back through stack __post_init__ and __init__ function calls. May
+        # be multiple __post_init__ from inheritance.
+        next = False
+        for frame in inspect.stack():
+            if next:
+                self.code_location = CodeLocation(Path(frame.filename), frame.lineno)
+                break
+            elif frame.function == '__init__':
+                next = True
+
         # Have to declare here so it's not included as a field for serialization.
         self._log_fd: Optional[BinaryIO] = None
 

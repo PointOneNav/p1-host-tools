@@ -11,7 +11,7 @@ from pathlib import Path
 repo_root = Path(__file__).parents[1].resolve()
 sys.path.append(str(repo_root))
 
-from fusion_engine_client.utils.log import DEFAULT_LOG_BASE_DIR, locate_log
+from fusion_engine_client.utils.log import DEFAULT_LOG_BASE_DIR, find_log_file
 
 from p1_hitl.defs import BuildType, HitlEnvArgs, TestType
 from p1_hitl.device_interfaces import AtlasInterface
@@ -53,7 +53,7 @@ def main():
         '--logs-base-dir', metavar='DIR', default=DEFAULT_LOG_BASE_DIR,
         help="The base directory containing FusionEngine logs to be searched and written to.")
     parser.add_argument(
-        '-p', '--playback-p1log', type=Path,
+        '-p', '--playback-log', type=Path,
         help="Rather then connect to a device, re-analyze a log instead.")
     parser.add_argument(
         '-e', '--env-file', type=Path,
@@ -77,9 +77,10 @@ def main():
         env_args = HitlEnvArgs.get_env_args()
     if env_args is None:
         exit(1)
+    logger.info(env_args)
 
     ################# Get build to provision device under test #################
-    if not args.playback_p1log:
+    if not args.playback_log:
         release_str_build_type = BuildType.get_build_type_from_version(env_args.HITL_DUT_VERSION)
         git_commitish = None
         if release_str_build_type is None:
@@ -136,7 +137,7 @@ def main():
 
     ################# Run tests #################
     if env_args.HITL_TEST_TYPE == TestType.CONFIGURATION:
-        if args.playback_p1log:
+        if args.playback_log:
             logger.error(f'HITL_TEST_TYPE "CONFIGURATION" does not support playback.')
             exit(1)
         # The config test exercises starting the data source as part of its test.
@@ -166,18 +167,25 @@ def main():
         output_dir = Path(log_manager.get_log_directory())  # type: ignore
         env_file_dump = output_dir / ENV_DUMP_FILE
         HitlEnvArgs.dump_env_to_json_file(env_file_dump)
+        ran_successfully = False
         try:
-            if args.playback_p1log:
-                result = run_analysis_playback(args.playback_p1log, env_args, output_dir, args.log_metric_values)
+            if args.playback_log:
+                # Locate the input file and set the output directory.
+                try:
+                    input_path = find_log_file(str(args.playback_log), log_base_dir=str(
+                        args.logs_base_dir), candidate_files=['input.raw', 'input.p1bin'])
+                    ran_successfully = run_analysis_playback(input_path, env_args, output_dir, args.log_metric_values)
+                except FileNotFoundError as e:
+                    logger.error(str(e))
             else:
-                device_interface.data_source.rx_log = log_manager
-                result = run_analysis(device_interface, env_args, output_dir, args.log_metric_values)
+                device_interface.data_source.rx_log = log_manager  # type: ignore
+                ran_successfully = run_analysis(device_interface, env_args, output_dir, args.log_metric_values)
         finally:
-            if not args.playback_p1log:
+            if not args.playback_log:
                 device_interface.data_source.stop()
             log_manager.stop()
 
-        if not result:
+        if not ran_successfully:
             exit(1)
 
     exit(0)
