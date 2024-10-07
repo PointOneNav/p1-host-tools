@@ -1995,7 +1995,7 @@ The type of startup to be performed: {''.join([f'{newline}- {k} - {v}' for k, v 
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.connect((address, port))
         except Exception as e:
-            logger.error("Problem connecting to TCP address '%s': %s." % (args.device_tcp_address, str(e)))
+            logger.error("Problem connecting to TCP address '%s:%d': %s." % (address, port, str(e)))
             sys.exit(1)
         data_source = SocketDataSource(s)
     elif (m := re.match(r'^(?:(?:tty|serial)://)?([\w/\-.]+)(?::(\d+))?$', args.device)):
