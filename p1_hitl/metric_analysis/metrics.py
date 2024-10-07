@@ -1,3 +1,14 @@
+'''!
+Framework for specifying HITL Metrics
+
+Top level design:
+  MetricController - is used to manage the global controls and state of the test being performed.
+  Check classes - These checks are declared in analysis code to specify the testing requirements. These are akin to
+                  asserts in a unit test.
+
+The check classes are expected to be customized at runtime based on the HitlEnvArgs and the TestParams derived from the
+TestType.
+'''
 
 import inspect
 import logging
@@ -5,7 +16,7 @@ import struct
 import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
-from enum import Enum, IntEnum, auto
+from enum import IntEnum, auto
 from pathlib import Path
 from typing import Any, BinaryIO, ClassVar, Dict, List, NamedTuple, Optional
 
@@ -28,33 +39,59 @@ _METRIC_LOG_FORMAT = '<Id'
 
 
 class FatalMetricException(Exception):
+    '''!
+    Exception to indicate a test with `is_fatal==True` failed.
+    '''
+
     def __init__(self, test_name) -> None:
         self.test_name = test_name
 
 
-class MetricCategories(Enum):
-    POSITION = auto()
-    RTK = auto()
-
-
 class TimeSource(IntEnum):
+    '''!
+    Indicates which time sources to use when checking for elapsed time.
+    '''
+    # Only consider the host time
     HOST = auto()
+    # Only consider the P1 and system timestamps from device FE messages
     DEVICE = auto()
+    # Use all available time sources
     ANY = auto()
 
 
 class CodeLocation(NamedTuple):
+    '''!
+    Tracks where in the code base a test metric was declared.
+    '''
     file: Path
     line: int
 
 
 @dataclass
 class Timestamp:
+    '''!
+    Captures when during the HITL test something occurred.
+    '''
+
     host_time: Optional[float]
     p1_time: Optional[float]
     system_time: Optional[float]
 
-    def get_max_elapsed(self, other: 'Timestamp', time_source: TimeSource) -> float:
+    def get_max_elapsed(self, previous_time: 'Timestamp', time_source: TimeSource) -> float:
+        '''!
+        Gets the time that elapsed "self - previous_time".
+
+        If multiple "types" of timestamps are applicable, find the elapsed time in each time base and take the greatest
+        value.
+
+        Makes no attempt to map between time based, though that might be an approach for future improvements.
+
+        @param previous_time - The previous timestamp to get the elapsed time from
+        @param time_source - Which time sources should be considered for the comparison. See @ref TimeSource.
+
+        @return The elapsed time in seconds. Returns `0` if one or both of the timestamps had no valid data for the
+                specified time source.
+        '''
         elapsed = 0
 
         def _update_max_elapsed(a, b, cur_max_elapsed) -> float:
@@ -66,16 +103,22 @@ class Timestamp:
             return cur_max_elapsed
 
         if time_source is TimeSource.HOST or time_source is TimeSource.ANY:
-            elapsed = _update_max_elapsed(self.host_time, other.host_time, elapsed)
+            elapsed = _update_max_elapsed(self.host_time, previous_time.host_time, elapsed)
 
         if time_source is TimeSource.DEVICE or time_source is TimeSource.ANY:
-            elapsed = _update_max_elapsed(self.system_time, other.system_time, elapsed)
-            elapsed = _update_max_elapsed(self.p1_time, other.p1_time, elapsed)
+            elapsed = _update_max_elapsed(self.system_time, previous_time.system_time, elapsed)
+            elapsed = _update_max_elapsed(self.p1_time, previous_time.p1_time, elapsed)
 
         return elapsed
 
 
 class MetricController:
+    '''!
+    Class for controlling global metric testing state.
+
+    @warning This class is not multi-thread safe. This is easy to see with its control of `_current_time`. No metrics
+             should be updated while calls to this class are being done.
+    '''
     # Metrics will add themselves to this list.
     _metrics: ClassVar[Dict[str, 'Metric']] = {}
     # Set of callbacks to customize metric configurations at runtime.
@@ -92,12 +135,23 @@ class MetricController:
 
     @classmethod
     def enable_logging(cls, log_dir: Path, log_msg_times: bool, log_metric_values: bool):
+        '''!
+        @param log_dir - Directory to write log files to.
+        @param log_msg_times - Should the host time of each FE message be logged.
+        @param log_metric_values - Should the value of each metric with `not_logged==False` be logged.
+        '''
         cls._log_dir = log_dir
         cls._log_msg_times = log_msg_times
         cls._log_metric_values = log_metric_values
 
     @classmethod
     def update_host_time(cls):
+        '''!
+        Update the global concept of current host time.
+
+        This is used to set any checks that rely on a host TimeSource.
+        This should only be called for realtime operation, and not called if playing back a log file.
+        '''
         cls._current_time.host_time = time.time()
         if cls._start_time.host_time is None:
             cls._start_time.host_time = cls._current_time.host_time
@@ -109,6 +163,12 @@ class MetricController:
 
     @classmethod
     def update_timestamps(cls, msg: MessageWithBytesTuple):
+        '''!
+        Update the global concept of current device time.
+
+        This is used to set any checks that rely on a device TimeSource.
+        This should be called for each message decoded from the device.
+        '''
         header, payload, _ = msg
         if isinstance(payload, MessagePayload):
             p1_time = payload.get_p1_time()
@@ -138,15 +198,28 @@ class MetricController:
 
     @classmethod
     def register_environment_config_customizations(cls, callback: Callable[[HitlEnvArgs], None]):
+        '''!
+        Register a callback to run when @ref apply_environment_config_customizations() is called.
+
+        These are meant to specify metric customizations to apply bask on the runtime test environment.
+        '''
         cls._config_customization_callbacks.append(callback)
 
     @classmethod
     def apply_environment_config_customizations(cls, env_args: HitlEnvArgs):
+        '''!
+        Run callbacks set with @ref register_environment_config_customizations().
+
+        This is meant to run once on test initialization.
+        '''
         for callback in cls._config_customization_callbacks:
             callback(env_args)
 
     @classmethod
     def finalize(cls):
+        '''!
+        Call metric `_finalize()` functions for processing metrics that are only checked on test completion.
+        '''
         for metric in cls._metrics.values():
             if not metric.is_disabled:
                 metric._finalize()
@@ -156,6 +229,12 @@ class MetricController:
 
     @classmethod
     def get_metrics_in_this_file(cls):
+        '''!
+        Utility function to return a list of metrics that were declared in the same file as this function's caller.
+
+        For example, if file "foo.py" declared 2 metrics "test1" and "test2". These objects would be returned if
+        MetricController.get_metrics_in_this_file() were also called somewhere in foo.py.
+        '''
         # Go up 1 frames to the caller
         frame = inspect.stack()[1]
         caller_path = Path(frame.filename)
@@ -163,6 +242,9 @@ class MetricController:
 
     @classmethod
     def generate_report(cls) -> Dict[str, Any]:
+        '''!
+        Generate dict with the configuration and results from all the active metrics.
+        '''
         results = {}
         for name, metric in cls._metrics.items():
             if not metric.is_disabled:
