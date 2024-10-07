@@ -7,8 +7,8 @@ from typing import List
 
 from p1_hitl.defs import HitlEnvArgs
 from p1_hitl.metric_analysis.metrics import (FatalMetricException,
-                                             MaxElapsedTime, MetricController,
-                                             TimeSource)
+                                             MaxElapsedTimeMetric,
+                                             MetricController, TimeSource)
 from p1_runner.device_interface import (MAX_FE_MSG_SIZE, DeviceInterface,
                                         FusionEngineDecoder,
                                         MessageWithBytesTuple)
@@ -20,7 +20,7 @@ from .sanity_analysis import SanityAnalyzer
 
 logger = logging.getLogger('point_one.hitl.analysis')
 
-metric_message_host_time_elapsed = MaxElapsedTime(
+metric_message_host_time_elapsed = MaxElapsedTimeMetric(
     'message_host_time_elapsed',
     'Max time to first message, and between subsequent messages.',
     TimeSource.HOST,
@@ -28,7 +28,7 @@ metric_message_host_time_elapsed = MaxElapsedTime(
     max_time_between_checks_sec=0.2,
     not_logged=True
 )
-metric_message_host_time_elapsed_test_stop = MaxElapsedTime(
+metric_message_host_time_elapsed_test_stop = MaxElapsedTimeMetric(
     'message_host_time_elapsed_test_stop',
     'If no messages are received for this duration (before or after first message), stop the test.',
     TimeSource.HOST,
@@ -92,7 +92,7 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs, output_dir: 
 
             for msg in msgs:
                 msg_count += 1
-                MetricController.update_timestamps(msg)
+                MetricController.update_device_time(msg)
                 metric_message_host_time_elapsed.check()
                 metric_message_host_time_elapsed_test_stop.check()
                 for analyzer in analyzers:
@@ -142,7 +142,7 @@ def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs,
 
                 for msg in msgs:
                     msg_count += 1
-                    MetricController.update_timestamps(msg)
+                    MetricController.update_device_time(msg)
                     for analyzer in analyzers:
                         analyzer.update(msg)
 

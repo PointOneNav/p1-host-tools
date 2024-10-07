@@ -5,13 +5,13 @@ from fusion_engine_client.parsers.decoder import MessageWithBytesTuple
 from pymap3d import geodetic2ecef
 
 from p1_hitl.defs import HitlEnvArgs
-from p1_hitl.metric_analysis.metrics import (CdfThreshold, IsTrue, MaxValue,
-                                             MetricController, PercentTrue,
-                                             StatsCheck)
+from p1_hitl.metric_analysis.metrics import (CdfThreshold, IsTrueMetric,
+                                             MaxValueMetric, MetricController,
+                                             PercentTrueMetric, StatsMetric)
 
 from .base_analysis import AnalyzerBase
 
-metric_fix_rate = PercentTrue(
+metric_fix_rate = PercentTrueMetric(
     'fix_rate',
     'Percent of solutions in fix mode.',
     90.0,
@@ -19,21 +19,21 @@ metric_fix_rate = PercentTrue(
     not_logged=True
 )
 
-metric_position_valid = IsTrue(
+metric_position_valid = IsTrueMetric(
     'position_valid',
     'All positions should be valid.',
     is_required=True,
     not_logged=True
 )
 
-metric_max_velocity = MaxValue(
+metric_max_velocity = MaxValueMetric(
     'max_velocity',
     'Velocity (mps) should be near 0.',
     0.01,
     is_required=True,
 )
 
-metric_2d_fixed_pos_error = StatsCheck(
+metric_2d_fixed_pos_error = StatsMetric(
     '2d_fixed_pos_error',
     '2d fixed position error (m) stats.',
     max_threshold=0.5,
@@ -44,7 +44,7 @@ metric_2d_fixed_pos_error = StatsCheck(
     is_required=True
 )
 
-metric_3d_fixed_pos_error = StatsCheck(
+metric_3d_fixed_pos_error = StatsMetric(
     '3d_fixed_pos_error',
     '3d fixed position error (m) stats.',
     max_threshold=0.5,

@@ -120,7 +120,7 @@ class MetricController:
              should be updated while calls to this class are being done.
     '''
     # Metrics will add themselves to this list.
-    _metrics: ClassVar[Dict[str, 'Metric']] = {}
+    _metrics: ClassVar[Dict[str, 'MetricBase']] = {}
     # Set of callbacks to customize metric configurations at runtime.
     _config_customization_callbacks: ClassVar[List[Callable[[HitlEnvArgs], None]]] = []
     # Logging settings
@@ -162,7 +162,7 @@ class MetricController:
                 metric._time_elapsed()
 
     @classmethod
-    def update_timestamps(cls, msg: MessageWithBytesTuple):
+    def update_device_time(cls, msg: MessageWithBytesTuple):
         '''!
         Update the global concept of current device time.
 
@@ -253,7 +253,12 @@ class MetricController:
 
 
 @dataclass
-class Metric:
+class MetricBase:
+    '''!
+    Base class for specifying test metrics.
+
+    Metrics are dataclasses to simplify their declaration, initialization, and serialization.
+    '''
     ############# Metric configuration #############
     name: str
     description: str
@@ -283,6 +288,10 @@ class Metric:
     was_checked: bool = field(default=False, init=False)
 
     def __post_init__(self):
+        '''!
+        Since `__init__` is handled by the dataclass code, __post_init__ is used to validate parameters and initialize
+        internal values.
+        '''
         if self.name in MetricController._metrics:
             raise KeyError(f'Duplicate metrics named "{self.name}"')
         else:
@@ -298,7 +307,7 @@ class Metric:
             elif frame.function == '__init__':
                 next = True
 
-        # Have to declare here so it's not included as a field for serialization.
+        # Declare here so it's not included as a field for serialization.
         self._log_fd: Optional[BinaryIO] = None
 
     def __log(self, value: float):
@@ -313,15 +322,36 @@ class Metric:
                     TimeSource.ANY) * 1000.0)
             self._log_fd.write(struct.pack(_METRIC_LOG_FORMAT, test_time_millis, value))
 
-    def _update_status(self, value: float, is_failure: bool, not_logged=False):
+    def _update_status(self, value: float, is_failure: bool, context=None):
+        '''!
+        Log the value and the failure state as needed.
+
+        When `is_failure==True` the failure_context will be set to `str(value)`.
+
+        @param value Value to log.
+        @param is_failure `True` if this value fail the metric's requirements.
+        @param context Optional string to associate with the metric's failure.
+        '''
         if self.is_disabled:
             return
-        if not self.not_logged and not not_logged:
+
+        if not self.not_logged:
             self.__log(value)
 
-        self._update_failure(is_failure, context=str(value))
+        if context is None:
+            context = str(value)
 
-    def _update_failure(self, is_failure: bool, context=None):
+        self._update_failure(is_failure, context)
+
+    def _update_failure(self, is_failure: bool, context: Optional[str] = None):
+        '''!
+        Update the metric's failure status.
+
+        Failure timestamps and contexts are only set on the metric's first failure.
+
+        @param is_failure `True` if metric's requirements have been violated.
+        @param context Optional string to associate with the metric's failure.
+        '''
         self.was_checked = True
         if self.is_disabled:
             return
@@ -333,14 +363,27 @@ class Metric:
                 raise FatalMetricException(self.name)
 
     def _finalize(self):
+        '''!
+        Callback to run checks performed at the end of the test collection.
+
+        For example, checks that require computing the stats for a value.
+        '''
         pass
 
     def _time_elapsed(self):
+        '''!
+        Callback to run checks based on time elapsing.
+
+        For example, checks on the elapsed time between events.
+        '''
         pass
 
 
 @dataclass
-class MaxValue(Metric):
+class MaxValueMetric(MetricBase):
+    '''!
+    Checks that a value never exceeds a specified threshold.
+    '''
     threshold: float
 
     def check(self, value: float):
@@ -348,11 +391,21 @@ class MaxValue(Metric):
 
 
 @dataclass
-class MaxElapsedTime(Metric):
+class MaxElapsedTimeMetric(MetricBase):
+    '''!
+    Validates that the elapsed time between checks never exceeds a time threshold.
+
+    @note This metric is validated during MetricController.update_host_time() and MetricController.update_device_time()
+          calls.
+    '''
+    # Time sources to compare for determining the elapsed time.
     time_source: TimeSource
+    # Metric will fail if `check()` is not called before this many seconds into the test.
     max_time_to_first_check_sec: Optional[float] = None
+    # Metric will fail if more than this many seconds elapses between between `check()` calls.
     max_time_between_checks_sec: Optional[float] = None
 
+    # Timestamp when this metric was last checked. `None` if never checked.
     __last_time = None
 
     def check(self) -> Optional[float]:
@@ -376,15 +429,22 @@ class MaxElapsedTime(Metric):
 
 
 class CdfThreshold(NamedTuple):
+    '''!
+    Struct for specifying a threshold for a statistical distribution check.
+    '''
+    # The percentile to check.
     percentile: float
+    # The value to check at this percentile.
     threshold: float
 
 
 @dataclass
-class StatsCheck(Metric):
+class StatsMetric(MetricBase):
     '''!
     Any combination of the thresholds may be set. The check will fail if any of
     the thresholds are violated.
+
+    max and min are validated by each `check()` call. CDF checks are only performed during test finalization.
     '''
     # Check fails if any value is above this.
     max_threshold: Optional[float] = None
@@ -402,42 +462,49 @@ class StatsCheck(Metric):
     # For example (50, 1) means that the check will fail if the median is larger
     # then 1.
     min_cdf_thresholds: List[CdfThreshold] = field(default_factory=list)
+    # Only check CDF thresholds if at least this many values have been computed.
     min_values_for_cdf_check: int = 100
 
-    __cdf_ratios = {}
+    # For each threshold count to number of times the value was below the threshold.
+    __below_threshold_counts = {}
+    # Count of total number of times this metric was checked.
+    __total_times_checked = 0
 
     def __post_init__(self):
         super().__post_init__()
         thresholds = set(k.threshold for k in self.max_cdf_thresholds)
         thresholds.update(k.threshold for k in self.min_cdf_thresholds)
         for threshold in thresholds:
-            self.__cdf_ratios[threshold] = [0, 0]
+            self.__below_threshold_counts[threshold] = 0
 
     def check(self, value: float):
         if not self.is_disabled:
-            # Failures are updated below and in _finalize().
-            self._update_status(value, False)
-            if self.max_threshold is not None:
-                self._update_failure(value > self.max_threshold, 'max_threshold')
-            if self.min_threshold is not None:
-                self._update_failure(value < self.min_threshold, 'min_threshold')
-            for k, v in self.__cdf_ratios.items():
-                # Not counting values == threshold.
-                if value < k:
-                    v[0] += 1
+            context = None
+            if self.max_threshold is not None and value > self.max_threshold:
+                context = f'{value}_above_max_threshold'
+            elif self.min_threshold is not None and value < self.min_threshold:
+                context = f'{value}_below_min_threshold'
 
-                if value != k:
-                    v[1] += 1
+            failed = context is not None
+
+            self._update_status(value, failed, context)
+
+            for k in self.__below_threshold_counts:
+                if value < k:
+                    self.__below_threshold_counts[k] += 1
+
+            self.__total_times_checked += 1
 
     def _finalize(self):
-        if not self.is_disabled and len(self.__cdf_ratios) > 0:
+        if not self.is_disabled and len(self.__below_threshold_counts) > 0 and \
+                self.__total_times_checked >= self.min_values_for_cdf_check:
             failures = []
 
             empirical_percentiles = {}
-            for threshold, counts in self.__cdf_ratios.items():
-                smaller_count, total = counts
-                if total > self.min_values_for_cdf_check:
-                    empirical_percentiles[threshold] = smaller_count / total * 100.0
+            for threshold, counts in self.__below_threshold_counts.items():
+                smaller_count = counts
+                if self.__total_times_checked > self.min_values_for_cdf_check:
+                    empirical_percentiles[threshold] = smaller_count / self.__total_times_checked * 100.0
 
             for percentile, threshold in self.max_cdf_thresholds:
                 if threshold in empirical_percentiles:
@@ -454,28 +521,34 @@ class StatsCheck(Metric):
 
 
 @dataclass
-class PercentTrue(Metric):
+class PercentTrueMetric(MetricBase):
     # Fail if less than this percent of checks are true.
     min_percent_true: float
+    # Only check threshold if at least this many values have been computed.
     min_values_for_check: int = 100
 
+    # Count of number of times value was `True`.
     __true_count = 0
-    __total_count = 0
+    # Count of total number of times this metric was checked.
+    __total_times_checked = 0
 
     def check(self, value: bool):
         if not self.is_disabled:
             if value:
                 self.__true_count += 1
-            self.__total_count += 1
+            self.__total_times_checked += 1
 
     def _finalize(self):
-        if not self.is_disabled and self.__total_count >= self.min_values_for_check:
-            measured_percent = self.__true_count / self.__total_count * 100.0
+        if not self.is_disabled and self.__total_times_checked >= self.min_values_for_check:
+            measured_percent = self.__true_count / self.__total_times_checked * 100.0
             self._update_status(measured_percent, measured_percent < self.min_percent_true, True)
 
 
 @dataclass
-class MinValue(Metric):
+class MinValueMetric(MetricBase):
+    '''!
+    Checks that a value is never below a specified threshold.
+    '''
     threshold: float
 
     def check(self, value: float):
@@ -483,7 +556,10 @@ class MinValue(Metric):
 
 
 @dataclass
-class EqualValue(Metric):
+class EqualValueMetric(MetricBase):
+    '''!
+    Checks that a value always matches a specified value.
+    '''
     threshold: float
 
     def check(self, value: float):
@@ -491,15 +567,19 @@ class EqualValue(Metric):
 
 
 @dataclass
-class IsTrue(Metric):
+class IsTrueMetric(MetricBase):
+    '''!
+    Checks that a value is always `True`.
+    '''
+
     def check(self, value: bool):
         self._update_status(value, not value)
 
 
 def _main():
-    test1 = MaxValue('test1', 'test1 description', 10)
-    test2 = MaxValue('test2', 'test2 description', 10)
-    test3 = StatsCheck(
+    test1 = MaxValueMetric('test1', 'test1 description', 10)
+    test2 = MaxValueMetric('test2', 'test2 description', 10)
+    test3 = StatsMetric(
         'test3', 'stat test',
         max_cdf_thresholds=[
             CdfThreshold(10, 11),

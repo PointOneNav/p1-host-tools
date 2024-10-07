@@ -8,33 +8,34 @@ from fusion_engine_client.messages import (EventNotificationMessage,
                                            Timestamp)
 from fusion_engine_client.parsers.decoder import MessageWithBytesTuple
 
-from p1_hitl.metric_analysis.metrics import (EqualValue, MaxElapsedTime,
-                                             MinValue, TimeSource)
+from p1_hitl.metric_analysis.metrics import (EqualValueMetric,
+                                             MaxElapsedTimeMetric,
+                                             MinValueMetric, TimeSource)
 
 from .base_analysis import AnalyzerBase
 
-metric_seq_num_gap = EqualValue(
+metric_seq_num_gap = EqualValueMetric(
     'seq_num_check',
     'Each FE sequence number should go up by one.',
     1,
     not_logged=True
 )
 
-metric_monotonic_p1time = MinValue(
+metric_monotonic_p1time = MinValueMetric(
     'monotonic_p1time',
     'Check P1Time goes forward monotonically.',
     0,
     not_logged=True
 )
 
-metric_error_msg_count = EqualValue(
+metric_error_msg_count = EqualValueMetric(
     'error_msg_count',
     'Number of error notification messages received.',
     0,
     not_logged=True
 )
 
-metric_pose_time_elapsed = MaxElapsedTime(
+metric_pose_time_elapsed = MaxElapsedTimeMetric(
     'pose_time_elapsed',
     'Max time to first message, and between subsequent messages.',
     TimeSource.DEVICE,
