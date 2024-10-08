@@ -3,7 +3,7 @@ import time
 from argparse import Namespace
 from typing import Any, Dict, Optional
 
-from bin.config_tool import save_config
+from bin.config_tool import apply_config, save_config
 from p1_hitl.defs import HitlEnvArgs
 from p1_runner.device_interface import DeviceInterface
 from p1_test_automation.atlas_device_ctrl import AtlasBalenaController
@@ -86,10 +86,16 @@ class AtlasInterface(DeviceInterfaceBase):
             return None
 
         device_interface = DeviceInterface(data_source)
-        logger.info(f'Clearing FE settings.')
+        logger.info('Clearing FE settings.')
         args = Namespace(revert_to_saved=False, revert_to_defaults=True)
         if not save_config(device_interface, args):
             logger.error('Clearing FE settings failed.')
+            return None
+
+        logger.info('Enabling diagnostics')
+        args = Namespace(interface_config_type='diagnostics_enabled', param='current', enabled=True, save=True)
+        if not apply_config(device_interface, args):
+            logger.error('Enabling diagnostics failed.')
             return None
 
         return device_interface
