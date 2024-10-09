@@ -69,7 +69,7 @@ def check_version_str(version_str: str, expected_version_re: Optional[str]) -> b
     if expected_version_re is None:
         return True
 
-    if re.match(expected_version_re, version_str):
+    if re.match(expected_version_re, version_str) is None:
         logger.error('Version response %s did not match expected version %s.', version_str, expected_version_re)
         return False
     else:
