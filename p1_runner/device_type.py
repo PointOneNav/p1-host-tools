@@ -1,6 +1,6 @@
 from enum import Enum, auto
 from typing import Optional
-
+import re
 
 class DeviceType(Enum):
     UNKNOWN = auto()
@@ -35,3 +35,13 @@ class DeviceType(Enum):
                 pass
 
         return DeviceType.UNKNOWN
+
+    @classmethod
+    def get_build_type_from_version(cls, version_str) -> Optional['DeviceType']:
+        # Determine path to the auto-generated config loading code on S3.
+        if re.match(r'lg69t-am-', version_str):
+            return DeviceType.LG69T_AM
+        elif re.match(r'v\d+\.\d+\.\d+', version_str):
+            return DeviceType.ATLAS
+        else:
+            return None

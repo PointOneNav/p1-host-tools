@@ -13,7 +13,7 @@ sys.path.append(str(repo_root))
 
 from fusion_engine_client.utils.log import DEFAULT_LOG_BASE_DIR, find_log_file
 
-from p1_hitl.defs import BuildType, HitlEnvArgs, TestType
+from p1_hitl.defs import DeviceType, HitlEnvArgs, TestType
 from p1_hitl.device_interfaces import AtlasInterface
 from p1_hitl.get_build_artifacts import get_build_info
 from p1_hitl.jenkins_ctrl import run_build
@@ -81,7 +81,7 @@ def main():
 
     ################# Get build to provision device under test #################
     if not args.playback_log:
-        release_str_build_type = BuildType.get_build_type_from_version(env_args.HITL_DUT_VERSION)
+        release_str_build_type = DeviceType.get_build_type_from_version(env_args.HITL_DUT_VERSION)
         git_commitish = None
         if release_str_build_type is None:
             logger.info(
@@ -98,7 +98,7 @@ def main():
                 f'HITL_DUT_VERSION "{env_args.HITL_DUT_VERSION}" is being interpreted as version string for {release_str_build_type.name}')
             if release_str_build_type != env_args.HITL_BUILD_TYPE:
                 logger.error(
-                    f'BuildType {release_str_build_type} inferred from HITL_DUT_VERSION {env_args.HITL_DUT_VERSION} does not match HITL_BUILD_TYPE {env_args.HITL_BUILD_TYPE.name}.')
+                    f'DeviceType {release_str_build_type} inferred from HITL_DUT_VERSION {env_args.HITL_DUT_VERSION} does not match HITL_BUILD_TYPE {env_args.HITL_BUILD_TYPE.name}.')
                 exit(1)
             else:
                 release_str = env_args.HITL_DUT_VERSION
@@ -121,7 +121,7 @@ def main():
                 exit(1)
 
     ################# Setup device under test #################
-        if env_args.HITL_BUILD_TYPE == BuildType.ATLAS:
+        if env_args.HITL_BUILD_TYPE == DeviceType.ATLAS:
             device_interfaces = AtlasInterface()
         else:
             raise NotImplementedError('Need to handle other build types.')
@@ -142,11 +142,11 @@ def main():
             exit(1)
         # The config test exercises starting the data source as part of its test.
         device_interface.data_source.stop()
-        interface_name = {BuildType.ATLAS: 'tcp1'}.get(env_args.HITL_BUILD_TYPE)
+        interface_name = {DeviceType.ATLAS: 'tcp1'}.get(env_args.HITL_BUILD_TYPE)
         test_set = ["fe_version", "interface_ids", "expected_storage", "msg_rates", "set_config",
                     "import_config", "save_config"]
         # TODO: Figure out what to do about Atlas reboot.
-        if env_args.HITL_BUILD_TYPE != BuildType.ATLAS:
+        if env_args.HITL_BUILD_TYPE != DeviceType.ATLAS:
             test_set += ["reboot", "watchdog_fault", "expected_storage"]
         test_config = TestConfig(
             config=ConfigSet(
@@ -162,7 +162,9 @@ def main():
         run_config_tests(test_config)
     else:
         # Create a log directory to write results to.
-        log_manager = LogManager(env_args.HITL_NAME, logs_base_dir=args.logs_base_dir)
+        log_manager = LogManager(env_args.HITL_NAME,
+                                 device_type=env_args.HITL_BUILD_TYPE.name,
+                                 logs_base_dir=args.logs_base_dir)
         log_manager.start()
         output_dir = Path(log_manager.get_log_directory())  # type: ignore
         env_file_dump = output_dir / ENV_DUMP_FILE

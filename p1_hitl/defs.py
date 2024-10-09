@@ -6,29 +6,9 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import List, NamedTuple, Optional
 
+from p1_runner.device_type import DeviceType
+
 logger = logging.getLogger('point_one.hitl.runner')
-
-
-class BuildType(Enum):
-    ATLAS = auto()
-    LG69T_AM = auto()
-
-    def is_lg69t(self):
-        return self in [BuildType.LG69T_AM]
-
-    @classmethod
-    def from_str(cls, val: str):
-        return cls[val.upper()]
-
-    @classmethod
-    def get_build_type_from_version(cls, version_str) -> Optional['BuildType']:
-        # Determine path to the auto-generated config loading code on S3.
-        if re.match(r'lg69t-am-', version_str):
-            return BuildType.LG69T_AM
-        elif re.match(r'v\d+\.\d+\.\d+', version_str):
-            return BuildType.ATLAS
-        else:
-            return None
 
 
 class TestParams(NamedTuple):
@@ -56,7 +36,7 @@ class TestType(Enum):
     ROOF_NO_CORRECTIONS_15_MIN = auto()
 
     @classmethod
-    def from_str(cls, val: str):
+    def from_string(cls, val: str):
         return cls[val.upper()]
 
     def get_test_params(self) -> TestParams:
@@ -81,8 +61,8 @@ class HitlEnvArgs(NamedTuple):
     HITL_NAUTILUS_PATH: str
     # The HITL test set to perform.
     HITL_TEST_TYPE: TestType
-    # The @ref BuildType being tested.
-    HITL_BUILD_TYPE: BuildType
+    # The @ref DeviceType being tested.
+    HITL_BUILD_TYPE: DeviceType
     # The version string for the build to run on the device. It can be either:
     # 1. The version string of an existing build to provision the device with (e.x. v2.1.0-920-g6090626b66).
     # 2. The commit-ish of the nautilus repo to get a version string from.
@@ -112,9 +92,9 @@ class HitlEnvArgs(NamedTuple):
             if arg in env_in_dict:
                 try:
                     if arg == 'HITL_TEST_TYPE':
-                        env_dict[arg] = TestType.from_str(env_in_dict[arg])
+                        env_dict[arg] = TestType.from_string(env_in_dict[arg])
                     elif arg == 'HITL_BUILD_TYPE':
-                        env_dict[arg] = BuildType.from_str(env_in_dict[arg])
+                        env_dict[arg] = DeviceType.from_string(env_in_dict[arg])
                     elif arg == 'JENKINS_ANTENNA_LOCATION':
                         parts = env_in_dict[arg].split(',')
                         if len(parts) == 3:
