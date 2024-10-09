@@ -104,11 +104,12 @@ class PositionAnalyzer(AnalyzerBase):
             metric_fix_rate.check(is_fixed)
             metric_position_valid.check(is_valid)
 
-            velocity_mps = float(np.linalg.norm(payload.velocity_body_mps))
-            metric_max_velocity.check(velocity_mps)
+            if is_valid:
+                velocity_mps = float(np.linalg.norm(payload.velocity_body_mps))
+                metric_max_velocity.check(velocity_mps)
 
-            error_2d_m, error_3d_m = calculate_position_error(payload.lla_deg, self.env_args.JENKINS_ANTENNA_LOCATION)
+                error_2d_m, error_3d_m = calculate_position_error(payload.lla_deg, self.env_args.JENKINS_ANTENNA_LOCATION)
 
-            if is_fixed:
-                metric_2d_fixed_pos_error.check(error_2d_m)
-                metric_3d_fixed_pos_error.check(error_3d_m)
+                if is_fixed:
+                    metric_2d_fixed_pos_error.check(error_2d_m)
+                    metric_3d_fixed_pos_error.check(error_3d_m)
