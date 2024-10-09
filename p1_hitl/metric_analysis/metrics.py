@@ -210,10 +210,16 @@ class MetricController:
         '''!
         Run callbacks set with @ref register_environment_config_customizations().
 
+        Afterwards initialize each active metric.
+
         This is meant to run once on test initialization.
         '''
         for callback in cls._config_customization_callbacks:
             callback(env_args)
+
+        for metric in cls._metrics.values():
+            if not metric.is_disabled:
+                metric._initialize()
 
     @classmethod
     def finalize(cls):
@@ -362,6 +368,12 @@ class MetricBase:
             if self.is_fatal:
                 raise FatalMetricException(self.name)
 
+    def _initialize(self):
+        '''!
+        Callback to initialize metric after its configuration has been finalized.
+        '''
+        pass
+
     def _finalize(self):
         '''!
         Callback to run checks performed at the end of the test collection.
@@ -470,8 +482,7 @@ class StatsMetric(MetricBase):
     # Count of total number of times this metric was checked.
     __total_times_checked = 0
 
-    def __post_init__(self):
-        super().__post_init__()
+    def _initialize(self):
         thresholds = set(k.threshold for k in self.max_cdf_thresholds)
         thresholds.update(k.threshold for k in self.min_cdf_thresholds)
         for threshold in thresholds:
