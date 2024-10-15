@@ -1,7 +1,8 @@
-from enum import IntEnum
-from typing import Union
 import struct
 import time
+from enum import IntEnum
+from typing import Union
+
 
 class WebsocketDataType(IntEnum):
     DATA_TYPE_UNKNOWN = 0
@@ -9,6 +10,7 @@ class WebsocketDataType(IntEnum):
     DATA_TYPE_STRING = 2
     DATA_TYPE_PROTO = 3
     DATA_TYPE_NMEA = 4
+
 
 class WebsocketHeader(object):
     _FORMAT = '<Id'

@@ -1,11 +1,10 @@
-from typing import List, Optional, Tuple
-
-from enum import Enum
 import logging
 import os
 import pathlib
 import re
 import sys
+from enum import Enum
+from typing import List, Optional, Tuple
 
 import serial
 from serial.tools.list_ports import comports
@@ -74,7 +73,7 @@ def _get_type(port):
 
 
 def find_serial_device(port_name: str = 'auto', port_type: Optional[PortType] = PortType.STANDARD,
-                       raise_on_wrong_type: bool = False) -> str:
+                       on_wrong_type: str = 'warn') -> str:
     """!
     @brief Find the serial port belonging to a Quectel LG69T device.
 
@@ -85,16 +84,17 @@ def find_serial_device(port_name: str = 'auto', port_type: Optional[PortType] = 
     - Standard - Connected to UART2 on the LG69T (configured for FusionEngine, RTCM, and NMEA data by default)
 
     If `port_name` is a specific serial device on the host computer (e.g., `/dev/ttyUSB0`, `COM1`), that device will be
-    used. If `raise_on_wrong_type == True`, this function will verify that the named port is a CP210x, and that it is
-    either the Standard or Enhanced port as requested by `port_type`. It will raise `ValueError` if either test fails.
-    If `port_type` is `None` or @ref PortType.ANY, either port may be returned. If `raise_on_wrong_type == False`, a
-    failed check will print a warning but will not raise an exception.
+    used. If `on_wrong_type` is set to `raise` or `warn`, this function will verify that the named port is a CP210x, and
+    that it is either the Standard or Enhanced port as requested by `port_type`.
 
     @param port_name If `auto`, automatically detect the requested port `type`. Otherwise, verify that the named device
            is a Silicon Labs CP210x with the requested port `type`.
     @param port_type The desired port on the Quectel device.
-    @param raise_on_wrong_type If `True` and `name` is a specific device (i.e., not `auto`) verify that the specified
-           device matches `port_type`.
+    @param on_wrong_type If `port_name` is a specific device (`port_name != 'auto'`), verify that the specified device
+           matches `port_type`:
+           - `raise` - Raise a `ValueError` if the requested port is not `port_type`
+           - `warm` - Print a warning if the requested port is not `port_type`
+           - `none` - Ignore `port_type`
 
     @return The name of the located serial device on the computer (`/dev/ttyUSB1`, 'COM3', etc.).
     """
@@ -157,9 +157,9 @@ def find_serial_device(port_name: str = 'auto', port_type: Optional[PortType] = 
                 if not _is_cp210x(port):
                     message = "%s does not appear to be a Silicon Labs CP210x. Are you sure it's the right port?" % \
                               port.device
-                    if raise_on_wrong_type:
+                    if on_wrong_type == 'raise':
                         raise ValueError(message)
-                    else:
+                    elif on_wrong_type == 'warn':
                         _logger.warning("Warning: %s" % message)
 
                 elif port_type is not None and port_type != PortType.ANY:
@@ -170,18 +170,18 @@ def find_serial_device(port_name: str = 'auto', port_type: Optional[PortType] = 
                             pass
                         else:
                             message = "Serial device %s matches CP210x type %s, not requested type %s." % \
-                                    (port.device, str(actual_type).title(), str(port_type).title())
-                            if raise_on_wrong_type:
+                                (port.device, str(actual_type).title(), str(port_type).title())
+                            if on_wrong_type == 'raise':
                                 raise ValueError(message)
-                            else:
+                            elif on_wrong_type == 'warn':
                                 _logger.warning("Warning: %s" % message)
                     # This exception can occur for Quad CP210x.
                     except:
                         message = "Serial device %s matches CP210x type, but not standard/enhanced port labelling." % \
-                                (port.device)
-                        if raise_on_wrong_type:
+                                  port.device
+                        if on_wrong_type == 'raise':
                             raise ValueError(message)
-                        else:
+                        elif on_wrong_type == 'warn':
                             _logger.warning(message)
 
                 return port.device
@@ -191,16 +191,16 @@ def find_serial_device(port_name: str = 'auto', port_type: Optional[PortType] = 
         if os.path.exists(port_name) and os.path.islink(port_name):
             target_path = str(pathlib.Path(port_name).resolve())
             _logger.debug('Expanding symlink %s to %s.' % (port_name, target_path))
-            find_serial_device(port_name=target_path, port_type=port_type, raise_on_wrong_type=raise_on_wrong_type)
+            find_serial_device(port_name=target_path, port_type=port_type, on_wrong_type=on_wrong_type)
             # We return the originally requested symlink, rather than the resolved path, to avoid any caller confusion.
             # The symlink should work correctly.
             return port_name
         # It could also be a virtual serial port.
         else:
             message = "Serial device %s not found." % port_name
-            if raise_on_wrong_type:
+            if on_wrong_type == 'raise':
                 raise ValueError(message)
-            else:
+            elif on_wrong_type == 'warn':
                 _logger.warning(message)
                 return port_name
 

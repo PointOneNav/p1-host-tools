@@ -1,15 +1,22 @@
-from dataclasses import dataclass, field
 import json
-from typing import Dict, Any, List, Optional, Tuple
+from dataclasses import dataclass, field
+# typing.Optional aliases construct.Optional
+from typing import Annotated, Any, Dict, List
+from typing import Optional as OptionalType
+from typing import Tuple
 
 from construct import *
 
-from .loader_utilities import AutoEnum, FrozenVectorAdapter, DataClassAdapter, OptionalAdapter, prepare_dataclass_for_json, IntOrStrEnum, update_dataclass_contents
+from .loader_utilities import (AutoEnum, DataClassAdapter, FrozenVectorAdapter,
+                               IntOrStrEnum, OptionalAdapter,
+                               prepare_dataclass_for_json,
+                               update_dataclass_contents)
+
 
 @dataclass
 class ProfilingConfig:
-    enabled: bool = True
-    interval_sec: float = 0.0
+    enable_mask: int = 27
+    interval_sec: float = 1.0
     context_mask: int = 1
 
     @staticmethod
@@ -20,8 +27,9 @@ class ProfilingConfig:
     def deserialize(data: bytes) -> 'ProfilingConfig':
         return ProfilingConfigConstruct.parse(data)
 
+
 _ProfilingConfigRawConstruct = Struct(
-    "enabled" / Flag,
+    "enable_mask" / Int8ul,
     Padding(3),
     "interval_sec" / Float32l,
     "context_mask" / Int32ul,
@@ -44,6 +52,7 @@ class Point3f:
     def deserialize(data: bytes) -> 'Point3f':
         return Point3fConstruct.parse(data)
 
+
 _Point3fRawConstruct = Struct(
     "x" / Float32l,
     "y" / Float32l,
@@ -56,7 +65,7 @@ Point3fConstruct = DataClassAdapter(Point3f, _Point3fRawConstruct)
 class GpsReceiverExtrinsicsConfig:
     uid: int = -1
     enabled: bool = True
-    r_b_bg: Point3f = field(default_factory=lambda:Point3f(**{'x': 0.0, 'y': 0.0, 'z': 0.0}))
+    r_b_bg: Point3f = field(default_factory=lambda: Point3f(**{'x': 0.0, 'y': 0.0, 'z': 0.0}))
 
     @staticmethod
     def serialize(val: 'GpsReceiverExtrinsicsConfig') -> bytes:
@@ -66,6 +75,7 @@ class GpsReceiverExtrinsicsConfig:
     def deserialize(data: bytes) -> 'GpsReceiverExtrinsicsConfig':
         return GpsReceiverExtrinsicsConfigConstruct.parse(data)
 
+
 _GpsReceiverExtrinsicsConfigRawConstruct = Struct(
     "uid" / Int32sl,
     "enabled" / Flag,
@@ -73,12 +83,13 @@ _GpsReceiverExtrinsicsConfigRawConstruct = Struct(
     "r_b_bg" / Point3fConstruct,
     Padding(32)
 )
-GpsReceiverExtrinsicsConfigConstruct = DataClassAdapter(GpsReceiverExtrinsicsConfig, _GpsReceiverExtrinsicsConfigRawConstruct)
+GpsReceiverExtrinsicsConfigConstruct = DataClassAdapter(
+    GpsReceiverExtrinsicsConfig, _GpsReceiverExtrinsicsConfigRawConstruct)
 
 
 @dataclass
 class Matrix3x3Float:
-    values: List[float] = field(default_factory=lambda:[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+    values: Annotated[List[float], 9] = field(default_factory=lambda: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
     @staticmethod
     def serialize(val: 'Matrix3x3Float') -> bytes:
@@ -87,6 +98,7 @@ class Matrix3x3Float:
     @staticmethod
     def deserialize(data: bytes) -> 'Matrix3x3Float':
         return Matrix3x3FloatConstruct.parse(data)
+
 
 _Matrix3x3FloatRawConstruct = Struct(
     "values" / Array(9, Float32l)
@@ -98,8 +110,9 @@ Matrix3x3FloatConstruct = DataClassAdapter(Matrix3x3Float, _Matrix3x3FloatRawCon
 class ImuExtrinsicsConfig:
     uid: int = -1
     enabled: bool = True
-    r_b_bs: Point3f = field(default_factory=lambda:Point3f(**{'x': 0.0, 'y': 0.0, 'z': 0.0}))
-    c_ds: Matrix3x3Float = field(default_factory=lambda:Matrix3x3Float(**{'values': [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]}))
+    r_b_bs: Point3f = field(default_factory=lambda: Point3f(**{'x': 0.0, 'y': 0.0, 'z': 0.0}))
+    c_ds: Matrix3x3Float = field(default_factory=lambda: Matrix3x3Float(
+        **{'values': [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]}))
 
     @staticmethod
     def serialize(val: 'ImuExtrinsicsConfig') -> bytes:
@@ -108,6 +121,7 @@ class ImuExtrinsicsConfig:
     @staticmethod
     def deserialize(data: bytes) -> 'ImuExtrinsicsConfig':
         return ImuExtrinsicsConfigConstruct.parse(data)
+
 
 _ImuExtrinsicsConfigRawConstruct = Struct(
     "uid" / Int32sl,
@@ -135,6 +149,7 @@ class Rotation3f:
     def deserialize(data: bytes) -> 'Rotation3f':
         return Rotation3fConstruct.parse(data)
 
+
 _Rotation3fRawConstruct = Struct(
     "yaw_deg" / Float32l,
     "pitch_deg" / Float32l,
@@ -147,8 +162,8 @@ Rotation3fConstruct = DataClassAdapter(Rotation3f, _Rotation3fRawConstruct)
 class ExternalPoseExtrinsicsConfig:
     uid: int = -1
     enabled: bool = True
-    r_b_bp: Point3f = field(default_factory=lambda:Point3f(**{'x': 0.0, 'y': 0.0, 'z': 0.0}))
-    c_pb: Rotation3f = field(default_factory=lambda:Rotation3f(**{'yaw_deg': 0.0, 'pitch_deg': 0.0, 'roll_deg': 0.0}))
+    r_b_bp: Point3f = field(default_factory=lambda: Point3f(**{'x': 0.0, 'y': 0.0, 'z': 0.0}))
+    c_pb: Rotation3f = field(default_factory=lambda: Rotation3f(**{'yaw_deg': 0.0, 'pitch_deg': 0.0, 'roll_deg': 0.0}))
 
     @staticmethod
     def serialize(val: 'ExternalPoseExtrinsicsConfig') -> bytes:
@@ -158,6 +173,7 @@ class ExternalPoseExtrinsicsConfig:
     def deserialize(data: bytes) -> 'ExternalPoseExtrinsicsConfig':
         return ExternalPoseExtrinsicsConfigConstruct.parse(data)
 
+
 _ExternalPoseExtrinsicsConfigRawConstruct = Struct(
     "uid" / Int32sl,
     "enabled" / Flag,
@@ -166,7 +182,8 @@ _ExternalPoseExtrinsicsConfigRawConstruct = Struct(
     "c_pb" / Rotation3fConstruct,
     Padding(32)
 )
-ExternalPoseExtrinsicsConfigConstruct = DataClassAdapter(ExternalPoseExtrinsicsConfig, _ExternalPoseExtrinsicsConfigRawConstruct)
+ExternalPoseExtrinsicsConfigConstruct = DataClassAdapter(
+    ExternalPoseExtrinsicsConfig, _ExternalPoseExtrinsicsConfigRawConstruct)
 
 
 @dataclass
@@ -182,6 +199,7 @@ class HeadingConfig:
     def deserialize(data: bytes) -> 'HeadingConfig':
         return HeadingConfigConstruct.parse(data)
 
+
 _HeadingConfigRawConstruct = Struct(
     "vertical_bias_deg" / Float32l,
     "horizontal_bias_deg" / Float32l,
@@ -195,7 +213,7 @@ class SensorExtrinsicsConfig:
     gps_receivers: List[GpsReceiverExtrinsicsConfig] = field(default_factory=list)
     imus: List[ImuExtrinsicsConfig] = field(default_factory=list)
     external_pose: List[ExternalPoseExtrinsicsConfig] = field(default_factory=list)
-    heading: HeadingConfig = field(default_factory=lambda:HeadingConfig())
+    heading: HeadingConfig = field(default_factory=lambda: HeadingConfig())
 
     @staticmethod
     def serialize(val: 'SensorExtrinsicsConfig') -> bytes:
@@ -204,6 +222,7 @@ class SensorExtrinsicsConfig:
     @staticmethod
     def deserialize(data: bytes) -> 'SensorExtrinsicsConfig':
         return SensorExtrinsicsConfigConstruct.parse(data)
+
 
 _SensorExtrinsicsConfigRawConstruct = Struct(
     "gps_receivers" / FrozenVectorAdapter(2, GpsReceiverExtrinsicsConfigConstruct),
@@ -220,6 +239,7 @@ class VehicleModel(IntOrStrEnum):
     DATASPEED_CD4 = 1
     J1939 = 2
     LEXUS_CT200H = 20
+    LEXUS_RX450H = 21
     KIA_SORENTO = 40
     KIA_SPORTAGE = 41
     AUDI_Q7 = 60
@@ -230,10 +250,13 @@ class VehicleModel(IntOrStrEnum):
     PEUGEOT_206 = 120
     MAN_TGX = 140
     FACTION = 160
+    FACTION_V2 = 161
     LINCOLN_MKZ = 180
     BMW_7 = 200
+    BMW_MOTORRAD = 201
     VW_4 = 220
     RIVIAN = 240
+
 
 class WheelSensorType(IntOrStrEnum):
     NONE = 0
@@ -242,6 +265,7 @@ class WheelSensorType(IntOrStrEnum):
     VEHICLE_SPEED = 4
     VEHICLE_TICKS = 5
 
+
 class AppliedSpeedType(IntOrStrEnum):
     NONE = 0
     REAR_WHEELS = 1
@@ -249,20 +273,24 @@ class AppliedSpeedType(IntOrStrEnum):
     FRONT_AND_REAR_WHEELS = 3
     VEHICLE_BODY = 4
 
+
 class SteeringType(IntOrStrEnum):
     UNKNOWN = 0
     FRONT = 1
     FRONT_AND_REAR = 2
+
 
 class TickMode(IntOrStrEnum):
     OFF = 0
     RISING_EDGE = 1
     FALLING_EDGE = 2
 
+
 class TickDirection(IntOrStrEnum):
     OFF = 0
     FORWARD_ACTIVE_HIGH = 1
     FORWARD_ACTIVE_LOW = 2
+
 
 @dataclass
 class CanConfig:
@@ -276,6 +304,7 @@ class CanConfig:
     @staticmethod
     def deserialize(data: bytes) -> 'CanConfig':
         return CanConfigConstruct.parse(data)
+
 
 _CanConfigRawConstruct = Struct(
     "id_whitelist" / FrozenVectorAdapter(10, Int32ul),
@@ -303,7 +332,7 @@ class VehicleConfig:
     wheel_ticks_always_increase: bool = True
     tick_mode: TickMode = TickMode.OFF
     tick_direction: TickDirection = TickDirection.OFF
-    can: CanConfig = field(default_factory=lambda:CanConfig())
+    can: CanConfig = field(default_factory=lambda: CanConfig())
 
     @staticmethod
     def serialize(val: 'VehicleConfig') -> bytes:
@@ -312,6 +341,7 @@ class VehicleConfig:
     @staticmethod
     def deserialize(data: bytes) -> 'VehicleConfig':
         return VehicleConfigConstruct.parse(data)
+
 
 _VehicleConfigRawConstruct = Struct(
     "vehicle_model" / AutoEnum(Int16ul, VehicleModel),
@@ -342,16 +372,19 @@ class IonoDelayModel(IntOrStrEnum):
     AUTO = 0
     OFF = 1
     KLOBUCHAR = 2
+    SBAS = 3
+
 
 class TropoDelayModel(IntOrStrEnum):
     AUTO = 0
     OFF = 1
     SAASTAMOINEN = 2
 
+
 @dataclass
 class NavigationConfig:
-    r_b_bo: Point3f = field(default_factory=lambda:Point3f(**{'x': 0.0, 'y': 0.0, 'z': 0.0}))
-    enu_datum_shift_m: Point3f = field(default_factory=lambda:Point3f(**{'x': 0.0, 'y': 0.0, 'z': 0.0}))
+    r_b_bo: Point3f = field(default_factory=lambda: Point3f(**{'x': 0.0, 'y': 0.0, 'z': 0.0}))
+    enu_datum_shift_m: Point3f = field(default_factory=lambda: Point3f(**{'x': 0.0, 'y': 0.0, 'z': 0.0}))
     enable_gps: bool = True
     enable_glonass: bool = True
     enable_galileo: bool = True
@@ -375,6 +408,7 @@ class NavigationConfig:
     def deserialize(data: bytes) -> 'NavigationConfig':
         return NavigationConfigConstruct.parse(data)
 
+
 _NavigationConfigRawConstruct = Struct(
     "r_b_bo" / Point3fConstruct,
     "enu_datum_shift_m" / Point3fConstruct,
@@ -397,40 +431,36 @@ _NavigationConfigRawConstruct = Struct(
 NavigationConfigConstruct = DataClassAdapter(NavigationConfig, _NavigationConfigRawConstruct)
 
 
-class SerialParity(IntOrStrEnum):
-    NONE = 0
-    EVEN = 1
-    ODD = 2
+class TransportDirection(IntOrStrEnum):
+    INVALID = 0
+    SERVER = 1
+    CLIENT = 2
 
-class SerialStopBit(IntOrStrEnum):
-    STOPBITS_0_5 = 0
-    STOPBITS_1 = 1
-    STOPBITS_1_5 = 2
-    STOPBITS_2 = 3
 
 @dataclass
-class SerialInterfaceConfig:
-    baud_rate: int = 460800
-    data_width: int = 8
-    parity: SerialParity = SerialParity.NONE
-    stop_bits: SerialStopBit = SerialStopBit.STOPBITS_1
+class TCPInterfaceConfig:
+    enable: bool = False
+    direction: TransportDirection = TransportDirection.SERVER
+    port: int = 0
+    hostname: str = ""
 
     @staticmethod
-    def serialize(val: 'SerialInterfaceConfig') -> bytes:
-        return SerialInterfaceConfigConstruct.build(val)
+    def serialize(val: 'TCPInterfaceConfig') -> bytes:
+        return TCPInterfaceConfigConstruct.build(val)
 
     @staticmethod
-    def deserialize(data: bytes) -> 'SerialInterfaceConfig':
-        return SerialInterfaceConfigConstruct.parse(data)
+    def deserialize(data: bytes) -> 'TCPInterfaceConfig':
+        return TCPInterfaceConfigConstruct.parse(data)
 
-_SerialInterfaceConfigRawConstruct = Struct(
-    "baud_rate" / Int32ul,
-    "data_width" / Int8ul,
-    "parity" / AutoEnum(Int8ul, SerialParity),
-    "stop_bits" / AutoEnum(Int8ul, SerialStopBit),
-    Padding(1)
+
+_TCPInterfaceConfigRawConstruct = Struct(
+    "enable" / Flag,
+    "direction" / AutoEnum(Int8ul, TransportDirection),
+    "port" / Int16ul,
+    "hostname" / PaddedString(64, "utf8"),
+    Padding(8)
 )
-SerialInterfaceConfigConstruct = DataClassAdapter(SerialInterfaceConfig, _SerialInterfaceConfigRawConstruct)
+TCPInterfaceConfigConstruct = DataClassAdapter(TCPInterfaceConfig, _TCPInterfaceConfigRawConstruct)
 
 
 class MessageRate(IntOrStrEnum):
@@ -449,6 +479,7 @@ class MessageRate(IntOrStrEnum):
     INTERVAL_10_S = 12
     INTERVAL_30_S = 13
     INTERVAL_60_S = 14
+
 
 @dataclass
 class FusionEngineMessageRates:
@@ -474,6 +505,7 @@ class FusionEngineMessageRates:
     raw_wheel_speed_output: MessageRate = MessageRate.OFF
     raw_vehicle_speed_output: MessageRate = MessageRate.OFF
     device_id: MessageRate = MessageRate.OFF
+    ssr_status: MessageRate = MessageRate.OFF
 
     @staticmethod
     def serialize(val: 'FusionEngineMessageRates') -> bytes:
@@ -482,6 +514,7 @@ class FusionEngineMessageRates:
     @staticmethod
     def deserialize(data: bytes) -> 'FusionEngineMessageRates':
         return FusionEngineMessageRatesConstruct.parse(data)
+
 
 _FusionEngineMessageRatesRawConstruct = Struct(
     "pose" / AutoEnum(Int8ul, MessageRate),
@@ -506,7 +539,8 @@ _FusionEngineMessageRatesRawConstruct = Struct(
     "raw_wheel_speed_output" / AutoEnum(Int8ul, MessageRate),
     "raw_vehicle_speed_output" / AutoEnum(Int8ul, MessageRate),
     "device_id" / AutoEnum(Int8ul, MessageRate),
-    Padding(18)
+    "ssr_status" / AutoEnum(Int8ul, MessageRate),
+    Padding(17)
 )
 FusionEngineMessageRatesConstruct = DataClassAdapter(FusionEngineMessageRates, _FusionEngineMessageRatesRawConstruct)
 
@@ -536,6 +570,7 @@ class NMEAMessageRates:
     def deserialize(data: bytes) -> 'NMEAMessageRates':
         return NMEAMessageRatesConstruct.parse(data)
 
+
 _NMEAMessageRatesRawConstruct = Struct(
     "gga" / AutoEnum(Int8ul, MessageRate),
     "gll" / AutoEnum(Int8ul, MessageRate),
@@ -558,7 +593,8 @@ NMEAMessageRatesConstruct = DataClassAdapter(NMEAMessageRates, _NMEAMessageRates
 
 @dataclass
 class RTCMMessageRates:
-
+    position: MessageRate = MessageRate.OFF
+    msm: MessageRate = MessageRate.OFF
 
     @staticmethod
     def serialize(val: 'RTCMMessageRates') -> bytes:
@@ -568,17 +604,20 @@ class RTCMMessageRates:
     def deserialize(data: bytes) -> 'RTCMMessageRates':
         return RTCMMessageRatesConstruct.parse(data)
 
+
 _RTCMMessageRatesRawConstruct = Struct(
-    Padding(40)
+    "position" / AutoEnum(Int8ul, MessageRate),
+    "msm" / AutoEnum(Int8ul, MessageRate),
+    Padding(38)
 )
 RTCMMessageRatesConstruct = DataClassAdapter(RTCMMessageRates, _RTCMMessageRatesRawConstruct)
 
 
 @dataclass
 class ProtocolMessageRates:
-    fusion_engine_rates: FusionEngineMessageRates = field(default_factory=lambda:FusionEngineMessageRates())
-    nmea_rates: NMEAMessageRates = field(default_factory=lambda:NMEAMessageRates())
-    rtcm_rates: RTCMMessageRates = field(default_factory=lambda:RTCMMessageRates())
+    fusion_engine_rates: FusionEngineMessageRates = field(default_factory=lambda: FusionEngineMessageRates())
+    nmea_rates: NMEAMessageRates = field(default_factory=lambda: NMEAMessageRates())
+    rtcm_rates: RTCMMessageRates = field(default_factory=lambda: RTCMMessageRates())
     diagnostic_messages_enabled: bool = False
 
     @staticmethod
@@ -588,6 +627,7 @@ class ProtocolMessageRates:
     @staticmethod
     def deserialize(data: bytes) -> 'ProtocolMessageRates':
         return ProtocolMessageRatesConstruct.parse(data)
+
 
 _ProtocolMessageRatesRawConstruct = Struct(
     "fusion_engine_rates" / FusionEngineMessageRatesConstruct,
@@ -600,28 +640,123 @@ ProtocolMessageRatesConstruct = DataClassAdapter(ProtocolMessageRates, _Protocol
 
 
 @dataclass
-class SerialPortConfig:
-    interface_config: SerialInterfaceConfig = field(default_factory=lambda:SerialInterfaceConfig())
-    output_rates: ProtocolMessageRates = field(default_factory=lambda:ProtocolMessageRates())
+class TCPSocketConfig:
+    interface_config: TCPInterfaceConfig = field(default_factory=lambda: TCPInterfaceConfig())
+    output_rates: ProtocolMessageRates = field(default_factory=lambda: ProtocolMessageRates())
 
     @staticmethod
-    def serialize(val: 'SerialPortConfig') -> bytes:
-        return SerialPortConfigConstruct.build(val)
+    def serialize(val: 'TCPSocketConfig') -> bytes:
+        return TCPSocketConfigConstruct.build(val)
 
     @staticmethod
-    def deserialize(data: bytes) -> 'SerialPortConfig':
-        return SerialPortConfigConstruct.parse(data)
+    def deserialize(data: bytes) -> 'TCPSocketConfig':
+        return TCPSocketConfigConstruct.parse(data)
 
-_SerialPortConfigRawConstruct = Struct(
-    "interface_config" / SerialInterfaceConfigConstruct,
+
+_TCPSocketConfigRawConstruct = Struct(
+    "interface_config" / TCPInterfaceConfigConstruct,
     "output_rates" / ProtocolMessageRatesConstruct
 )
-SerialPortConfigConstruct = DataClassAdapter(SerialPortConfig, _SerialPortConfigRawConstruct)
+TCPSocketConfigConstruct = DataClassAdapter(TCPSocketConfig, _TCPSocketConfigRawConstruct)
+
+
+@dataclass
+class FileInterfaceConfig:
+    enable: bool = False
+    filename: str = ""
+
+    @staticmethod
+    def serialize(val: 'FileInterfaceConfig') -> bytes:
+        return FileInterfaceConfigConstruct.build(val)
+
+    @staticmethod
+    def deserialize(data: bytes) -> 'FileInterfaceConfig':
+        return FileInterfaceConfigConstruct.parse(data)
+
+
+_FileInterfaceConfigRawConstruct = Struct(
+    "enable" / Flag,
+    Padding(3),
+    "filename" / PaddedString(64, "utf8")
+)
+FileInterfaceConfigConstruct = DataClassAdapter(FileInterfaceConfig, _FileInterfaceConfigRawConstruct)
+
+
+@dataclass
+class FileOutputConfig:
+    interface_config: FileInterfaceConfig = field(default_factory=lambda: FileInterfaceConfig())
+    output_rates: ProtocolMessageRates = field(default_factory=lambda: ProtocolMessageRates())
+
+    @staticmethod
+    def serialize(val: 'FileOutputConfig') -> bytes:
+        return FileOutputConfigConstruct.build(val)
+
+    @staticmethod
+    def deserialize(data: bytes) -> 'FileOutputConfig':
+        return FileOutputConfigConstruct.parse(data)
+
+
+_FileOutputConfigRawConstruct = Struct(
+    "interface_config" / FileInterfaceConfigConstruct,
+    "output_rates" / ProtocolMessageRatesConstruct
+)
+FileOutputConfigConstruct = DataClassAdapter(FileOutputConfig, _FileOutputConfigRawConstruct)
+
+
+@dataclass
+class UDPInterfaceConfig:
+    enable: bool = False
+    hostname: str = ""
+    port: int = 0
+
+    @staticmethod
+    def serialize(val: 'UDPInterfaceConfig') -> bytes:
+        return UDPInterfaceConfigConstruct.build(val)
+
+    @staticmethod
+    def deserialize(data: bytes) -> 'UDPInterfaceConfig':
+        return UDPInterfaceConfigConstruct.parse(data)
+
+
+_UDPInterfaceConfigRawConstruct = Struct(
+    "enable" / Flag,
+    "hostname" / PaddedString(64, "utf8"),
+    Padding(9),
+    "port" / Int16ul
+)
+UDPInterfaceConfigConstruct = DataClassAdapter(UDPInterfaceConfig, _UDPInterfaceConfigRawConstruct)
+
+
+@dataclass
+class UDPSocketConfig:
+    interface_config: UDPInterfaceConfig = field(default_factory=lambda: UDPInterfaceConfig())
+    output_rates: ProtocolMessageRates = field(default_factory=lambda: ProtocolMessageRates())
+
+    @staticmethod
+    def serialize(val: 'UDPSocketConfig') -> bytes:
+        return UDPSocketConfigConstruct.build(val)
+
+    @staticmethod
+    def deserialize(data: bytes) -> 'UDPSocketConfig':
+        return UDPSocketConfigConstruct.parse(data)
+
+
+_UDPSocketConfigRawConstruct = Struct(
+    "interface_config" / UDPInterfaceConfigConstruct,
+    "output_rates" / ProtocolMessageRatesConstruct
+)
+UDPSocketConfigConstruct = DataClassAdapter(UDPSocketConfig, _UDPSocketConfigRawConstruct)
 
 
 @dataclass
 class CommInterfacesConfig:
-    serial_ports: List[SerialPortConfig] = field(default_factory=lambda:[SerialPortConfig(), SerialPortConfig()])
+    tcp_sockets: Annotated[List[TCPSocketConfig], 5] = field(
+        default_factory=lambda: [TCPSocketConfig(), TCPSocketConfig(), TCPSocketConfig(), TCPSocketConfig(), TCPSocketConfig()])
+    web_sockets: Annotated[List[TCPSocketConfig], 1] = field(default_factory=lambda: [TCPSocketConfig()])
+    file_outputs: Annotated[List[FileOutputConfig], 2] = field(
+        default_factory=lambda: [FileOutputConfig(), FileOutputConfig()])
+    udp_sockets: Annotated[List[UDPSocketConfig], 2] = field(
+        default_factory=lambda: [UDPSocketConfig(), UDPSocketConfig()])
 
     @staticmethod
     def serialize(val: 'CommInterfacesConfig') -> bytes:
@@ -631,8 +766,12 @@ class CommInterfacesConfig:
     def deserialize(data: bytes) -> 'CommInterfacesConfig':
         return CommInterfacesConfigConstruct.parse(data)
 
+
 _CommInterfacesConfigRawConstruct = Struct(
-    "serial_ports" / Array(2, SerialPortConfigConstruct),
+    "tcp_sockets" / Array(5, TCPSocketConfigConstruct),
+    "web_sockets" / Array(1, TCPSocketConfigConstruct),
+    "file_outputs" / Array(2, FileOutputConfigConstruct),
+    "udp_sockets" / Array(2, UDPSocketConfigConstruct),
     Padding(284)
 )
 CommInterfacesConfigConstruct = DataClassAdapter(CommInterfacesConfig, _CommInterfacesConfigRawConstruct)
@@ -651,6 +790,7 @@ class SystemControlConfig:
     def deserialize(data: bytes) -> 'SystemControlConfig':
         return SystemControlConfigConstruct.parse(data)
 
+
 _SystemControlConfigRawConstruct = Struct(
     "enable_watchdog_timer" / Flag,
     Padding(3),
@@ -662,12 +802,12 @@ SystemControlConfigConstruct = DataClassAdapter(SystemControlConfig, _SystemCont
 
 @dataclass
 class UserConfig:
-    profiling: ProfilingConfig = field(default_factory=lambda:ProfilingConfig())
-    sensors: SensorExtrinsicsConfig = field(default_factory=lambda:SensorExtrinsicsConfig())
-    vehicle: VehicleConfig = field(default_factory=lambda:VehicleConfig())
-    navigation: NavigationConfig = field(default_factory=lambda:NavigationConfig())
-    comm_interfaces: CommInterfacesConfig = field(default_factory=lambda:CommInterfacesConfig())
-    system_controls: SystemControlConfig = field(default_factory=lambda:SystemControlConfig())
+    profiling: ProfilingConfig = field(default_factory=lambda: ProfilingConfig())
+    sensors: SensorExtrinsicsConfig = field(default_factory=lambda: SensorExtrinsicsConfig())
+    vehicle: VehicleConfig = field(default_factory=lambda: VehicleConfig())
+    navigation: NavigationConfig = field(default_factory=lambda: NavigationConfig())
+    comm_interfaces: CommInterfacesConfig = field(default_factory=lambda: CommInterfacesConfig())
+    system_controls: SystemControlConfig = field(default_factory=lambda: SystemControlConfig())
 
     @staticmethod
     def serialize(val: 'UserConfig') -> bytes:
@@ -676,6 +816,11 @@ class UserConfig:
     @staticmethod
     def deserialize(data: bytes) -> 'UserConfig':
         return UserConfigConstruct.parse(data)
+
+    EXTRA_JSON_DATA = {
+        "__version": "7.1",
+        "__platform_id": 1
+    }
 
     @staticmethod
     def get_version() -> Tuple[int, int]:
@@ -697,9 +842,22 @@ class UserConfig:
         Ver 6.5 - Added device ID. 6/06/2023
         Ver 6.6 - Added CAN baudrate. 6/07/2023
         Ver 6.7 - Removed WheelSensorType::TICK_RATE enum. 9/25/2023
+        Ver 6.8 - Removed comm_interfaces.ui and added udp_clients. 1/8/2024
+        Ver 6.9 - Removed diagnostic log from comm_interfaces.file_output and UI websocket from comm_interfaces.websocket_servers. 2/6/2024
+        Ver 6.10 - Added UNIX domain socket support (not currently enabled for any platforms). 5/17/2024
+        Ver 7.0 - Combined UDP and TCP client/server configuration to match UNIX sockets. 5/30/2024
+        Ver 7.1 - Changing profiler enable value to enable_mask. 6/26/2024
 
         """
-        return 6, 7
+        return 7, 1
+
+    @staticmethod
+    def get_platform_id() -> int:
+        return 1
+
+    @staticmethod
+    def get_serialized_size() -> int:
+        return UserConfigConstruct.sizeof()
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'UserConfig':
@@ -707,16 +865,20 @@ class UserConfig:
         config.update(data)
         return config
 
-    def update(self, other, merge_list_elements: bool = False) -> None:
-        update_dataclass_contents(self, other, merge_list_elements)
+    def update(self, other) -> Dict[str, Any]:
+        """!
+        See update_dataclass_contents()
+        """
+        return update_dataclass_contents(self, other)
 
-    def to_dict(self) ->  Dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         return prepare_dataclass_for_json(self)
 
     def to_json(self) -> str:
         dict_contents = self.to_dict()
-        dict_contents['__version'] = "6.7"
+        dict_contents.update(self.EXTRA_JSON_DATA)
         return json.dumps(dict_contents, indent=2, sort_keys=True)
+
 
 _UserConfigRawConstruct = Struct(
     "profiling" / ProfilingConfigConstruct,
@@ -725,8 +887,7 @@ _UserConfigRawConstruct = Struct(
     "navigation" / NavigationConfigConstruct,
     "comm_interfaces" / CommInterfacesConfigConstruct,
     "system_controls" / SystemControlConfigConstruct,
-    Padding(248),
-    Padding(224)
+    Padding(6464),
+    Padding(1136)
 )
 UserConfigConstruct = DataClassAdapter(UserConfig, _UserConfigRawConstruct)
-

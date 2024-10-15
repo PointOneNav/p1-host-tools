@@ -6,9 +6,11 @@ import sys
 from datetime import datetime
 
 from construct import *
-
-from fusion_engine_client.utils.argument_parser import ArgumentParser, CSVAction, ExtendedBooleanAction
-from fusion_engine_client.parsers.decoder import FusionEngineDecoder, MessagePayload
+from fusion_engine_client.parsers.decoder import (FusionEngineDecoder,
+                                                  MessagePayload)
+from fusion_engine_client.utils.argument_parser import (ArgumentParser,
+                                                        CSVAction,
+                                                        ExtendedBooleanAction)
 from fusion_engine_client.utils.log import DEFAULT_LOG_BASE_DIR, find_log_file
 
 # Add the parent directory to the search path to enable p1_runner package imports when not installed in Python.
@@ -16,9 +18,9 @@ repo_root = os.path.normpath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(repo_root)
 
 from p1_runner import trace as logging
-from p1_runner.p1bin_type import find_matching_p1bin_types
 from p1_runner.nmea_framer import NMEAFramer
 from p1_runner.p1bin_reader import P1BinFileStream, P1BinType
+from p1_runner.p1bin_type import find_matching_p1bin_types
 from p1_runner.rtcm_framer import RTCMFramer
 
 _logger = logging.getLogger('point_one.raw_analysis')
@@ -28,8 +30,10 @@ READ_SIZE = 1024
 FORMAT_STRS = set(('fe', 'nmea', 'rtcm'))
 EOF_FORMAT = 'eof'
 
+
 def is_msm_id(msg_id):
     return msg_id == 1005 or msg_id == 1006 or (msg_id >= 1071 and msg_id <= 1227)
+
 
 def get_output_file_path(input_path, postfix, output_dir=None, prefix=None):
     if output_dir is None:
@@ -42,7 +46,8 @@ def get_output_file_path(input_path, postfix, output_dir=None, prefix=None):
 def get_fd(input_path: str, options):
     if input_path.endswith('.p1bin'):
         _logger.info(f"Reading raw data from p1bin {options.p1bin_type}.")
-        return P1BinFileStream(input_path, options.p1bin_type, ignore_index=options.ignore_index, show_read_progress=True)
+        return P1BinFileStream(input_path, options.p1bin_type, ignore_index=options.ignore_index,
+                               show_read_progress=True)
     else:
         return open(input_path, 'rb')
 
@@ -71,7 +76,8 @@ def index_messages(input_path, options):
 
     if len(options.format) < len(FORMAT_STRS):
         index_file = get_output_file_path(
-            input_path, '_' + '_'.join(options.format) + '_index.csv', output_dir=options.output_dir, prefix=options.prefix)
+            input_path, '_' + '_'.join(options.format) + '_index.csv', output_dir=options.output_dir,
+            prefix=options.prefix)
     else:
         index_file = index_file_full
 
@@ -81,9 +87,16 @@ def index_messages(input_path, options):
         for index_file_to_load in index_files_to_load:
             if os.path.exists(index_file_to_load):
                 index = load_index(index_file_to_load)
+
                 # Check if index was generated for same datafile.
-                eof_index = index[-1]
-                if eof_index[0] == EOF_FORMAT:
+                #
+                # The index file should always have an EOF marker. If it does not, we might have run into an error while
+                # generating it.
+                eof_index = index[-1] if len(index) > 0 else None
+                if eof_index is None or eof_index[0] != EOF_FORMAT:
+                    _logger.warning(
+                        f'Index file "{index_file_to_load}" missing EOF entry, skipping load.')
+                else:
                     if eof_index[2] != bytes_to_process:
                         _logger.info(
                             f'Index file "{index_file_to_load}" was generated for different input data, skipping load.')
@@ -91,9 +104,6 @@ def index_messages(input_path, options):
                         _logger.info(
                             f'Using existing index "{index_file_to_load}".')
                         return index
-                else:
-                    _logger.info(
-                        f'Index file "{index_file_to_load}" missing EOF entry, skipping load.')
 
     _logger.info(f"Indexing raw input.")
 
@@ -203,8 +213,9 @@ def generate_separated_logs(input_path, indexes, options):
                     if current_base_id != -1:
                         output_map['rtcm'].close()
                         rtcm_file_idx += 1
-                        output_map['rtcm'] = open(get_output_file_path(input_path, f'_{rtcm_file_idx}.rtcm3',
-                                                                    output_dir=options.output_dir, prefix=options.prefix), 'wb')
+                        output_map['rtcm'] = open(get_output_file_path(
+                            input_path, f'_{rtcm_file_idx}.rtcm3',
+                            output_dir=options.output_dir, prefix=options.prefix), 'wb')
                     _logger.info(f"Writing for base station id: {base_id}")
 
                 current_base_id = base_id
@@ -234,9 +245,9 @@ parser.add_argument('-p', '--prefix', type=str,
                     "filename of the input data file.")
 parser.add_argument(
     '-t', '--p1bin-type', type=str, action='append',
-    help="An optional list message types to analyse from a p1bin file. Defaults to 'EXTERNAL_UNFRAMED_GNSS'. Only used if the "
-         "raw log is a *.p1bin file. May be specified multiple times (-m DEBUG -m EXTERNAL_UNFRAMED_GNSS), or as a "
-         "comma-separated list (-m DEBUG,EXTERNAL_UNFRAMED_GNSS). All matches are case-insensitive.\n"
+    help="An optional list message types to analyse from a p1bin file. Defaults to 'EXTERNAL_UNFRAMED_GNSS'. Only used "
+         "if the raw log is a *.p1bin file. May be specified multiple times (-m DEBUG -m EXTERNAL_UNFRAMED_GNSS), or "
+         "as a comma-separated list (-m DEBUG,EXTERNAL_UNFRAMED_GNSS). All matches are case-insensitive.\n"
          "\n"
          "If a partial name is specified, the best match will be returned. Use the wildcard '*' to match multiple "
          "message types.\n"

@@ -1,19 +1,20 @@
-from datetime import datetime, timezone
-from enum import IntEnum
 import math
 import os
 import threading
 import traceback
+from datetime import datetime, timezone
+from enum import IntEnum
 
-from fusion_engine_client.parsers import FusionEngineEncoder, FusionEngineDecoder
+import serial
 from fusion_engine_client.messages import *
+from fusion_engine_client.parsers import (FusionEngineDecoder,
+                                          FusionEngineEncoder)
 from fusion_engine_client.utils.log import DEFAULT_LOG_BASE_DIR
 from gpstime import gpstime
 from pynmea2 import NMEASentence
-import serial
 
 from . import trace as logging
-from .find_serial_device import find_serial_device, PortType
+from .find_serial_device import PortType, find_serial_device
 from .log_manager import LogManager
 from .log_manifest import DeviceType
 from .nmea_framer import NMEAFramer
@@ -37,7 +38,7 @@ class P1Runner(threading.Thread):
 
     DEFAULT_DEVICE_ID = 'p1-lg69t'
 
-    def __init__(self, device_id=None, reset_type='hot', wait_for_reset=True,
+    def __init__(self, device_id=None, device_type=None, reset_type='hot', wait_for_reset=True,
                  device_port='auto', device_baudrate=460800,
                  corrections_port=None, corrections_baudrate=460800,
                  external_port=None, external_baudrate=4608000, external_output_path=None, external_corrections=False,
@@ -51,6 +52,8 @@ class P1Runner(threading.Thread):
 
         super().__init__(name='p1_%s' % device_id)
 
+        self.device_type = device_type
+
         self.reference_tcp_address = reference_tcp_address
         self.reference_generator = None
         self.reference_filename = 'reference.csv' if reference_format == 'csv' else 'reference.p1log'
@@ -63,7 +66,8 @@ class P1Runner(threading.Thread):
                 files.append(external_output_path)
             logs_base_dir = os.path.expanduser(logs_base_dir)
             self.log_manager = LogManager(
-                device_id=device_id, logs_base_dir=logs_base_dir, files=files, log_extension="." + log_format,
+                device_id=device_id, device_type=self.device_type,
+                logs_base_dir=logs_base_dir, files=files, log_extension="." + log_format,
                 log_created_cmd=log_created_cmd, log_timestamps=log_timestamps)
 
             if log_format == 'nmea' or log_format == 'p1log':
@@ -102,10 +106,11 @@ class P1Runner(threading.Thread):
             self.corrections_serial.port = corrections_port
 
         self.ntrip_client = None
+        self.ntrip_aux_client = None
         self.ntrip_position_override = None
         self.last_ntrip_position_update = None
-        self.nmea_framer = NMEAFramer()
 
+        self.nmea_framer = NMEAFramer()
         self.rtcm_framer = RTCMFramer()
 
         self.rtt_mode = rtt_mode
@@ -220,6 +225,10 @@ class P1Runner(threading.Thread):
             self.logger.debug('Starting NTRIP corrections stream.')
             self.ntrip_client.start()
 
+        if self.ntrip_aux_client is not None:
+            self.logger.debug('Starting aux NTRIP corrections stream.')
+            self.ntrip_aux_client.start()
+
         if self.state == State.RESET_COMPLETE:
             self.logger.debug('Device reset disabled. Data will be recorded immediately.')
 
@@ -265,6 +274,9 @@ class P1Runner(threading.Thread):
             if self.ntrip_client is not None:
                 self.ntrip_client.stop()
 
+            if self.ntrip_aux_client is not None:
+                self.ntrip_aux_client.stop()
+
             if self.rtt_client is not None:
                 self.rtt_client.stop()
 
@@ -284,6 +296,8 @@ class P1Runner(threading.Thread):
             self.output_server.join()
         if self.ntrip_client is not None:
             self.ntrip_client.join(timeout)
+        if self.ntrip_aux_client is not None:
+            self.ntrip_aux_client.join(timeout)
         if self.rtt_client is not None:
             self.rtt_client.join(timeout)
         if self.log_manager is not None:
@@ -295,24 +309,32 @@ class P1Runner(threading.Thread):
         if self.corrections_serial.is_open:
             self.corrections_serial.close()
 
-    def connect_to_ntrip(self, url=None, mountpoint=None, username=None, password=None, version=2):
-        if self.ntrip_client is not None:
-            self.ntrip_client.stop()
-            self.ntrip_client.join()
+    def connect_to_ntrip(self, url=None, mountpoint=None, username=None, password=None, version=2,
+                         stream='primary'):
+        client_name = 'ntrip_aux_client' if stream == 'aux' else 'ntrip_client'
 
-        self.logger.debug('Configuring NTRIP corrections stream. [url=%s, ntrip_version=%d, mountpoint=%s]' %
-                          (url, version, mountpoint))
-        self.ntrip_client = NTRIPClient(url=url, mountpoint=mountpoint, username=username, password=password,
-                                        data_callback=self._on_corrections, version=version)
+        client = self.__dict__[client_name]
+        if client is not None:
+            client.stop()
+            client.join()
+
+        self.logger.debug('Configuring %s NTRIP corrections stream. [url=%s, ntrip_version=%d, mountpoint=%s]' %
+                          ('aux' if stream == 'aux' else '', url, version, mountpoint))
+        client = NTRIPClient(url=url, mountpoint=mountpoint, username=username, password=password,
+                             data_callback=self._on_corrections, version=version)
+        self.__dict__[client_name] = client
+
         if self.is_alive():
-            self.ntrip_client.start()
+            client.start()
 
     def set_ntrip_position_override(self, lla_deg):
         self.logger.debug('Overriding NTRIP position. [%.8f, %.8f, %.2f]' % tuple(lla_deg))
         self.ntrip_position_override = lla_deg
         if self.ntrip_client is not None and self.ntrip_client.is_connected():
-            if self.ntrip_client.send_position(self.ntrip_position_override):
-                self.last_ntrip_position_update = datetime.now(tz=timezone.utc)
+            self.ntrip_client.send_position(self.ntrip_position_override)
+        if self.ntrip_aux_client is not None and self.ntrip_aux_client.is_connected():
+            self.ntrip_aux_client.send_position(self.ntrip_position_override)
+        self.last_ntrip_position_update = datetime.now(tz=timezone.utc)
 
     def run(self):
         while not self.shutdown_pending.is_set():
@@ -438,7 +460,7 @@ class P1Runner(threading.Thread):
                 if self.nmea_positions_received > 10 and self.fe_positions_received == 0:
                     now = datetime.now(tz=timezone.utc)
                     if (self.last_missing_fe_warning_time is None or
-                        (now - self.last_missing_fe_warning_time).total_seconds() >= 30.0):
+                            (now - self.last_missing_fe_warning_time).total_seconds() >= 30.0):
                         self.logger.warning("""
 ////////////////////////////////////////////////////////////////////////////////
 FusionEngine data not detected on %s.
@@ -540,18 +562,30 @@ Are you using the correct UART/COM port (--device-port)?
         else:
             self.logger.debug(output_str)
 
+        self._send_ntrip_position_update(response_payload)
+
+    def _send_ntrip_position_update(self, pose_message: PoseMessage):
+        if self.ntrip_position_override is not None:
+            lla_deg = self.ntrip_position_override
+        elif pose_message.solution_type != SolutionType.Invalid:
+            lla_deg = pose_message.lla_deg
+        else:
+            return
+
+        if ((self.ntrip_client is None or not self.ntrip_client.is_connected()) and
+                (self.ntrip_aux_client is None or not self.ntrip_aux_client.is_connected())):
+            return
+
         # Forward the position to the NTRIP server every 60 seconds.
-        if (self.ntrip_client is not None and
-            (response_payload.solution_type != SolutionType.Invalid or self.ntrip_position_override is not None)):
-            now = datetime.now(tz=timezone.utc)
-            if (self.last_ntrip_position_update is None or
+        now = datetime.now(tz=timezone.utc)
+        if (self.last_ntrip_position_update is None or
                 (now - self.last_ntrip_position_update).total_seconds() >= 60.0):
-                if self.ntrip_position_override is not None:
-                    if self.ntrip_client.send_position(self.ntrip_position_override):
-                        self.last_ntrip_position_update = now
-                else:
-                    if self.ntrip_client.send_position(response_payload.lla_deg):
-                        self.last_ntrip_position_update = now
+            if self.ntrip_client is not None:
+                self.ntrip_client.send_position(lla_deg)
+            if self.ntrip_aux_client is not None:
+                self.ntrip_aux_client.send_position(lla_deg)
+
+            self.last_ntrip_position_update = now
 
     def _handle_cmd_response(self, header: MessageHeader, response_payload: CommandResponseMessage, *args):
         if response_payload.response == Response.OK:
@@ -568,7 +602,7 @@ Are you using the correct UART/COM port (--device-port)?
         self.logger.info(
             'Calibration: stage=%s, gyro=%.1f%%, accel=%.1f%%, mounting_angles=%.1f%%' %
             (str(status.calibration_stage), status.gyro_bias_percent_complete, status.accel_bias_percent_complete,
-            status.mounting_angle_percent_complete))
+             status.mounting_angle_percent_complete))
         self.logger.info(
             '           : ypr=(%.1f, %.1f, %.1f) deg, ypr_std=(%.1f, %.1f, %.1f) deg, dist=%.1f km' %
             (*status.ypr_deg, *status.ypr_std_dev_deg, status.travel_distance_m * 1e-3))
@@ -580,19 +614,24 @@ Are you using the correct UART/COM port (--device-port)?
         sw_version = version.engine_version_str
         self.logger.info('Detected FusionEngine software version: %s', sw_version)
 
-        if sw_version.startswith('lg69t-ap'):
-            device_type = DeviceType.LG69T_AP
-        elif sw_version.startswith('lg69t-am'):
-            device_type = DeviceType.LG69T_AM
-        elif sw_version.startswith('lg69t-ah'):
-            device_type = DeviceType.LG69T_AH
-        else:
-            device_type = DeviceType.UNKNOWN
-            self.logger.warning('Could not deduce device type from version string.')
+        if self.device_type is None:
+            if sw_version.startswith('lg69t-ap'):
+                device_type = DeviceType.LG69T_AP
+            elif sw_version.startswith('lg69t-am'):
+                device_type = DeviceType.LG69T_AM
+            elif sw_version.startswith('lg69t-ah'):
+                device_type = DeviceType.LG69T_AH
+            elif sw_version.startswith('ssr'):
+                device_type = DeviceType.SSR_LG69T
+            else:
+                device_type = DeviceType.UNKNOWN
+                self.logger.warning('Could not deduce device type from version string.')
+
+            self.device_type = device_type
 
         if self.log_manager is not None:
             self.log_manager.update_manifest([
-                ('device_type', device_type),
+                ('device_type', self.device_type),
                 ('sw_version', sw_version),
             ])
 

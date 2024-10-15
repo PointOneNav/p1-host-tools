@@ -1,6 +1,7 @@
+import logging
+
 from p1_runner.rtcm_framer import *
 
-import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logging.getLogger('point_one').setLevel(logging.TRACE)
 
@@ -65,6 +66,7 @@ def test_frame_single_message():
     input = P1_RESET_MESSAGE
     framer = RTCMFramer()
     count = [0,]
+
     def _callback(result):
         assert result.header.message_id == 4050
         count[0] += 1
@@ -129,17 +131,17 @@ def test_frame_checksum_failure():
 
 
 def test_lossless_resync():
-  # Test decoding messages with sync bytes in between.
-  input = P1_RESET_MESSAGE + b'\xD3' + P1_RESET_MESSAGE + \
-      b'\xD3\xD3' + P1_RESET_MESSAGE + bytes(1024)
-  framer = RTCMFramer()
-  results = framer.on_data(input)
-  assert len(results) == 3
+    # Test decoding messages with sync bytes in between.
+    input = P1_RESET_MESSAGE + b'\xD3' + P1_RESET_MESSAGE + \
+        b'\xD3\xD3' + P1_RESET_MESSAGE + bytes(1024)
+    framer = RTCMFramer()
+    results = framer.on_data(input)
+    assert len(results) == 3
 
-  # Test decoding messages with checksum error in between.
-  input = bytearray(P1_RESET_MESSAGE + P1_RESET_MESSAGE)
-  input[-2] = 0x00
-  input += P1_RESET_MESSAGE + bytes(1024)
-  framer = RTCMFramer()
-  results = framer.on_data(input)
-  assert len(results) == 2
+    # Test decoding messages with checksum error in between.
+    input = bytearray(P1_RESET_MESSAGE + P1_RESET_MESSAGE)
+    input[-2] = 0x00
+    input += P1_RESET_MESSAGE + bytes(1024)
+    framer = RTCMFramer()
+    results = framer.on_data(input)
+    assert len(results) == 2

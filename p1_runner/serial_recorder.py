@@ -1,6 +1,6 @@
-from datetime import datetime, timezone, timedelta
 import threading
 import traceback
+from datetime import datetime, timedelta, timezone
 
 import serial
 

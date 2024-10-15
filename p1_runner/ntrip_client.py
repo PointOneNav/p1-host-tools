@@ -1,16 +1,16 @@
 import asyncio
-from datetime import datetime, timezone
-from functools import reduce
 import math
 import operator
 import ssl
 import threading
 import time
 import traceback
-from urllib3.util import parse_url
+from datetime import datetime, timezone
+from functools import reduce
 
 import ntripstreams
 from serial import SerialException
+from urllib3.util import parse_url
 
 from . import trace as logging
 
