@@ -88,7 +88,7 @@ jobs:
           mkdir -p ${{ env.RELEASE_DIR }}
           mkdir -p ${{ env.RELEASE_DIR }}/bin
           mkdir -p ${{ env.RELEASE_DIR }}/p1_runner
-          mkdir -p ${{ env.RELEASE_DIR }}/user_config_loader
+          mkdir -p ${{ env.RELEASE_DIR }}/user_config_loaders
 
       - name: Copy in p1_runner
         run: |
@@ -97,7 +97,7 @@ jobs:
           cp -r requirements.txt ${{ env.RELEASE_DIR }}/
           cp -r setup.py ${{ env.RELEASE_DIR }}/
           cp -r p1_runner/*.py ${{ env.RELEASE_DIR }}/p1_runner/
-          cp -r user_config_loader/*.py ${{ env.RELEASE_DIR }}/user_config_loader/
+          cp --parents `find user_config_loaders/ -name \*.py` ${{ env.RELEASE_DIR }}/user_config_loaders/
           cp -r bin/*.py ${{ env.RELEASE_DIR }}/bin/
 
       - name: Display List of Downloaded Structures
