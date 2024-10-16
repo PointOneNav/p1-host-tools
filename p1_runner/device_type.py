@@ -1,6 +1,7 @@
+import re
 from enum import Enum, auto
 from typing import Optional
-import re
+
 
 class DeviceType(Enum):
     UNKNOWN = auto()

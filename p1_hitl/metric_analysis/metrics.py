@@ -115,7 +115,7 @@ class Timestamp:
     p1_time: Optional[float]
     system_time: Optional[float]
 
-    def get_max_elapsed(self, previous_time: 'Timestamp', time_source: TimeSource) -> float:
+    def get_max_elapsed(self, previous_time: 'Timestamp', time_source: TimeSource) -> Optional[float]:
         '''!
         Gets the time that elapsed "self - previous_time".
 
@@ -127,12 +127,13 @@ class Timestamp:
         @param previous_time - The previous timestamp to get the elapsed time from
         @param time_source - Which time sources should be considered for the comparison. See @ref TimeSource.
 
-        @return The elapsed time in seconds. Returns `0` if one or both of the timestamps had no valid data for the
+        @return The elapsed time in seconds. Returns `None` if one or both of the timestamps had no valid data for the
                 specified time source.
         '''
-        elapsed = 0
+        elapsed = None
 
-        def _update_max_elapsed(a, b, cur_max_elapsed) -> float:
+        def _update_max_elapsed(a: Optional[float], b: Optional[float],
+                                cur_max_elapsed: Optional[float]) -> Optional[float]:
             if a is not None and b is not None:
                 new_elapsed = a - b
                 if cur_max_elapsed is None or new_elapsed > cur_max_elapsed:
@@ -221,12 +222,13 @@ class MetricController:
                     cls._start_time.system_time = system_time
 
         # Only log host times when update_host_time() is being called.
-        if cls._current_time.host_time is not None and cls._log_dir is not None and cls._log_msg_times:
+        elapsed = cls._current_time.get_max_elapsed(cls._start_time, TimeSource.HOST)
+        if elapsed is not None and cls._log_dir is not None and cls._log_msg_times:
             if cls._time_log_fd is None:
                 file_path = cls._log_dir / MSG_TIME_LOG_FILENAME
                 cls._time_log_fd = open(file_path, 'wb')
 
-            test_time_millis = round(cls._current_time.get_max_elapsed(cls._start_time, TimeSource.HOST) * 1000.0)
+            test_time_millis = round(elapsed * 1000.0)
             cls._time_log_fd.write(struct.pack(_MSG_TIME_LOG_FORMAT, test_time_millis, header.sequence_number))
 
         # Check metrics triggered by elapsed device time.
@@ -359,11 +361,10 @@ class MetricBase:
             if self._log_fd is None:
                 file_path = MetricController._log_dir / (self.name + '.bin')
                 self._log_fd = open(file_path, 'wb')
-
-            test_time_millis = round(
-                MetricController._current_time.get_max_elapsed(
-                    MetricController._start_time,
-                    TimeSource.ANY) * 1000.0)
+            elapsed = MetricController._current_time.get_max_elapsed(
+                MetricController._start_time,
+                TimeSource.ANY)
+            test_time_millis = 0 if elapsed is None else round(elapsed * 1000.0)
             self._log_fd.write(struct.pack(_METRIC_LOG_FORMAT, test_time_millis, value))
 
     def _update_status(self, value: float, is_failure: bool, context=None):
@@ -462,6 +463,8 @@ class MaxElapsedTimeMetric(MetricBase):
         elapsed = None
         if isinstance(self.__last_time, Timestamp):
             elapsed = MetricController._current_time.get_max_elapsed(self.__last_time, self.time_source)
+            if elapsed is None:
+                return None
             # Failures are updated in _time_elapsed() function.
             self._update_status(elapsed, False)
         self.__last_time = MetricController._current_time
@@ -471,10 +474,14 @@ class MaxElapsedTimeMetric(MetricBase):
         if isinstance(self.__last_time, Timestamp):
             if self.max_time_between_checks_sec is not None:
                 elapsed = MetricController._current_time.get_max_elapsed(self.__last_time, self.time_source)
+                if elapsed is None:
+                    return
                 self._update_failure(elapsed > self.max_time_between_checks_sec, 'max_time_between_checks')
         else:
             if self.max_time_to_first_check_sec is not None:
                 elapsed = MetricController._current_time.get_max_elapsed(MetricController._start_time, self.time_source)
+                if elapsed is None:
+                    return
                 self._update_failure(elapsed > self.max_time_to_first_check_sec, 'max_time_to_first_check')
 
 
