@@ -74,21 +74,22 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs, output_dir: 
     try:
         params = env_args.HITL_TEST_TYPE.get_test_params()
         analyzers = _setup_analysis(env_args, output_dir, log_metric_values)
-        start_time = time.time()
+        start_time = time.monotonic()
         logger.info(f'Monitoring device for {params.duration_sec} sec.')
         msg_count = 0
-        last_logger_update = time.time()
-        while time.time() - start_time < params.duration_sec:
+        last_logger_update = time.monotonic()
+        while time.monotonic() - start_time < params.duration_sec:
             try:
                 msgs = interface.wait_for_any_fe_message(response_timeout=0.1)
             except Exception as e:
                 logger.error(f'Exception collecting FusionEngine messages from device {exception_to_str(e)}')
                 return False
             MetricController.update_host_time()
-            if time.time() - last_logger_update > LOGGER_UPDATE_INTERVAL_SEC:
-                elapsed = time.time() - start_time
+            now = time.monotonic()
+            if now - last_logger_update > LOGGER_UPDATE_INTERVAL_SEC:
+                elapsed = now - start_time
                 logger.info(f'{round(elapsed)}/{params.duration_sec} elapsed. {msg_count} messages from device.')
-                last_logger_update = time.time()
+                last_logger_update = now
 
             for msg in msgs:
                 msg_count += 1
@@ -124,21 +125,22 @@ def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs,
             file_size = in_fd.tell()
             in_fd.seek(0, io.SEEK_SET)
 
-            start_time = time.time()
+            start_time = time.monotonic()
             logger.info(f'Playing back {playback_path} ({file_size/1024/1024} MB).')
             msg_count = 0
-            last_logger_update = time.time()
+            last_logger_update = time.monotonic()
 
             for chunk in iter(lambda: in_fd.read(PLAYBACK_READ_SIZE), b''):
                 msgs: List[MessageWithBytesTuple] = fe_decoder.on_data(chunk)  # type: ignore
-                if time.time() - last_logger_update > LOGGER_UPDATE_INTERVAL_SEC:
-                    elapsed_sec = time.time() - start_time
+                now = time.monotonic()
+                if now - last_logger_update > LOGGER_UPDATE_INTERVAL_SEC:
+                    elapsed_sec = now - start_time
                     total_bytes_read = in_fd.tell()
                     logger.log(logging.INFO,
                                'Processed %d/%d bytes (%.1f%%). msg_count: %d. [elapsed=%.1f sec, rate=%.1f MB/s]' %
                                (total_bytes_read, file_size, 100.0 * float(total_bytes_read) / file_size, msg_count,
                                 elapsed_sec, total_bytes_read / elapsed_sec / 1e6))
-                    last_logger_update = time.time()
+                    last_logger_update = now
 
                 for msg in msgs:
                     msg_count += 1

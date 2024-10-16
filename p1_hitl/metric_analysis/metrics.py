@@ -1,13 +1,51 @@
 '''!
 Framework for specifying HITL Metrics
 
-Top level design:
+# Top level design
   MetricController - is used to manage the global controls and state of the test being performed.
   Check classes - These checks are declared in analysis code to specify the testing requirements. These are akin to
                   asserts in a unit test.
 
+# Time Stamping
+
+There are 3 time bases:
+
+host - The monotonic time of the host running the metrics analysis when the last FE message was received. This is only
+       intended to be set if the metrics are being evaluated in realtime and not from an existing file log.
+p1 - The P1Time associated with a message received from the device. This is a monotonically increasing value that is
+     kept rate locked to GPS time when possible.
+system - The system timestamp associated with a message received from the device. Typically, this is the underlying OS
+         or MCU clock. It has no defined relationship to any other time base.
+
+The current time is the set of the host time the latest FE message was received, the device timestamps from the latest
+message, and the last timestamp received for any time bases that aren't updated. This means that for messages with a
+P1Time, the system time will be lagging behind.
+
+Metrics and logs check the "elapsed time" from these time sources. Currently, no effort is made to map between the,
+source types. The elapsed time is found by taking the max from comparing the time elapsed for each type. This can be
+limited to only consider a subset of the time bases.
+
+For example to find the max elapsed device time between pose messages, we might have a situation like:
+
+```
+system message @ system time 1.0
+pose message @ p1time 100.1 -> Use this start time (elapsed time is 0)
+system message @ system time 1.5 -> Only system device time is updated so elapsed time is 0.5
+system message @ system time 1.9 -> elapsed time is 0.9
+pose message @ p1time 101.1 -> since p1time difference now exceeds system time, elapsed time is 1.0
+```
+
+The purpose of calculating the elapsed time this way is to have a fallback if there's a gap of messages with the
+expected timestamp from the device.
+
+# Runtime Metric Configuration
+
 The check classes are expected to be customized at runtime based on the HitlEnvArgs and the TestParams derived from the
 TestType.
+
+To be consistent in when this is being performed, files that declare metrics should add a callback to @ref
+MetricController.register_environment_config_customizations() that implement the logic to update values based on the
+environment.
 '''
 
 import inspect
@@ -152,7 +190,7 @@ class MetricController:
         This is used to set any checks that rely on a host TimeSource.
         This should only be called for realtime operation, and not called if playing back a log file.
         '''
-        cls._current_time.host_time = time.time()
+        cls._current_time.host_time = time.monotonic()
         if cls._start_time.host_time is None:
             cls._start_time.host_time = cls._current_time.host_time
 

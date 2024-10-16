@@ -68,9 +68,9 @@ class AtlasInterface(DeviceInterfaceBase):
             logger.info(f'Updating Atlas {status.name} to target release.')
             balena_ctrl.pin_release(config.balena.uuid, target_release.id)
 
-            start_time = time.time()
+            start_time = time.monotonic()
             while True:
-                if time.time() > start_time + UPDATE_TIMEOUT_SEC:
+                if time.monotonic() > start_time + UPDATE_TIMEOUT_SEC:
                     logger.error(f'Atlas {balena_status.name} update timed out after {UPDATE_TIMEOUT_SEC} seconds.')
                     return None
                 balena_status = balena_ctrl.get_status(config.balena.uuid)
