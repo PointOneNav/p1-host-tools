@@ -8,6 +8,8 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import Type
 
+import construct # For ignoring wrapper class in DeepDiff
+from deepdiff import DeepDiff
 from fusion_engine_client.messages.configuration import (
     ConfigurationSource, DataType, DataVersion, PlatformStorageDataMessage,
     Response)
@@ -167,18 +169,32 @@ def main():
 
     # Convert to binary or JSON and write the result to disk.
     if direction == ConversionDirection.TO_BINARY:
-        user_config = UserConfig()
-        # This only checks for "extra" fields in the loaded JSON. To check for missed fields, we'd need to do a deepdiff
-        # between the loaded input JSON, and the dict generated from the UserConfig object.
-        unused = user_config.update(json_data)
-        # Ignore metadata fields
-        unused = {k: v for k, v in unused.items() if not k.startswith('__')}
-        if len(unused) > 0:
-            logger.error(f'Some JSON keys found in input file do not correspond with known UserConfig fields: {unused}')
+        loaded_config_data = {k: v for k, v in json_data.items() if not k.startswith('__')}
+        try:
+            user_config = UserConfig.from_dict(loaded_config_data)
+        except Exception as e:
+            logger.error(f'Error parsing {in_file}: {e}')
+            sys.exit(1)
+        full_config_data = user_config.to_dict()
+        conf_diff = DeepDiff(
+            full_config_data,
+            loaded_config_data,
+            ignore_nan_inequality=True,
+            ignore_numeric_type_changes=True,
+            math_epsilon=0.00001,
+            ignore_type_in_groups=[(list, construct.lib.ListContainer)],
+        )
+
+        if len(conf_diff) > 0:
+            logger.error(f'The fields in {in_file} do not match full set used by UserConfig:\n{conf_diff.pretty()}')
             sys.exit(1)
         else:
             encoder = FusionEngineEncoder()
-            config_data = UserConfig.serialize(user_config)
+            try:
+                config_data = UserConfig.serialize(user_config)
+            except Exception as e:
+                logger.error(f'JSON to binary conversion failed: {e}')
+                sys.exit(1)
             storage_message = PlatformStorageDataMessage()
             major, minor = [int(i) for i in version_str.split('.')]
             storage_message.data_version = DataVersion(major, minor)

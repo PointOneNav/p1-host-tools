@@ -9,6 +9,7 @@ requirements = [
     "argparse-formatter>=1.4",
     "colorama>=0.4.4",
     "construct~=2.10.67",
+    "deepdiff>=8.0.1",
     "fusion-engine-client==1.23.6rc2",
     "psutil>=5.9.4",
     "pynmea2~=1.18.0",

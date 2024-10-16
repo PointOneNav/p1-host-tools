@@ -359,7 +359,12 @@ def update_dataclass_contents(data_class, values: Dict[str, Any]) -> Dict[str, A
                     setattr(data_class, k, loaded_values)
 
             else:
-                setattr(data_class, k, _interpret_value(field.type, values[k]))
+                try:
+                    setattr(data_class, k, _interpret_value(field.type, values[k]))
+                except KeyError as e:
+                    raise TypeError(
+                        f"'{values[k]}' is not a valid value for field named '{k}' of type {field.type}."
+                    )
 
     return unused
 
