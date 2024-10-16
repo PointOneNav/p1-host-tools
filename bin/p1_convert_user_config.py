@@ -19,7 +19,7 @@ repo_root = Path(os.path.dirname(__file__)).parent.absolute()
 sys.path.append(str(repo_root))
 
 from p1_runner import trace as logging
-from p1_runner.argument_parser import ArgumentParser
+from p1_runner.argument_parser import ArgumentParser, ExtendedBooleanAction
 # Example version imported just to help with type checking. The version of the class for interacting with UserConfig
 # data will be loaded below with the appropriate platform type and config version based on the input file.
 from user_config_loaders.platform_id_1.version_7_1.user_config_loader.user_config_loader import \
@@ -31,6 +31,16 @@ logger = logging.getLogger('point_one.p1_convert_user_config')
 class ConversionDirection(Enum):
     TO_JSON = auto()
     TO_BINARY = auto()
+
+
+def check_output(out_file: Path, options):
+    if out_file.exists():
+        if options.force:
+            logger.info(f'Overwriting existing output path ({out_file}).')
+        else:
+            logger.error(
+                f'Output path ({out_file}) already exists. Aborting conversion. Rerun with `--force` CLI argument to overwrite.')
+            sys.exit(1)
 
 
 def main():
@@ -54,12 +64,16 @@ def main():
         type=Path,
         help="The path to the file to load. Must have extension '*.json' or '*.p1log'.")
     parser.add_argument(
-        '-o', '--out',
+        '-o', '--output',
         required=False,
         type=Path,
         help="Optional path to write the converted file to. Defaults to the parent directory of `in_file`. "
              "If this is a directory, the filename will be based on the input file with new extension. For "
              "example /in_dir/bar.json -> /out_file/bar.p1log.")
+    parser.add_argument(
+        '-f', '--force',
+        action=ExtendedBooleanAction,
+        help="Overwrite an existing file at the output path instead of aborting.")
 
     options = parser.parse_args()
 
@@ -75,10 +89,10 @@ def main():
 
     # For type hinting.
     in_file: Path = options.in_file
-    if options.out_file is None:
+    if options.output is None:
         out_file = in_file.parent
     else:
-        out_file: Path = options.out_file
+        out_file: Path = options.output
 
     if not in_file.exists():
         logger.error(f'Input file ({in_file}) not found.')
@@ -153,6 +167,8 @@ def main():
     # Convert to binary or JSON and write the result to disk.
     if direction == ConversionDirection.TO_BINARY:
         user_config = UserConfig()
+        # This only checks for "extra" fields in the loaded JSON. To check for missed fields, we'd need to do a deepdiff
+        # between the loaded input JSON, and the dict generated from the UserConfig object.
         unused = user_config.update(json_data)
         # Ignore metadata fields
         unused = {k: v for k, v in unused.items() if not k.startswith('__')}
@@ -172,12 +188,14 @@ def main():
             storage_message.data = config_data
             wrapped_data = encoder.encode_message(storage_message)
 
+            check_output(out_file, options)
             logger.info(f'Writing binary UserConfig to {out_file}.')
             with open(out_file, 'wb') as fd:
                 fd.write(wrapped_data)
     else:
         user_config = UserConfig.deserialize(payload.data)
         data = user_config.to_json()
+        check_output(out_file, options)
         logger.info(f'Writing JSON UserConfig to {out_file}.')
         with open(out_file, 'w') as fd:
             fd.write(data)
