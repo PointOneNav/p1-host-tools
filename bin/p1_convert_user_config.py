@@ -154,7 +154,8 @@ def main():
         f'platform_id_{platform_id}' / f'version_{version_str.replace(".", "_")}'
     if not user_config_dir.exists():
         logger.error(
-            f'The UserConfig support for platform ID {platform_id} and version {version_str} is not known ({user_config_dir} not found). A newer p1-host-tools release may have added support.')
+            f'The UserConfig support for platform ID {platform_id} and version {version_str} is not known'
+            f'({user_config_dir} not found). A newer p1-host-tools release may have added support.')
         sys.exit(1)
 
     logger.info(f'Loading UserConfig support for platform ID {platform_id} and version {version_str}.')
