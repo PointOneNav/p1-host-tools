@@ -50,6 +50,7 @@ environment.
 
 import inspect
 import logging
+import math
 import struct
 import time
 from collections.abc import Callable
@@ -122,7 +123,7 @@ class Timestamp:
         If multiple "types" of timestamps are applicable, find the elapsed time in each time base and take the greatest
         value.
 
-        Makes no attempt to map between time based, though that might be an approach for future improvements.
+        Makes no attempt to map between time bases, though that might be an approach for future improvements.
 
         @param previous_time - The previous timestamp to get the elapsed time from
         @param time_source - Which time sources should be considered for the comparison. See @ref TimeSource.
@@ -206,17 +207,23 @@ class MetricController:
         Update the global concept of current device time.
 
         This is used to set any checks that rely on a device TimeSource.
-        This should be called for each message decoded from the device.
+        This should be called for each message decoded from the device. This
+        will update the current time with any time bases available in this
+        message. Since most messages don't have timestamps for each timebase,
+        this means that one base may lag the other or that they may leapfrog.
+
+        See the comment at the top of the file on how time keeping is performed.
         '''
         header, payload, _ = msg
         if isinstance(payload, MessagePayload):
             p1_time = payload.get_p1_time()
-            if p1_time is not None:
+            # Note p1_time bool check validates if p1_time not None and not NaN.
+            if p1_time:
                 cls._current_time.p1_time = p1_time.seconds
                 if cls._start_time.p1_time is None:
                     cls._start_time.p1_time = p1_time.seconds
             system_time = payload.get_system_time_sec()
-            if system_time is not None:
+            if system_time is not None and not math.isnan(system_time):
                 cls._current_time.system_time = system_time
                 if cls._start_time.system_time is None:
                     cls._start_time.system_time = system_time
@@ -367,7 +374,7 @@ class MetricBase:
             test_time_millis = 0 if elapsed is None else round(elapsed * 1000.0)
             self._log_fd.write(struct.pack(_METRIC_LOG_FORMAT, test_time_millis, value))
 
-    def _update_status(self, value: float, is_failure: bool, context=None):
+    def _update_status(self, value: float, is_failure: bool, context: Optional[str] = None):
         '''!
         Log the value and the failure state as needed.
 
@@ -528,6 +535,9 @@ class StatsMetric(MetricBase):
     __total_times_checked = 0
 
     def _initialize(self):
+        if self.min_values_for_cdf_check < 1:
+            raise ValueError(
+                f"min_values_for_cdf_check for metric {self.name} can't be {self.min_values_for_cdf_check} which is < 1.")
         thresholds = set(k.threshold for k in self.max_cdf_thresholds)
         thresholds.update(k.threshold for k in self.min_cdf_thresholds)
         for threshold in thresholds:
@@ -588,6 +598,11 @@ class PercentTrueMetric(MetricBase):
     # Count of total number of times this metric was checked.
     __total_times_checked = 0
 
+    def _initialize(self):
+        if self.min_values_for_check < 1:
+            raise ValueError(
+                f"min_values_for_check for metric {self.name} can't be {self.min_values_for_check} which is < 1.")
+
     def check(self, value: bool):
         if not self.is_disabled:
             if value:
@@ -617,13 +632,24 @@ class EqualValueMetric(MetricBase):
     Checks that a value always matches a specified value.
     '''
     threshold: float
+    '''!
+    The maximum allowed difference between a and b, relative to the larger absolute value of a or b. For example, to set
+    a tolerance of 5%, pass rel_tol=0.05. The default tolerance is 1e-09, which assures that the two values are the same
+    within about 9 decimal digits. rel_tol must be greater than zero. See:
+    https://docs.python.org/3/library/math.html#math.isclose
+    '''
+    rel_tol: float = 1e-09
+    '''! The minimum absolute tolerance, useful for comparisons near zero. abs_tol must be at least zero. See:
+    https://docs.python.org/3/library/math.html#math.isclose
+    '''
+    abs_tol: float = 0.0
 
     def check(self, value: float):
-        self._update_status(value, value != self.threshold)
+        self._update_status(value, not math.isclose(self, threshold, value, rel_tol=self.rel_tol, abs_tol=self.abs_tol))
 
 
 @dataclass
-class IsTrueMetric(MetricBase):
+class AlwaysTrueMetric(MetricBase):
     '''!
     Checks that a value is always `True`.
     '''

@@ -5,7 +5,7 @@ from fusion_engine_client.parsers.decoder import MessageWithBytesTuple
 from pymap3d import geodetic2ecef
 
 from p1_hitl.defs import HitlEnvArgs
-from p1_hitl.metric_analysis.metrics import (CdfThreshold, IsTrueMetric,
+from p1_hitl.metric_analysis.metrics import (AlwaysTrueMetric, CdfThreshold,
                                              MaxValueMetric, MetricController,
                                              PercentTrueMetric, StatsMetric)
 
@@ -19,7 +19,7 @@ metric_fix_rate = PercentTrueMetric(
     not_logged=True
 )
 
-metric_position_valid = IsTrueMetric(
+metric_position_valid = AlwaysTrueMetric(
     'position_valid',
     'All positions should be valid.',
     is_required=True,
