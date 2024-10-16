@@ -37,6 +37,7 @@ logger = logging.getLogger('point_one.hitl.runner')
 ENV_DUMP_FILE = 'env.json'
 BUILD_INFO_FILE = 'build-info.json'
 
+
 def main():
     parser = ArgumentParser()
     parser.add_argument(
@@ -54,10 +55,10 @@ def main():
         help="The base directory containing FusionEngine logs to be searched and written to.")
     parser.add_argument(
         '-p', '--playback-log', type=Path,
-        help="Rather then connect to a device, re-analyze a log instead.")
+        help="Rather than connect to a device, re-analyze a log instead.")
     parser.add_argument(
         '-e', '--env-file', type=Path,
-        help="Rather then load args from environment, use a JSON file.")
+        help="Rather than load args from environment, use a JSON file.")
     args = parser.parse_args()
 
     if args.verbose == 0:

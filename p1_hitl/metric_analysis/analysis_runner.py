@@ -85,11 +85,6 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs, output_dir: 
                 logger.error(f'Exception collecting FusionEngine messages from device {exception_to_str(e)}')
                 return False
             MetricController.update_host_time()
-            now = time.monotonic()
-            if now - last_logger_update > LOGGER_UPDATE_INTERVAL_SEC:
-                elapsed = now - start_time
-                logger.info(f'{round(elapsed)}/{params.duration_sec} elapsed. {msg_count} messages from device.')
-                last_logger_update = now
 
             for msg in msgs:
                 msg_count += 1
@@ -98,6 +93,12 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs, output_dir: 
                 metric_message_host_time_elapsed_test_stop.check()
                 for analyzer in analyzers:
                     analyzer.update(msg)
+
+            now = time.monotonic()
+            if now - last_logger_update > LOGGER_UPDATE_INTERVAL_SEC:
+                elapsed = now - start_time
+                logger.info(f'{round(elapsed)}/{params.duration_sec} elapsed. {msg_count} messages from device.')
+                last_logger_update = now
 
     except FatalMetricException:
         pass

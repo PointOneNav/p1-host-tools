@@ -191,6 +191,8 @@ class MetricController:
 
         This is used to set any checks that rely on a host TimeSource.
         This should only be called for realtime operation, and not called if playing back a log file.
+
+        See the comment at the top of the file on how time keeping is performed.
         '''
         cls._current_time.host_time = time.monotonic()
         if cls._start_time.host_time is None:
@@ -483,13 +485,15 @@ class MaxElapsedTimeMetric(MetricBase):
                 elapsed = MetricController._current_time.get_max_elapsed(self.__last_time, self.time_source)
                 if elapsed is None:
                     return
-                self._update_failure(elapsed > self.max_time_between_checks_sec, 'max_time_between_checks')
+                self._update_failure(elapsed > self.max_time_between_checks_sec,
+                                     f'time between checks: {elapsed} > {self.max_time_between_checks_sec}')
         else:
             if self.max_time_to_first_check_sec is not None:
                 elapsed = MetricController._current_time.get_max_elapsed(MetricController._start_time, self.time_source)
                 if elapsed is None:
                     return
-                self._update_failure(elapsed > self.max_time_to_first_check_sec, 'max_time_to_first_check')
+                self._update_failure(elapsed > self.max_time_to_first_check_sec,
+                                     f'time to first check: {elapsed} > {self.max_time_to_first_check_sec}')
 
 
 class CdfThreshold(NamedTuple):
@@ -547,9 +551,9 @@ class StatsMetric(MetricBase):
         if not self.is_disabled:
             context = None
             if self.max_threshold is not None and value > self.max_threshold:
-                context = f'{value}_above_max_threshold'
+                context = f'{value} > max threshold ({self.max_threshold})'
             elif self.min_threshold is not None and value < self.min_threshold:
-                context = f'{value}_below_min_threshold'
+                context = f'{value} < min threshold ({self.min_threshold})'
 
             failed = context is not None
 
@@ -575,12 +579,13 @@ class StatsMetric(MetricBase):
             for percentile, threshold in self.max_cdf_thresholds:
                 if threshold in empirical_percentiles:
                     if empirical_percentiles[threshold] < percentile:
-                        failures.append(f'{percentile}_percentile_above_{threshold}')
+                        failures.append(f'{percentile}th percentile ({empirical_percentiles[threshold]}) > {threshold}')
 
             for percentile, threshold in self.min_cdf_thresholds:
                 if threshold in empirical_percentiles:
                     if empirical_percentiles[threshold] > percentile:
-                        failures.append(f'{percentile}_percentile_below_{threshold}')
+                        failures.append(
+                            f'{percentile}th percentile ({empirical_percentiles[threshold] }) < {threshold}')
 
             if len(failures) > 0:
                 self._update_failure(True, ','.join(failures))
@@ -612,7 +617,7 @@ class PercentTrueMetric(MetricBase):
     def _finalize(self):
         if not self.is_disabled and self.__total_times_checked >= self.min_values_for_check:
             measured_percent = self.__true_count / self.__total_times_checked * 100.0
-            self._update_status(measured_percent, measured_percent < self.min_percent_true, True)
+            self._update_status(measured_percent, measured_percent < self.min_percent_true)
 
 
 @dataclass
@@ -645,7 +650,7 @@ class EqualValueMetric(MetricBase):
     abs_tol: float = 0.0
 
     def check(self, value: float):
-        self._update_status(value, not math.isclose(self, threshold, value, rel_tol=self.rel_tol, abs_tol=self.abs_tol))
+        self._update_status(value, not math.isclose(self.threshold, value, rel_tol=self.rel_tol, abs_tol=self.abs_tol))
 
 
 @dataclass
