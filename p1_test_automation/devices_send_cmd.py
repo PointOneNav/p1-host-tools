@@ -17,6 +17,7 @@ from p1_runner import trace as logging
 from p1_runner.argument_parser import (ArgumentParser, ExtendedBooleanAction,
                                        TriStateBooleanAction)
 from p1_runner.device_interface import DeviceInterface
+from p1_runner.exception_utils import exception_to_str
 from p1_test_automation.atlas_device_ctrl import (
     AtlasBalenaController, CrashLogAction, LoggingCmd, enable_rolling_logs,
     restart_application, send_logging_cmd_to_legacy_atlas,
@@ -73,7 +74,7 @@ def send_cmd_function(device_config: DeviceConfig, args: Namespace, balena: Opti
         namespace_args.type = 'log'
 
         enabled = (
-            args.enable_rolling_logs if args.enable_rolling_logs is not None else device_config.rolling_logs_enabled
+            args.enable_rolling_logs if args.enable_rolling_logs is not None else device_config.settings.rolling_logs_enabled
         )
         if enabled is not None:
             if device_config.tcp_address is None:
@@ -292,7 +293,7 @@ NONE - Leave logs on device until this setting is changed to FULL_LOG or device 
         try:
             all_successes &= future.result()
         except Exception as exc:
-            logger.error(f'Sending command to {device_config.name} generated an exception {type(exc).__name__}: {exc}')
+            logger.error(f'Sending command to {device_config.name} generated an exception {exception_to_str(exc)}')
             all_successes = False
 
     if all_successes:

@@ -2,12 +2,12 @@ import logging
 import re
 from typing import Optional
 
-from p1_hitl.defs import BuildType, HitlEnvArgs, TestType
+from p1_hitl.defs import DeviceType, HitlEnvArgs, TestType
 from p1_hitl.git_cmds import GitWrapper
 
 DEVICE_TAG_GLOB = {
-    BuildType.ATLAS: 'v?.*',
-    BuildType.LG69T_AM: 'lg69t-am-v?.*',
+    DeviceType.ATLAS: 'v?.*',
+    DeviceType.LG69T_AM: 'lg69t-am-v?.*',
 }
 
 logger = logging.getLogger('point_one.hitl.runner')

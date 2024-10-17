@@ -6,7 +6,7 @@ from p1_runner.device_interface import DeviceInterface
 from p1_test_automation.devices_config import DeviceConfig
 
 
-class DeviceInitBase(ABC):
+class DeviceInterfaceBase(ABC):
     @staticmethod
     @abstractmethod
     def get_device_config(args: HitlEnvArgs) -> Optional[DeviceConfig]:

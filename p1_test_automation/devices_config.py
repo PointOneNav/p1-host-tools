@@ -6,12 +6,12 @@ import socket
 import sys
 from enum import Enum, auto
 from pathlib import Path
-from typing import Any, Dict, List, NamedTuple, Optional
+from typing import Any, Dict, List, Optional
 
 import serial
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
-# Add the host tool root directory and device_init to the python path.
+# Add the host tool root directory and device_interfaces to the python path.
 repo_root = Path(__file__).parents[1].resolve()
 sys.path.append(str(repo_root))
 
@@ -26,6 +26,9 @@ SERIAL_TIMEOUT = 5
 
 
 class Settings(BaseModel):
+    # Throw error if unknown fields are specified.
+    model_config = ConfigDict(extra="forbid")
+
     # The UserConfig settings that have been changed from their defaults.
     modified_settings: Dict[str, Any] = {}
     # A regex to match when checking the device navigation engine version.
@@ -43,6 +46,9 @@ class Settings(BaseModel):
 
 
 class BalenaConfig(BaseModel):
+    # Throw error if unknown fields are specified.
+    model_config = ConfigDict(extra="forbid")
+
     # The Balena UUID for the device.
     uuid: str
     # The uuid for the release the device should be pinned to.
@@ -50,6 +56,9 @@ class BalenaConfig(BaseModel):
 
 
 class DeviceConfig(BaseModel):
+    # Throw error if unknown fields are specified.
+    model_config = ConfigDict(extra="forbid")
+
     # Identifier for device.
     name: str
     # The interface for the device. Must specify either a TCP address or a
@@ -67,10 +76,13 @@ class DeviceConfig(BaseModel):
 
 
 class TruthType(Enum):
-    DEVELOP_ATLAS = auto()
+    DEVELOP_ATLAS = 'DEVELOP_ATLAS'
 
 
 class TruthConfig(BaseModel):
+    # Throw error if unknown fields are specified.
+    model_config = ConfigDict(extra="forbid")
+
     # Identifier for truth device.
     name: str
 
@@ -99,6 +111,8 @@ class ConfigSet(BaseModel):
     For example if the default value was `{"arr": [{"a":0}, {"a":1}]}`:
     Merging with a modification of `{"arr/1": {"a":10}}` would result in `{"arr": [{"a":0}, {"a":10}]}`
     '''
+    # Throw error if unknown fields are specified.
+    model_config = ConfigDict(extra="forbid")
 
     # Expected configuration shared across the set of devices.
     shared: Settings = Settings()

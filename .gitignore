@@ -138,3 +138,6 @@ dmypy.json
 
 # Cached typing helper
 .p1_type_cache/
+
+# default output directory
+out/

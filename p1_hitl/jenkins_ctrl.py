@@ -5,32 +5,32 @@ from typing import Dict
 
 from jenkinsapi.jenkins import Jenkins
 
-from p1_hitl.defs import BuildType
+from p1_hitl.defs import DeviceType
 
 logger = logging.getLogger('point_one.hitl.jenkins_ctrl')
 
 JENKINS_BASE_URL = 'https://build.pointonenav.com'
 
 BUILD_JOB_MAP = {
-    BuildType.ATLAS: "atlas-build-st-develop",
-    BuildType.LG69T_AM: "quectel-build",
+    DeviceType.ATLAS: "atlas-build-st-develop",
+    DeviceType.LG69T_AM: "quectel-build",
 }
 
 QUECTEL_BUILD_TYPE_MAP = {
-    BuildType.LG69T_AM: "gnss",
+    DeviceType.LG69T_AM: "gnss",
 }
 
 NUM_OLD_BUILDS_TO_CHECK = 10
 
 
-def _get_build_params(git_commitish: str, build_type: BuildType) -> Dict[str, str]:
+def _get_build_params(git_commitish: str, build_type: DeviceType) -> Dict[str, str]:
     params = {'BRANCH': git_commitish}
     if build_type in list(QUECTEL_BUILD_TYPE_MAP.keys()):
         params['BUILD_TYPE'] = QUECTEL_BUILD_TYPE_MAP[build_type]
     return params
 
 
-def run_build(git_commitish: str, build_type: BuildType) -> bool:
+def run_build(git_commitish: str, build_type: DeviceType) -> bool:
     JENKINS_API_USERNAME = os.environ.get('JENKINS_API_USERNAME')
     JENKINS_API_TOKEN = os.environ.get('JENKINS_API_TOKEN')
 
@@ -101,7 +101,7 @@ def run_build(git_commitish: str, build_type: BuildType) -> bool:
 
 def _main():
     logging.basicConfig(level=logging.INFO, format='%(message)s')
-    run_build("origin/st-develop", BuildType.ATLAS)
+    run_build("origin/st-develop", DeviceType.ATLAS)
 
 
 if __name__ == '__main__':

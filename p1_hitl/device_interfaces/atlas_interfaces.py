@@ -3,22 +3,22 @@ import time
 from argparse import Namespace
 from typing import Any, Dict, Optional
 
-from bin.config_tool import save_config
+from bin.config_tool import apply_config, save_config
 from p1_hitl.defs import HitlEnvArgs
 from p1_runner.device_interface import DeviceInterface
 from p1_test_automation.atlas_device_ctrl import AtlasBalenaController
 from p1_test_automation.devices_config import (BalenaConfig, DeviceConfig,
                                                open_data_source)
 
-from .base_init import DeviceInitBase
+from .base_interfaces import DeviceInterfaceBase
 
 UPDATE_TIMEOUT_SEC = 60 * 10
 
 
-logger = logging.getLogger('point_one.hitl.atlas_init')
+logger = logging.getLogger('point_one.hitl.atlas_interface')
 
 
-class AtlasInit(DeviceInitBase):
+class AtlasInterface(DeviceInterfaceBase):
     @staticmethod
     def get_device_config(args: HitlEnvArgs) -> Optional[DeviceConfig]:
         if not args.check_fields(['JENKINS_ATLAS_LAN_IP', 'JENKINS_ATLAS_BALENA_UUID']):
@@ -68,9 +68,9 @@ class AtlasInit(DeviceInitBase):
             logger.info(f'Updating Atlas {status.name} to target release.')
             balena_ctrl.pin_release(config.balena.uuid, target_release.id)
 
-            start_time = time.time()
+            start_time = time.monotonic()
             while True:
-                if time.time() > start_time + UPDATE_TIMEOUT_SEC:
+                if time.monotonic() > start_time + UPDATE_TIMEOUT_SEC:
                     logger.error(f'Atlas {balena_status.name} update timed out after {UPDATE_TIMEOUT_SEC} seconds.')
                     return None
                 balena_status = balena_ctrl.get_status(config.balena.uuid)
@@ -86,10 +86,16 @@ class AtlasInit(DeviceInitBase):
             return None
 
         device_interface = DeviceInterface(data_source)
-        logger.info(f'Clearing FE settings.')
+        logger.info('Clearing FE settings.')
         args = Namespace(revert_to_saved=False, revert_to_defaults=True)
         if not save_config(device_interface, args):
             logger.error('Clearing FE settings failed.')
+            return None
+
+        logger.info('Enabling diagnostics')
+        args = Namespace(interface_config_type='diagnostics_enabled', param='current', enabled=True, save=True)
+        if not apply_config(device_interface, args):
+            logger.error('Enabling diagnostics failed.')
             return None
 
         return device_interface

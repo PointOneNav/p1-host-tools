@@ -10,6 +10,7 @@ from fusion_engine_client.messages import (CommandResponseMessage,
 from bin.config_tool import query_fe_version
 from p1_runner import trace as logging
 from p1_runner.device_interface import DeviceInterface
+from p1_runner.exception_utils import exception_to_str
 from p1_runner.import_config_loader import (UserConfigType,
                                             get_config_loader_class)
 
@@ -45,7 +46,7 @@ def get_config_loader_for_device(config_interface: DeviceInterface,
         try:
             return get_config_loader_class(args, resp.engine_version_str)
         except Exception as e:
-            logger.error(f'Could not get UserConfig loader {type(e).__name__}: "{e}"')
+            logger.error(f'Could not get UserConfig loader {exception_to_str(e)}')
 
     return None
 
