@@ -170,8 +170,9 @@ def main():
         output_dir = Path(log_manager.get_log_directory())  # type: ignore
         env_file_dump = output_dir / ENV_DUMP_FILE
         HitlEnvArgs.dump_env_to_json_file(env_file_dump)
-        with open(output_dir / BUILD_INFO_FILE, 'w') as fd:
-            json.dump(build_info, fd)
+        if not args.playback_log:
+            with open(output_dir / BUILD_INFO_FILE, 'w') as fd:
+                json.dump(build_info, fd)
         ran_successfully = False
         try:
             if args.playback_log:
