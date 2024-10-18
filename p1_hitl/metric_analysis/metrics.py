@@ -48,13 +48,13 @@ MetricController.register_environment_config_customizations() that implement the
 environment.
 '''
 
-from copy import deepcopy
 import inspect
 import logging
 import math
 import struct
 import time
 from collections.abc import Callable
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from enum import IntEnum, auto
 from pathlib import Path
@@ -105,6 +105,9 @@ class CodeLocation(NamedTuple):
     '''
     file: Path
     line: int
+
+    def __str__(self) -> str:
+        return f'{self.file}:{self.line}'
 
 
 @dataclass

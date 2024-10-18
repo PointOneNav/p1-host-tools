@@ -1,11 +1,11 @@
 import logging
-from pathlib import Path
 import time
 from argparse import Namespace
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from bin.config_tool import apply_config, request_shutdown, save_config
-from p1_hitl.defs import HitlEnvArgs, UPLOADED_LOG_LIST_FILE
+from p1_hitl.defs import UPLOADED_LOG_LIST_FILE, HitlEnvArgs
 from p1_runner.device_interface import DeviceInterface
 from p1_test_automation.atlas_device_ctrl import (AtlasBalenaController,
                                                   get_log_status,

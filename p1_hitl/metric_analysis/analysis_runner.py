@@ -91,7 +91,17 @@ def _finish_analysis(output_dir: Path) -> bool:
 
     if had_failures:
         with open(output_dir / FAILURE_REPORT, 'w') as fd:
-            fd.write('test\n')
+            errors = []
+            for name, metric in MetricController._metrics.items():
+                if metric.failure_time is not None:
+                    errors.append(
+                        {
+                            'name': name,
+                            'type': type(metric).__name__,
+                            'context': metric.failure_context
+                        }
+                    )
+            json.dump(errors, fd, indent=2)
 
     with open(output_dir / FULL_REPORT, 'w') as fd:
         json.dump(report, fd, indent=2, default=custom_json)
