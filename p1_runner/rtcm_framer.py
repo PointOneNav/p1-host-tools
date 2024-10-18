@@ -240,12 +240,26 @@ class RTCMFramer(object):
                 self.logger.trace('Found preamble.')
                 self.preamble_found = True
 
+            # The 2nd byte in the header (1st byte after preamble) contains 6 reserved bits, plus 2 bits of rhe 10b
+            # payload length. Those 6 reserved bits should be 0 as of RTCM 10403.3. If they are not, we'll assume the
+            # preamble byte we found was not actually an RTCM message.
+            if len(self.buffer) >= RTCM3_HEADER_LENGTH + 2:
+                reserved = self.buffer[1] >> 2
+                if reserved != 0x0:
+                    self.logger.debug(
+                        'Header reserved bits non-zero. Assuming invalid sync. [reserved=0x%02X]' % reserved)
+                    # Add all but first byte of failed message back onto data buffer to retry parsing.
+                    self.buffer = self.buffer[1:]
+                    self.total_data_offset += 1
+                    self.preamble_found = False
+                    continue
+
             if len(self.buffer) < RTCM3_HEADER_LENGTH + 2:
                 break
             elif self.message_length is None:
                 self.header = rtcm3_header.parse(self.buffer)
                 self.logger.debug('Received RTCM %d message header. Waiting for payload. [payload_size=%d B]' %
-                                (self.header.message_id, self.header.info.payload_length))
+                                  (self.header.message_id, self.header.info.payload_length))
                 self.message_length = RTCM3_HEADER_LENGTH + self.header.info.payload_length + RTCM3_CRC_LENGTH
 
             # Collect the payload and CRC.

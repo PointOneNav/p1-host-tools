@@ -1,8 +1,12 @@
 import argparse
 from argparse import *
 
-from fusion_engine_client.utils.argument_parser import ArgumentParser as ArgumentParserBase
-from fusion_engine_client.utils.argument_parser import ExtendedBooleanAction, TriStateBooleanAction
+# Note: This will import everything from the FE argument_parser module, _including_ the ArgumentParser class. We do that
+# for convenience for any file importing this file so it has all of the FE utilities available. ArgumentParser will be
+# overridden with our modified version below.
+from fusion_engine_client.utils.argument_parser import \
+    ArgumentParser as ArgumentParserBase
+from fusion_engine_client.utils.argument_parser import *
 
 
 class ArgumentParser(ArgumentParserBase):

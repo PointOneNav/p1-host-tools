@@ -1,5 +1,5 @@
-from enum import IntEnum
 import re
+from enum import IntEnum
 
 from . import trace as logging
 

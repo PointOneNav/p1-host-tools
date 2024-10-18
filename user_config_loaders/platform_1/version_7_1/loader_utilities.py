@@ -1,19 +1,22 @@
+import logging
+import math
 from dataclasses import asdict, fields, is_dataclass
 from enum import IntEnum
-import math
-from typing import Dict, Any
+from typing import Annotated, Any, Dict, List, Optional, get_args, get_origin
 
-from construct import (Adapter, Array, Const, Enum, Flag, IfThenElse,
-                       Int32ul, Padding, Pointer, Struct, Subconstruct, this)
+from construct import (Adapter, Array, Const, Enum, Flag, IfThenElse, Int32ul,
+                       Padding, Pointer, Struct, Subconstruct, this)
+
+logger = logging.getLogger('point_one.user_config_loader_utils')
 
 
 # Used to allow construction from either integer or string representation of enum.
 class IntOrStrEnum(IntEnum):
-  @classmethod
-  def _missing_(cls, value):
-      if isinstance(value, str):
-          return cls[value]
-      return super()._missing_(value)
+    @classmethod
+    def _missing_(cls, value):
+        if isinstance(value, str):
+            return cls[value]
+        return super()._missing_(value)
 
 
 class AdapterWithDefaults(Adapter):
@@ -213,10 +216,7 @@ class OptionalAdapter(AdapterWithDefaults):
         return obj['value'] if obj['valid'] else None
 
     def _encode(self, obj, context, path):
-        return {
-            'valid': obj is not None,
-            'value': obj
-        }
+        return {'valid': obj is not None, 'value': obj}
 
     def get_default_val(self):
         return None
@@ -234,14 +234,13 @@ class FrozenVectorAdapter(Adapter):
         super().__init__(frozen_vector_subcon)
 
     def _decode(self, obj, context, path):
-        return obj['values'][:obj['size']]
+        return obj['values'][: obj['size']]
 
     def _encode(self, obj, context, path):
-        default_val = self.storage_subcon.get_default_val() if isinstance(self.storage_subcon, AdapterWithDefaults) else 0
-        return {
-            'size': len(obj),
-            'values': obj + [default_val] * (self.max_size - len(obj))
-        }
+        default_val = (
+            self.storage_subcon.get_default_val() if isinstance(self.storage_subcon, AdapterWithDefaults) else 0
+        )
+        return {'size': len(obj), 'values': obj + [default_val] * (self.max_size - len(obj))}
 
 
 # Turn fields loaded from JSON into their correct representation.
@@ -257,33 +256,112 @@ def _interpret_value(field_type: type, val):
 # Recursively update the fields in data_class in-place with the corresponding values.
 # Only values that aren't none and with keys that match the field names will be used to update data_class.
 # Fields that aren't updated will preserve their current values.
-# By default the elements of a list aren't updated, they are replaced. Setting `merge_list_elements` to
-# `True` will instead try to merge existing elements of a list.
-def update_dataclass_contents(data_class, values: Dict[str, Any], merge_list_elements: bool = False):
+#
+# Lists (vectors, arrays, etc.) are treated as values and don't have their values merged.
+# For example if the original value was `{"arr": [0, 1]}`:
+# Merging with a modification of `{"arr": [10]}` would result in `{"arr": [10]}`
+#
+# To update a value in a list, specify an index is also supported. Use the syntax "key_name/i" where "i" is the index of
+# the array to merge changes into.
+# For example if the original value was `{"arr": [{"a":0}, {"a":1}]}`:
+# Merging with a modification of `{"arr/1": {"a":10}}` would result in `{"arr": [{"a":0}, {"a":10}]}`
+#
+# Return a dict of entries in values that don't have corresponding fields in data_class.
+def update_dataclass_contents(data_class, values: Dict[str, Any]) -> Dict[str, Any]:
+    indexed_values = {}
+    unused = {}
+    field_names = [field.name for field in fields(data_class)]
+    # Check if any of the keys contain array indexes, or don't exist in data_class.
+    for k, v in dict(values).items():
+        split_key = k.split('/')
+        if len(split_key) == 1:
+            if k not in field_names:
+                unused[k] = ''
+        elif len(split_key) == 2:
+            try:
+                actual_key = split_key[0]
+                indexed_values[actual_key] = int(split_key[1])
+                values[actual_key] = v
+                if actual_key not in field_names:
+                    unused[actual_key] = ''
+            except Exception as e:
+                pass
+
+    # When recursing, use this helper function to update the unused keys.
+    def _update_unused(key, child_unused):
+        if len(child_unused) > 0:
+            if key in unused:
+                unused[key].update(child_unused)
+            else:
+                unused[key] = child_unused
+
     for field in fields(data_class):
         k = field.name
         if k in values and values[k] is not None:
-            if is_dataclass(field.type):
-                update_dataclass_contents(getattr(data_class, k), values[k], merge_list_elements)
-            # Used to recursively update fields that are typed to a list.
-            elif hasattr(field.type, '_name') and field.type._name == "List":
+            # Either get the field type directly, or if if a Annotated type (a List with fixed size), get the child
+            # type.
+            if get_origin(field.type) == Annotated:
+                field_type = get_args(field.type)[0]
+                field_type_meta = get_args(field.type)[1]
+            else:
+                field_type = field.type
+                field_type_meta = None
+
+            if is_dataclass(field_type):
+                _update_unused(k, update_dataclass_contents(getattr(data_class, k), values[k]))
+            elif get_origin(field_type) == list:
                 # The type of the values in the List.
-                list_type = field.type.__args__[0]
-                loaded_values = []
+                list_type = get_args(field_type)[0]
                 current_values = getattr(data_class, k)
-                for i, v in enumerate(values[k]):
+                # The update to the list is specified with an index `"key_name/1": val`. This is unambiguous and we
+                # merge the value with the value currently at this index. An exception is raised if the index doesn't
+                # exist.
+                if k in indexed_values:
+                    i = indexed_values[k]
+                    v = values[k]
+                    original_key = k + f'/{i}'
+                    if i >= len(current_values):
+                        raise IndexError(f'{k}/{i} out of range {field_type} size {len(current_values)}.')
                     if is_dataclass(list_type):
-                        if merge_list_elements and current_values and i < len(current_values):
-                            data_val = current_values[i]
-                        else:
-                            data_val = list_type()
-                        update_dataclass_contents(data_val, v, merge_list_elements)
+                        data_val = current_values[i]
+                        _update_unused(original_key, update_dataclass_contents(data_val, v))
                     else:
                         data_val = _interpret_value(list_type, v)
-                    loaded_values.append(data_val)
-                setattr(data_class, k, loaded_values)
+                    current_values[i] = data_val
+                # Trying to merge into a list of values. This is interpreted as replacing the current list without
+                # merging (treating the array as a value to replace). This is often a surprising result, especially when
+                # the entries are themselves complex objects. To merge into a value in an array the update index
+                # notation `"key_name/1": val`.
+                else:
+                    try:
+                        if isinstance(values[k], str) or isinstance(values[k], dict):
+                            raise TypeError()
+                        update_size = len(values[k])
+                    except TypeError:
+                        raise TypeError(f'Scalar value being used to update list {k}.')
+
+                    # This field encodes a list with fixed size (an array).
+                    if field_type_meta is not None:
+                        field_list_size = field_type_meta
+                        if update_size != field_list_size:
+                            raise TypeError(
+                                f"Value {k} is a fixed size list. Update value size {update_size} does't match list size {field_list_size}."
+                            )
+
+                    loaded_values = []
+                    for i, v in enumerate(values[k]):
+                        if is_dataclass(list_type):
+                            data_val = list_type()
+                            _update_unused(k, update_dataclass_contents(data_val, v))
+                        else:
+                            data_val = _interpret_value(list_type, v)
+                        loaded_values.append(data_val)
+                    setattr(data_class, k, loaded_values)
+
             else:
                 setattr(data_class, k, _interpret_value(field.type, values[k]))
+
+    return unused
 
 
 # Used for formatting values for conversion to JSON.
@@ -293,7 +371,7 @@ def prepare_dataclass_for_json(obj):
     # Convert NaN floats into 'nan' strings.
     elif isinstance(obj, float) and math.isnan(obj):
         return 'nan'
-     # Convert IntEnum into their string representation.
+    # Convert IntEnum into their string representation.
     elif isinstance(obj, IntEnum):
         return obj.name
     elif isinstance(obj, dict):

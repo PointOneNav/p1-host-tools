@@ -1,5 +1,5 @@
 import re
-from typing import NamedTuple, List, Set, Union
+from typing import List, NamedTuple, Set, Union
 
 from fusion_engine_client.utils.enum_utils import IntEnum
 
@@ -12,7 +12,9 @@ class P1BinType(IntEnum):
     INVALID = 0xFFFF
     DEBUG = 0x01,
     RTCM3_POLARIS = 0x21
+    M_TYPE_SBF = 0x40
     EXTERNAL_UNFRAMED_GNSS = 0x42
+    M_TYPE_ATLAS_SBF = 0xa1
 
 
 class P1BinRecord(NamedTuple):

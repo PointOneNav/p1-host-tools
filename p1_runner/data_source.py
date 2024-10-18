@@ -1,23 +1,22 @@
-from abc import ABC, abstractmethod
-
-from threading import Event, Lock
-import time
-from typing import Optional, BinaryIO, Union
-import socket
-from socket import SocketType
 import select
-
+import socket
+import time
+from abc import ABC, abstractmethod
+from socket import SocketType
+from threading import Event, Lock
+from typing import BinaryIO, Optional, Union
 
 import serial.threaded
 from serial import Serial
+
 try:
     from websockets.sync.client import ClientConnection
 except ImportError:
-    class ClientConnection: pass
+    class ClientConnection:
+        pass
 
 import p1_runner.trace as logging
 from p1_runner.log_manager import LogManager
-
 
 logger = logging.getLogger('point_one.data_source')
 
@@ -82,6 +81,7 @@ class WebSocketDataSource(DataSource):
 
     For the most part this is just to make the access calls conform to the needed behaviors.
     """
+
     def __init__(
             self, socket_out: ClientConnection, socket_in: Optional[ClientConnection] = None,
             rx_log: Optional[Union[LogManager, BinaryIO]] = None):
@@ -106,9 +106,9 @@ class WebSocketDataSource(DataSource):
 
     def stop(self):
         self.flush_rx()
-        if self.socket_in != None:
+        if self.socket_in is not None:
             self.socket_in.close()
-        if self.socket_out != None and self.socket_out != self.socket_in:
+        if self.socket_out is not None and self.socket_out != self.socket_in:
             self.socket_out.close()
 
     def flush_rx(self):
@@ -127,6 +127,7 @@ class SocketDataSource(DataSource):
 
     For the most part this is just to make the access calls conform to the needed behaviors.
     """
+
     def __init__(
             self, socket_out: SocketType, socket_in: Optional[SocketType] = None,
             rx_log: Optional[Union[LogManager, BinaryIO]] = None):
@@ -159,9 +160,9 @@ class SocketDataSource(DataSource):
 
     def stop(self):
         self.flush_rx()
-        if self.socket_in != None:
+        if self.socket_in is not None:
             self.socket_in.close()
-        if self.socket_out != None and self.socket_out != self.socket_in:
+        if self.socket_out is not None and self.socket_out != self.socket_in:
             self.socket_out.close()
 
     def flush_rx(self):
@@ -182,6 +183,7 @@ class SerialDataSource(DataSource, serial.threaded.Protocol):
     rates, the port must be read constantly to avoid dropping data. This class provides a thread to do that and store
     the data until it's actually needed.
     """
+
     def __init__(
             self, serial_out: Serial, serial_in: Optional[Serial] = None,
             rx_log: Optional[Union[LogManager, BinaryIO]] = None):

@@ -1,14 +1,13 @@
+import time
+
 import colorama
 import numpy as np
 import serial
-import time
-
 from fusion_engine_client.messages import *
 
-
+from p1_runner import trace as logging
 from p1_runner.data_source import SerialDataSource
 from p1_runner.device_interface import DeviceInterface
-from p1_runner import trace as logging
 
 MPS_TO_KPH = 3.6
 MPS_TO_MPH = 2.23694
@@ -48,8 +47,8 @@ class WheelTickDisplay:
 
     def query_tick_output_rate(self):
         self.device_interface.get_message_rate(ConfigurationSource.ACTIVE, config_object=[
-                                      InterfaceID(TransportType.CURRENT, 0), ProtocolType.FUSION_ENGINE,
-                                      MessageType.RAW_VEHICLE_TICK_OUTPUT])
+            InterfaceID(TransportType.CURRENT, 0), ProtocolType.FUSION_ENGINE,
+            MessageType.RAW_VEHICLE_TICK_OUTPUT])
 
     def query_wheel_config(self):
         # First, issue a set request for the wheel config. When the response comes back, we'll send a request for the
@@ -168,10 +167,11 @@ class WheelTickDisplay:
             # If hardware ticks are not properly configured, then undefined state will not be printed.
             elif not self.hardware_ticks_configured:
                 self.logger.error("ERROR: Hardware wheel ticks not configured: `tick_mode` parameter currently set to "
-                                "'off'")
+                                  "'off'")
             # If the message rate for hardware tick FE messages are set to `OFF`, the state will not be printed.
             elif not self.hardware_tick_messages_enabled:
-                self.logger.error("ERROR: Hardware wheel tick messages not enabled: message rate currently set to 'off'")
+                self.logger.error(
+                    "ERROR: Hardware wheel tick messages not enabled: message rate currently set to 'off'")
             else:
                 if self.display_mode == 'gui':
                     # Clear the previous text on each update.
@@ -203,7 +203,7 @@ class WheelTickDisplay:
                         nav_engine_speed_mps = round(self.nav_engine_speed_mps * 10.0) / 10.0
                         nav_speed_mps_str = '%6.1f m/s (%.1f km/h = %.1f mph)' % \
                                             (nav_engine_speed_mps, nav_engine_speed_mps * MPS_TO_KPH,
-                                            nav_engine_speed_mps * MPS_TO_MPH)
+                                             nav_engine_speed_mps * MPS_TO_MPH)
 
                     print('P1 Time: %15.3f sec' % float(self.p1_time))
                     print('Tick Count: %s ticks  |  Gear: %s' % (tick_str, self.gear))
@@ -213,7 +213,7 @@ class WheelTickDisplay:
                     tick_str = '%d' % self.tick_count if self.tick_count is not None else '?'
                     speed_str = '%.1f' % (round(self.speed_mps * 10.0) / 10.0) if self.speed_mps is not None else '?'
                     self.logger.info('%s | %s ticks --> %s m/s | Gear: %s' %
-                                    (str(self.p1_time), tick_str, speed_str, str(self.gear)))
+                                     (str(self.p1_time), tick_str, speed_str, str(self.gear)))
 
             self.p1_time = None
             self.tick_count = None

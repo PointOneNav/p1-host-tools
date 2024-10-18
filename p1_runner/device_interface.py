@@ -6,9 +6,8 @@ from fusion_engine_client.parsers import (FusionEngineDecoder,
                                           FusionEngineEncoder)
 
 import p1_runner.trace as logging
+from p1_runner.data_source import RESPONSE_TIMEOUT, DataSource
 from p1_runner.nmea_framer import NMEAFramer
-
-from p1_runner.data_source import DataSource, RESPONSE_TIMEOUT
 
 logger = logging.getLogger('point_one.device_interface')
 
@@ -18,12 +17,14 @@ REBOOT_MAX_TIME = 5
 
 MAX_FE_MSG_SIZE = 16 * 1024
 
+
 class DeviceInterface:
     '''!
     @brief Class to simplify command and configuration communication with a device over serial.
 
     In order to use this class to receive data from the device, @ref start_rx_thread() must be called before anything else.
     '''
+
     def __init__(self, data_source: DataSource):
         '''!
         @param serial_out An open serial port class to use for sending data.
@@ -64,6 +65,10 @@ class DeviceInterface:
         req_cmd.request_source = source
         message = self.fe_encoder.encode_message(req_cmd)
         logger.debug('Requesting config. [size=%d B]' % len(message))
+        # We flush the serial RX buffer before we send the request in an attempt to avoid the response timing out as we
+        # process the backlog of data. This only a concern when running on a lower CPU power system like a Raspi that
+        # may not be able to keep up with the byte-by-byte processing for a high data rate interface.
+        self.data_source.flush_rx()
         self.data_source.write(message)
 
     def get_message_rate(self, source: ConfigurationSource, config_object):
@@ -71,6 +76,10 @@ class DeviceInterface:
         req_cmd = GetMessageRate(*config_object)
         message = self.fe_encoder.encode_message(req_cmd)
         logger.debug('Querying message rate. [size=%d B]' % len(message))
+        # We flush the serial RX buffer before we send the request in an attempt to avoid the response timing out as we
+        # process the backlog of data. This only a concern when running on a lower CPU power system like a Raspi that
+        # may not be able to keep up with the byte-by-byte processing for a high data rate interface.
+        self.data_source.flush_rx()
         self.data_source.write(message)
 
     def set_message_rate(self, config_object):

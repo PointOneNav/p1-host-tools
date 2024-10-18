@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 import os
 import queue
 import struct
@@ -7,6 +6,7 @@ import sys
 import threading
 import time
 import uuid
+from datetime import datetime, timezone
 
 from . import trace as logging
 from .log_manifest import DeviceType, LogManifest
@@ -19,11 +19,12 @@ class LogManager(threading.Thread):
     SEQUENCE_NUMBER_FILE = 'sequence_num.txt'
 
     def __init__(
-            self, device_id, logs_base_dir='/logs', files=None, log_extension='.raw', create_symlink=True,
-            log_created_cmd=None, log_timestamps=True):
+            self, device_id, device_type='UNKNOWN', logs_base_dir='/logs', files=None, log_extension='.raw',
+            create_symlink=True, log_created_cmd=None, log_timestamps=True):
         super().__init__(name='log_manager')
 
         self.device_id = device_id
+        self.device_type = device_type
         self.logs_base_dir = logs_base_dir
         self.create_symlink = create_symlink
         self.log_created_cmd = log_created_cmd
@@ -135,7 +136,7 @@ class LogManager(threading.Thread):
                     timestamp = time.time()
                     if timestamp_file and timestamp - self.last_timestamp > 0.001:
                         # This will rollover after about about 50 days.
-                        milliseconds = int(round((timestamp - self.start_time) * 1000.))  % 2**32
+                        milliseconds = int(round((timestamp - self.start_time) * 1000.)) % 2**32
                         # This will rollover after about about 26 hours of full rate 460800 baud data.
                         offset = bin_file.tell() % 2**32
                         data = struct.pack('II', milliseconds, offset)
@@ -148,6 +149,9 @@ class LogManager(threading.Thread):
         self.logger.info("Log data stored in '%s'." % self.log_dir)
 
     def update_manifest(self, items):
+        if 'device_type' in items:
+            self.device_type = items['device_type'] if items['device_type'] is not None else 'UNKNOWN'
+
         path = os.path.join(self.log_dir, LogManifest.MANIFEST_FILENAME)
         LogManifest.update_items_in_file(path, items)
 
@@ -158,7 +162,7 @@ class LogManager(threading.Thread):
         manifest.log_sequence_num = self.sequence_num
         manifest.creation_time = self.creation_time
         manifest.device_id = self.device_id
-        manifest.device_type = 'lg69t'
+        manifest.device_type = self.device_type if self.device_type is not None else 'UNKNOWN'
 
         manifest.channels.append(self.data_filename)
         manifest.channels.extend(self.files)
