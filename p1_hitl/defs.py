@@ -19,7 +19,16 @@ FULL_REPORT = 'hitl_report.json'
 CONSOLE_FILE = 'hitl_console.txt'
 UPLOADED_LOG_LIST_FILE = 'uploaded_device_logs.txt'
 MSG_TIME_LOG_FILENAME = 'msg_times.bin'
-LOG_FILES = [FAILURE_REPORT, FULL_REPORT, CONSOLE_FILE, UPLOADED_LOG_LIST_FILE, MSG_TIME_LOG_FILENAME]
+ENV_DUMP_FILE = 'env.json'
+BUILD_INFO_FILE = 'build-info.json'
+LOG_FILES = [
+    FAILURE_REPORT,
+    FULL_REPORT,
+    CONSOLE_FILE,
+    UPLOADED_LOG_LIST_FILE,
+    MSG_TIME_LOG_FILENAME,
+    ENV_DUMP_FILE,
+    BUILD_INFO_FILE]
 
 
 class TestParams(NamedTuple):

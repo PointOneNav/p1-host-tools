@@ -13,8 +13,9 @@ sys.path.append(str(repo_root))
 
 from fusion_engine_client.utils.log import find_log_file
 
-from p1_hitl.defs import (CONSOLE_FILE, LOG_FILES, PLAYBACK_DIR, DeviceType,
-                          HitlEnvArgs, TestType, get_args)
+from p1_hitl.defs import (BUILD_INFO_FILE, CONSOLE_FILE, ENV_DUMP_FILE,
+                          LOG_FILES, PLAYBACK_DIR, DeviceType, HitlEnvArgs,
+                          TestType, get_args)
 from p1_hitl.device_interfaces import HitlAtlasInterface
 from p1_hitl.get_build_artifacts import get_build_info
 from p1_hitl.jenkins_ctrl import run_build
@@ -32,10 +33,6 @@ logger = logging.getLogger('point_one.hitl.runner')
 # TODO:
 # - Generate report from metrics
 # - Update configuration test to use metrics
-
-
-ENV_DUMP_FILE = 'env.json'
-BUILD_INFO_FILE = 'build-info.json'
 
 
 def main():
