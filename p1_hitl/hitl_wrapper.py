@@ -12,7 +12,8 @@ from tempfile import gettempdir
 repo_root = Path(__file__).parents[1].resolve()
 sys.path.append(str(repo_root))
 
-from p1_hitl.defs import CONSOLE_FILE, PLAYBACK_DIR, get_args, FAILURE_REPORT, FULL_REPORT
+from p1_hitl.defs import (CONSOLE_FILE, FAILURE_REPORT, FULL_REPORT,
+                          PLAYBACK_DIR, get_args)
 from p1_runner.log_manager import LogManager
 
 # TODO: Slack integration.

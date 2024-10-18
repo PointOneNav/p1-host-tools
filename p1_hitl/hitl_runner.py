@@ -11,10 +11,10 @@ from pathlib import Path
 repo_root = Path(__file__).parents[1].resolve()
 sys.path.append(str(repo_root))
 
-from fusion_engine_client.utils.log import DEFAULT_LOG_BASE_DIR, find_log_file
+from fusion_engine_client.utils.log import find_log_file
 
-from p1_hitl.defs import (PLAYBACK_DIR, DeviceType, HitlEnvArgs, TestType, CONSOLE_FILE,
-                          get_args)
+from p1_hitl.defs import (CONSOLE_FILE, PLAYBACK_DIR, DeviceType, HitlEnvArgs,
+                          TestType, get_args)
 from p1_hitl.device_interfaces import AtlasInterface
 from p1_hitl.get_build_artifacts import get_build_info
 from p1_hitl.jenkins_ctrl import run_build
@@ -50,7 +50,7 @@ def main():
             level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', stream=sys.stdout
         )
         logger.setLevel(logging.DEBUG)
-        logging.getLogger('point_one.config_test').setLevel(logging.DEBUG)
+        logging.getLogger('point_one.hitl').setLevel(logging.DEBUG)
         if cli_args.verbose > 1:
             logging.getLogger().setLevel(logging.DEBUG)
 
