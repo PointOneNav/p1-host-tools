@@ -17,6 +17,7 @@ from p1_test_automation.devices_config import (BalenaConfig, DeviceConfig,
 from .base_interfaces import HitlDeviceInterfaceBase
 
 UPDATE_TIMEOUT_SEC = 60 * 10
+UPDATE_WAIT_TIME_SEC = 30
 RESTART_WAIT_TIME_SEC = 10
 
 logger = logging.getLogger('point_one.hitl.atlas_interface')
@@ -86,7 +87,7 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
                 if target_release == balena_status.current_release:
                     logger.info(f'{balena_status.name} finished updating.')
                     break
-                time.sleep(RESTART_WAIT_TIME_SEC)
+                time.sleep(UPDATE_WAIT_TIME_SEC)
 
         data_source = open_data_source(self.config)
         if data_source is None:
