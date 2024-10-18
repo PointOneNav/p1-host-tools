@@ -13,8 +13,8 @@ sys.path.append(str(repo_root))
 
 from fusion_engine_client.utils.log import find_log_file
 
-from p1_hitl.defs import (CONSOLE_FILE, PLAYBACK_DIR, DeviceType, HitlEnvArgs,
-                          TestType, get_args)
+from p1_hitl.defs import (CONSOLE_FILE, LOG_FILES, PLAYBACK_DIR, DeviceType,
+                          HitlEnvArgs, TestType, get_args)
 from p1_hitl.device_interfaces import HitlAtlasInterface
 from p1_hitl.get_build_artifacts import get_build_info
 from p1_hitl.jenkins_ctrl import run_build
@@ -81,7 +81,8 @@ def main():
         log_manager = LogManager(env_args.HITL_NAME,
                                  device_type=env_args.HITL_BUILD_TYPE.name,
                                  logs_base_dir=cli_args.logs_base_dir,
-                                 directory_to_reuse=cli_args.reuse_log_dir)
+                                 directory_to_reuse=cli_args.reuse_log_dir,
+                                 files=LOG_FILES)
         log_manager.create_log_dir()
         output_dir = Path(log_manager.get_log_directory())  # type: ignore
 

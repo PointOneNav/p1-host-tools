@@ -63,7 +63,7 @@ from typing import Any, BinaryIO, ClassVar, Dict, List, NamedTuple, Optional
 from fusion_engine_client.messages import MessagePayload
 from fusion_engine_client.parsers.decoder import MessageWithBytesTuple
 
-from p1_hitl.defs import HitlEnvArgs
+from p1_hitl.defs import MSG_TIME_LOG_FILENAME, HitlEnvArgs
 
 logger = logging.getLogger('point_one.hitl.metrics')
 
@@ -71,7 +71,6 @@ logger = logging.getLogger('point_one.hitl.metrics')
 # [u32 host test time elapsed in milliseconds][u32 message sequence number]
 # The sequence number is probably not necessary, but can crosscheck that the decoder operation is consistent.
 _MSG_TIME_LOG_FORMAT = '<II'
-MSG_TIME_LOG_FILENAME = 'msg_times.bin'
 
 # Format for metric log:
 # [u32 test time elapsed in milliseconds (host if available, or device for playback)][f64 metric value]
