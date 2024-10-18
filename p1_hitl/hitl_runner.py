@@ -15,7 +15,7 @@ from fusion_engine_client.utils.log import find_log_file
 
 from p1_hitl.defs import (CONSOLE_FILE, PLAYBACK_DIR, DeviceType, HitlEnvArgs,
                           TestType, get_args)
-from p1_hitl.device_interfaces import AtlasInterface
+from p1_hitl.device_interfaces import HitlAtlasInterface
 from p1_hitl.get_build_artifacts import get_build_info
 from p1_hitl.jenkins_ctrl import run_build
 from p1_hitl.metric_analysis.analysis_runner import (run_analysis,
@@ -84,6 +84,10 @@ def main():
                                  directory_to_reuse=cli_args.reuse_log_dir)
         log_manager.create_log_dir()
         output_dir = Path(log_manager.get_log_directory())  # type: ignore
+
+    env_file_dump = output_dir / ENV_DUMP_FILE
+    HitlEnvArgs.dump_env_to_json_file(env_file_dump)
+
     ################# Get build to provision device under test #################
     if not cli_args.playback_log:
         release_str_build_type = DeviceType.get_build_type_from_version(env_args.HITL_DUT_VERSION)
@@ -114,6 +118,8 @@ def main():
         build_info = get_build_info(release_str, env_args.HITL_BUILD_TYPE)
         if build_info:
             logger.info(f'Build found: {build_info}')
+            with open(output_dir / BUILD_INFO_FILE, 'w') as fd:
+                json.dump(build_info, fd)
         else:
             if git_commitish is not None:
                 if not run_build(git_commitish, env_args.HITL_BUILD_TYPE):
@@ -132,15 +138,16 @@ def main():
 
     ################# Setup device under test #################
         if env_args.HITL_BUILD_TYPE == DeviceType.ATLAS:
-            device_interfaces = AtlasInterface()
+            hitl_device_interface_cls = HitlAtlasInterface
         else:
             raise NotImplementedError('Need to handle other build types.')
 
-        device_config = device_interfaces.get_device_config(env_args)
+        device_config = hitl_device_interface_cls.get_device_config(env_args)
         if device_config is None:
             logger.error('Failure configuring device for HITL testing.')
             sys.exit(1)
-        device_interface = device_interfaces.init_device(device_config, build_info)
+        hitl_device_interface = hitl_device_interface_cls(device_config)
+        device_interface = hitl_device_interface.init_device(build_info)
         if device_interface is None:
             logger.error('Failure initializing device for HITL testing.')
             sys.exit(1)
@@ -171,24 +178,26 @@ def main():
             ])
         run_config_tests(test_config)
     else:
-        env_file_dump = output_dir / ENV_DUMP_FILE
-        HitlEnvArgs.dump_env_to_json_file(env_file_dump)
-        if not cli_args.playback_log:
-            with open(output_dir / BUILD_INFO_FILE, 'w') as fd:
-                json.dump(build_info, fd)
         ran_successfully = False
+        tests_passed = False
         try:
             if cli_args.playback_log:
-                ran_successfully = run_analysis_playback(
+                tests_passed = run_analysis_playback(
                     playback_file, env_args, output_dir, cli_args.log_metric_values)
             else:
                 if log_manager is not None:
                     log_manager.start()
                     device_interface.data_source.rx_log = log_manager  # type: ignore
-                ran_successfully = run_analysis(device_interface, env_args, output_dir, cli_args.log_metric_values)
+                tests_passed = run_analysis(device_interface, env_args, output_dir, cli_args.log_metric_values)
         finally:
-            if not cli_args.playback_log:
-                device_interface.data_source.stop()
+            if tests_passed is not None:
+                ran_successfully = True
+            else:
+                tests_passed = False
+            try:
+                hitl_device_interface.shutdown_device(tests_passed, output_dir)
+            except:
+                pass
             if log_manager is not None:
                 log_manager.stop()
 

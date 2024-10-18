@@ -48,6 +48,7 @@ MetricController.register_environment_config_customizations() that implement the
 environment.
 '''
 
+from copy import deepcopy
 import inspect
 import logging
 import math
@@ -479,7 +480,7 @@ class MaxElapsedTimeMetric(MetricBase):
                 return None
             # Failures are updated in _time_elapsed() function.
             self._update_status(elapsed, False)
-        self.__last_time = MetricController._current_time
+        self.__last_time = deepcopy(MetricController._current_time)
         return elapsed
 
     def _time_elapsed(self):

@@ -4,7 +4,7 @@ import logging
 import time
 import traceback
 from pathlib import Path
-from typing import Iterator, List
+from typing import Iterator, List, Optional
 
 from fusion_engine_client.messages import MessageHeader, message_type_to_class
 from fusion_engine_client.parsers import fast_indexer
@@ -66,7 +66,7 @@ def custom_json(obj):
         return str(obj)
 
 
-def _finish_analysis(output_dir: Path):
+def _finish_analysis(output_dir: Path) -> bool:
     MetricController.finalize()
     report = MetricController.generate_report()
     results = report['results']
@@ -87,15 +87,20 @@ def _finish_analysis(output_dir: Path):
     logger.info(f'{skipped} tests skipped')
     logger.info(f'{failed} tests failed')
 
-    with open(output_dir / FULL_REPORT, 'w') as fd:
-        json.dump(report, fd, indent=2, default=custom_json)
+    had_failures = failed > 0
 
-    if failed > 0:
+    if had_failures:
         with open(output_dir / FAILURE_REPORT, 'w') as fd:
             fd.write('test\n')
 
+    with open(output_dir / FULL_REPORT, 'w') as fd:
+        json.dump(report, fd, indent=2, default=custom_json)
 
-def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs, output_dir: Path, log_metric_values: bool) -> bool:
+    return not had_failures
+
+
+def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs,
+                 output_dir: Path, log_metric_values: bool) -> Optional[bool]:
     try:
         params = env_args.HITL_TEST_TYPE.get_test_params()
         analyzers = _setup_analysis(env_args, output_dir, log_metric_values)
@@ -108,7 +113,7 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs, output_dir: 
                 msgs = interface.wait_for_any_fe_message(response_timeout=0.1)
             except Exception as e:
                 logger.error(f'Exception collecting FusionEngine messages from device {exception_to_str(e)}')
-                return False
+                return None
             MetricController.update_host_time()
 
             for msg in msgs:
@@ -129,15 +134,13 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs, output_dir: 
         pass
     except Exception as e:
         logger.error(f'Exception while analyzing FE messages:\n{traceback.format_exc()}')
-        return False
+        return None
 
-    _finish_analysis(output_dir)
-
-    return True
+    return _finish_analysis(output_dir)
 
 
 def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs,
-                          output_dir: Path, log_metric_values: bool) -> bool:
+                          output_dir: Path, log_metric_values: bool) -> Optional[bool]:
     class _PlaybackStatus:
         def __init__(self, in_fd) -> None:
             self.in_fd = in_fd
@@ -210,8 +213,6 @@ def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs,
         pass
     except Exception as e:
         logger.error(f'Exception while analyzing FE messages:\n{traceback.format_exc()}')
-        return False
+        return None
 
-    _finish_analysis(output_dir)
-
-    return True
+    return _finish_analysis(output_dir)

@@ -17,6 +17,7 @@ PLAYBACK_DIR = 'playback'
 FAILURE_REPORT = 'hitl_failures.json'
 FULL_REPORT = 'hitl_report.json'
 CONSOLE_FILE = 'hitl_console.txt'
+UPLOADED_LOG_LIST_FILE = 'uploaded_device_logs.txt'
 
 
 class TestParams(NamedTuple):
