@@ -9,7 +9,8 @@ requirements = [
     "argparse-formatter>=1.4",
     "colorama>=0.4.4",
     "construct~=2.10.67",
-    "fusion-engine-client==1.23.6rc1",
+    "deepdiff>=8.0.1",
+    "fusion-engine-client==1.23.6rc2",
     "psutil>=5.9.4",
     "pynmea2~=1.18.0",
     "pyserial~=3.5",
@@ -21,13 +22,13 @@ requirements = [
 dev_requirements = [
     "autopep8~=2.3.1",
     "isort~=5.13.2",
+    "pytest",
 ]
 
 internal_only_requirements = [
     # NOTE: balena-sdk==15.0.0 introduced breaking changes migrating to API v7. Need
     # to update ~/.balena/balena.cfg as well as fix "should_be_running__release"
     "balena-sdk==14.5.0",
-    "deepdiff>6.7",
     "remi>=2022.7.27",
     "boto3>=1.34",
     "pydantic>=2.9.1",
@@ -41,7 +42,7 @@ if sys.version_info >= (3, 7):
 
 setup(
     name='p1-host-tools',
-    version='v0.18.4',
+    version='v0.30.0',
     packages=find_packages(where='.'),
     install_requires=list(all_requirements),
     extras_require={

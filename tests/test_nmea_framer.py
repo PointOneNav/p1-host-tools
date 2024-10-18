@@ -1,5 +1,4 @@
 import logging
-import sys
 
 from p1_runner.nmea_framer import NMEAFramer
 
