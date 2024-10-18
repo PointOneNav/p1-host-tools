@@ -7,6 +7,7 @@ import threading
 import time
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
 from . import trace as logging
 from .log_manifest import DeviceType, LogManifest
@@ -20,7 +21,7 @@ class LogManager(threading.Thread):
 
     def __init__(
             self, device_id, device_type='UNKNOWN', logs_base_dir='/logs', files=None, log_extension='.raw',
-            create_symlink=True, log_created_cmd=None, log_timestamps=True):
+            create_symlink=True, log_created_cmd=None, log_timestamps=True, directory_to_reuse: Optional[str] = None):
         super().__init__(name='log_manager')
 
         self.device_id = device_id
@@ -29,6 +30,7 @@ class LogManager(threading.Thread):
         self.create_symlink = create_symlink
         self.log_created_cmd = log_created_cmd
         self.data_filename = 'input' + log_extension
+        self.directory_to_reuse = directory_to_reuse
 
         self.log_guid = None
         self.creation_time = None
@@ -54,18 +56,20 @@ class LogManager(threading.Thread):
         else:
             return os.path.join(self.log_dir, relative_path)
 
-    def start(self):
-        self.logger.debug('Starting log manager.')
-
+    def create_log_dir(self):
         self.log_guid = str(uuid.uuid4()).replace('-', '')
         self.creation_time = datetime.now(tz=timezone.utc)
-        self.log_dir = os.path.join(self.logs_base_dir, self.creation_time.strftime('%Y-%m-%d'), self.device_id,
-                                    self.log_guid)
-
-        if os.path.exists(self.log_dir):
-            raise IOError("Log directory '%s' already exists." % self.log_dir)
+        if self.directory_to_reuse:
+            self.log_dir = self.directory_to_reuse
+            if not os.path.exists(self.log_dir):
+                raise IOError("Log directory '%s' doesn't exists." % self.log_dir)
         else:
-            os.makedirs(self.log_dir)
+            self.log_dir = os.path.join(self.logs_base_dir, self.creation_time.strftime('%Y-%m-%d'), self.device_id,
+                                        self.log_guid)
+            if os.path.exists(self.log_dir):
+                raise IOError("Log directory '%s' already exists." % self.log_dir)
+            else:
+                os.makedirs(self.log_dir)
 
         self.sequence_num = self._next_sequence_number()
         self.logger.info("Creating log for device '%s'. [log_num=%d, path='%s']" %
@@ -93,6 +97,10 @@ class LogManager(threading.Thread):
 
         self._create_manifest()
 
+    def start(self):
+        self.logger.debug('Starting log manager.')
+        if self.log_dir is None:
+            self.create_log_dir()
         super().start()
 
     def stop(self):

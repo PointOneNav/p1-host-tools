@@ -301,10 +301,13 @@ class MetricController:
         Generate dict with the configuration and results from all the active metrics.
         '''
         results = {}
+        has_failures = False
         for name, metric in cls._metrics.items():
             if not metric.is_disabled:
                 results[name] = asdict(metric)
-        return {'results': results, 'test_start': cls._start_time}
+                has_failures |= metric.failure_time is not None
+
+        return {'results': results, 'test_start': cls._start_time, 'has_failures': has_failures}
 
 
 @dataclass

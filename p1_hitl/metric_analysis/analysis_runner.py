@@ -1,14 +1,16 @@
 import io
+import json
 import logging
 import time
 import traceback
 from pathlib import Path
 from typing import List
 
-from p1_hitl.defs import HitlEnvArgs
+from p1_hitl.defs import FAILURE_REPORT, FULL_REPORT, HitlEnvArgs
 from p1_hitl.metric_analysis.metrics import (FatalMetricException,
                                              MaxElapsedTimeMetric,
-                                             MetricController, TimeSource)
+                                             MetricController, TimeSource,
+                                             Timestamp)
 from p1_runner.device_interface import (MAX_FE_MSG_SIZE, DeviceInterface,
                                         FusionEngineDecoder,
                                         MessageWithBytesTuple)
@@ -54,20 +56,40 @@ def _setup_analysis(env_args: HitlEnvArgs, output_dir: Path, log_metric_values: 
     return analyzers
 
 
-def _finish_analysis():
+def custom_json(obj):
+    if isinstance(obj, Timestamp):
+        return {'host_time': obj.host_time, 'p1_time': obj.p1_time, 'system_time': obj.system_time}
+    else:
+        return str(obj)
+
+
+def _finish_analysis(output_dir: Path):
     MetricController.finalize()
     report = MetricController.generate_report()
     results = report['results']
 
+    skipped = 0
+    failed = 0
+    passed = 0
     for k, v in results.items():
         if v['failure_time'] is None:
             if not v['was_checked']:
-                logger.info(f'[MISS]: {k}')
+                skipped += 1
             else:
-                logger.info(f'[GOOD]: {k}')
+                passed += 1
         else:
             logger.warning(f'[FAIL]: {k}')
-            logger.info(v)
+            failed += 1
+    logger.info(f'{passed} tests passed')
+    logger.info(f'{skipped} tests skipped')
+    logger.info(f'{failed} tests failed')
+
+    with open(output_dir / FULL_REPORT, 'w') as fd:
+        json.dump(report, fd, indent=2, default=custom_json)
+
+    if failed > 0:
+        with open(output_dir / FAILURE_REPORT, 'w') as fd:
+            fd.write('test\n')
 
 
 def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs, output_dir: Path, log_metric_values: bool) -> bool:
@@ -106,7 +128,7 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs, output_dir: 
         logger.error(f'Exception while analyzing FE messages:\n{traceback.format_exc()}')
         return False
 
-    _finish_analysis()
+    _finish_analysis(output_dir)
 
     return True
 
@@ -155,6 +177,6 @@ def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs,
         logger.error(f'Exception while analyzing FE messages:\n{traceback.format_exc()}')
         return False
 
-    _finish_analysis()
+    _finish_analysis(output_dir)
 
     return True
