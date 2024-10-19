@@ -49,8 +49,7 @@ LOGGER_UPDATE_INTERVAL_SEC = 30
 PLAYBACK_READ_SIZE = 1024
 
 
-def _setup_analysis(env_args: HitlEnvArgs, output_dir: Path, log_metric_values: bool) -> List[AnalyzerBase]:
-    MetricController.enable_logging(output_dir, True, log_metric_values)
+def _setup_analysis(env_args: HitlEnvArgs) -> List[AnalyzerBase]:
     MetricController.apply_environment_config_customizations(env_args)
 
     analyzers = [SanityAnalyzer(), PositionAnalyzer()]
@@ -113,7 +112,8 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs,
                  output_dir: Path, log_metric_values: bool) -> Optional[bool]:
     try:
         params = env_args.HITL_TEST_TYPE.get_test_params()
-        analyzers = _setup_analysis(env_args, output_dir, log_metric_values)
+        MetricController.enable_logging(output_dir, True, log_metric_values)
+        analyzers = _setup_analysis(env_args)
         start_time = time.monotonic()
         logger.info(f'Monitoring device for {params.duration_sec} sec.')
         msg_count = 0
@@ -167,10 +167,15 @@ def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs,
             if now - self.last_logger_update > LOGGER_UPDATE_INTERVAL_SEC:
                 elapsed_sec = now - self.start_time
                 total_bytes_read = self.in_fd.tell()
-                logger.log(logging.INFO,
-                           'Processed %d/%d bytes (%.1f%%). msg_count: %d. [elapsed=%.1f sec, rate=%.1f MB/s]' %
-                           (total_bytes_read, self.file_size, 100.0 * float(total_bytes_read) / self.file_size, self.msg_count,
-                            elapsed_sec, total_bytes_read / elapsed_sec / 1e6))
+                logger.log(
+                    logging.INFO,
+                    'Processed %d/%d bytes (%.1f%%). msg_count: %d. [elapsed=%.1f sec, rate=%.1f MB/s]' %
+                    (total_bytes_read,
+                     self.file_size,
+                     100.0 * float(total_bytes_read) / self.file_size,
+                     self.msg_count,
+                     elapsed_sec,
+                     total_bytes_read / elapsed_sec / 1e6))
                 self.last_logger_update = now
 
     # Can be used to replicate specific decoder behaviors, but is much slower.
@@ -208,7 +213,9 @@ def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs,
                 status.update()
 
     try:
-        analyzers = _setup_analysis(env_args, output_dir, log_metric_values)
+        MetricController.enable_logging(output_dir, False, log_metric_values)
+        MetricController.playback_host_time(output_dir.parent)
+        analyzers = _setup_analysis(env_args)
 
         metric_message_host_time_elapsed.is_disabled = True
         metric_message_host_time_elapsed_test_stop.is_disabled = True

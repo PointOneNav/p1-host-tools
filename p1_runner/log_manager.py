@@ -36,6 +36,7 @@ class LogManager(threading.Thread):
         self.creation_time = None
         self.sequence_num = None
         self.log_dir = None
+        self.timestamp_path = None
         self.log_timestamps = log_timestamps
         self.start_time = time.time()
         self.last_timestamp = time.time()
@@ -122,9 +123,9 @@ class LogManager(threading.Thread):
         self.logger.debug("Opening bin file '%s'." % path)
         timestamp_file = None
         if self.log_timestamps:
-            timestamp_path = os.path.join(self.log_dir, self.data_filename + '.timestamps')
-            self.logger.debug("Opening timestamp file '%s'." % timestamp_path)
-            timestamp_file = open(timestamp_path, 'wb')
+            self.timestamp_path = os.path.join(self.log_dir, self.data_filename + '.timestamps')
+            self.logger.debug("Opening timestamp file '%s'." % self.timestamp_path)
+            timestamp_file = open(self.timestamp_path, 'wb')
         with open(path, 'wb') as bin_file:
             if self.log_created_cmd is not None:
                 try:
@@ -173,6 +174,8 @@ class LogManager(threading.Thread):
         manifest.device_type = self.device_type if self.device_type is not None else 'UNKNOWN'
 
         manifest.channels.append(self.data_filename)
+        if self.timestamp_path:
+            manifest.channels.append(self.timestamp_path)
         manifest.channels.extend(self.files)
         manifest.channels.sort()
 

@@ -22,21 +22,7 @@ message, and the last timestamp received for any time bases that aren't updated.
 P1Time, the system time will be lagging behind.
 
 Metrics and logs check the "elapsed time" from these time sources. Currently, no effort is made to map between the,
-source types. The elapsed time is found by taking the max from comparing the time elapsed for each type. This can be
-limited to only consider a subset of the time bases.
-
-For example to find the max elapsed device time between pose messages, we might have a situation like:
-
-```
-system message @ system time 1.0
-pose message @ p1time 100.1 -> Use this start time (elapsed time is 0)
-system message @ system time 1.5 -> Only system device time is updated so elapsed time is 0.5
-system message @ system time 1.9 -> elapsed time is 0.9
-pose message @ p1time 101.1 -> since p1time difference now exceeds system time, elapsed time is 1.0
-```
-
-The purpose of calculating the elapsed time this way is to have a fallback if there's a gap of messages with the
-expected timestamp from the device.
+source types. The elapsed time is only computed with respect to a single time base.
 
 # Runtime Metric Configuration
 
@@ -92,10 +78,10 @@ class TimeSource(IntEnum):
     '''
     # Only consider the host time
     HOST = auto()
-    # Only consider the P1 and system timestamps from device FE messages
-    DEVICE = auto()
-    # Use all available time sources
-    ANY = auto()
+    # Only consider the P1 timestamps from device FE messages
+    P1 = auto()
+    # Only consider system timestamps from device FE messages
+    SYSTEM = auto()
 
 
 class CodeLocation(NamedTuple):
@@ -119,7 +105,29 @@ class Timestamp:
     p1_time: Optional[float]
     system_time: Optional[float]
 
-    def get_max_elapsed(self, previous_time: 'Timestamp', time_source: TimeSource) -> Optional[float]:
+    def get_elapsed(self, previous_time: 'Timestamp', time_source: TimeSource) -> Optional[float]:
+        '''!
+        Gets the time that elapsed "self - previous_time".
+
+        Makes no attempt to map between time bases, though that might be an approach for future improvements.
+
+        @param previous_time - The previous timestamp to get the elapsed time from
+        @param time_source - The time base to get the elapsed time for
+
+        @return The elapsed time in seconds. Returns `None` if one or both of the timestamps had no valid data for the
+                specified time source.
+        '''
+        current, previous = {
+            TimeSource.HOST: (self.host_time, previous_time.host_time),
+            TimeSource.P1: (self.p1_time, previous_time.p1_time),
+            TimeSource.SYSTEM: (self.system_time, previous_time.system_time)
+        }[time_source]
+        if current is not None and previous is not None:
+            return current - previous
+        else:
+            return None
+
+    def get_max_elapsed(self, previous_time: 'Timestamp') -> Optional[float]:
         '''!
         Gets the time that elapsed "self - previous_time".
 
@@ -129,10 +137,9 @@ class Timestamp:
         Makes no attempt to map between time bases, though that might be an approach for future improvements.
 
         @param previous_time - The previous timestamp to get the elapsed time from
-        @param time_source - Which time sources should be considered for the comparison. See @ref TimeSource.
 
         @return The elapsed time in seconds. Returns `None` if one or both of the timestamps had no valid data for the
-                specified time source.
+                all time bases.
         '''
         elapsed = None
 
@@ -145,12 +152,9 @@ class Timestamp:
 
             return cur_max_elapsed
 
-        if time_source is TimeSource.HOST or time_source is TimeSource.ANY:
-            elapsed = _update_max_elapsed(self.host_time, previous_time.host_time, elapsed)
-
-        if time_source is TimeSource.DEVICE or time_source is TimeSource.ANY:
-            elapsed = _update_max_elapsed(self.system_time, previous_time.system_time, elapsed)
-            elapsed = _update_max_elapsed(self.p1_time, previous_time.p1_time, elapsed)
+        elapsed = _update_max_elapsed(self.host_time, previous_time.host_time, elapsed)
+        elapsed = _update_max_elapsed(self.system_time, previous_time.system_time, elapsed)
+        elapsed = _update_max_elapsed(self.p1_time, previous_time.p1_time, elapsed)
 
         return elapsed
 
@@ -175,6 +179,8 @@ class MetricController:
     # entries, failure times, and tracking elapsed time metrics.
     _start_time: ClassVar[Timestamp] = Timestamp(None, None, None)
     _current_time: ClassVar[Timestamp] = Timestamp(None, None, None)
+    # Controls if host time should be played back.
+    _playback_host_times: ClassVar[bool] = False
 
     @classmethod
     def enable_logging(cls, log_dir: Path, log_msg_times: bool, log_metric_values: bool):
@@ -186,6 +192,15 @@ class MetricController:
         cls._log_dir = log_dir
         cls._log_msg_times = log_msg_times
         cls._log_metric_values = log_metric_values
+
+    @classmethod
+    def playback_host_time(cls, log_dir: Path):
+        file_path = log_dir / MSG_TIME_LOG_FILENAME
+        if file_path.exists():
+            cls._time_log_fd = open(file_path, 'rb')
+            cls._playback_host_times = True
+        else:
+            logger.warning(f"{file_path} not found. Can't use host times for playback.")
 
     @classmethod
     def update_host_time(cls):
@@ -214,28 +229,50 @@ class MetricController:
         This is used to set any checks that rely on a device TimeSource.
         This should be called for each message decoded from the device. This
         will update the current time with any time bases available in this
-        message. Since most messages don't have timestamps for each timebase,
+        message. Since most messages don't have timestamps for each time base,
         this means that one base may lag the other or that they may leapfrog.
 
         See the comment at the top of the file on how time keeping is performed.
         '''
         header, payload, _ = msg
+        updated = False
+        if cls._playback_host_times and cls._time_log_fd:
+            data = cls._time_log_fd.read(8)
+            if len(data) == 8:
+                test_time_millis, seq_num = struct.unpack(_MSG_TIME_LOG_FORMAT, data)
+                if seq_num != header.sequence_number:
+                    logger.error(
+                        f"Playback host times sequence number didn't match expected"
+                        f" [time_seq_num={seq_num}, msg_seq_num={header.sequence_number}].")
+                    # TODO: Try to resync
+                    cls._time_log_fd = None
+                else:
+                    cls._current_time.host_time = test_time_millis / 1000.0
+                    if cls._start_time.host_time is None:
+                        cls._start_time.host_time = cls._current_time.host_time
+                    updated = True
+            else:
+                cls._time_log_fd = None
+                logger.error('Playback host times ran out of data.')
+
         if isinstance(payload, MessagePayload):
             p1_time = payload.get_p1_time()
             # Note p1_time bool check validates if p1_time not None and not NaN.
             if p1_time:
+                updated = True
                 cls._current_time.p1_time = p1_time.seconds
                 if cls._start_time.p1_time is None:
                     cls._start_time.p1_time = p1_time.seconds
             system_time = payload.get_system_time_sec()
             if system_time is not None and not math.isnan(system_time):
+                updated = True
                 cls._current_time.system_time = system_time
                 if cls._start_time.system_time is None:
                     cls._start_time.system_time = system_time
 
         # Only log host times when update_host_time() is being called.
-        elapsed = cls._current_time.get_max_elapsed(cls._start_time, TimeSource.HOST)
-        if elapsed is not None and cls._log_dir is not None and cls._log_msg_times:
+        elapsed = cls._current_time.get_elapsed(cls._start_time, TimeSource.HOST)
+        if elapsed is not None and cls._log_dir is not None and cls._log_msg_times and not cls._playback_host_times:
             if cls._time_log_fd is None:
                 file_path = cls._log_dir / MSG_TIME_LOG_FILENAME
                 cls._time_log_fd = open(file_path, 'wb')
@@ -244,9 +281,10 @@ class MetricController:
             cls._time_log_fd.write(struct.pack(_MSG_TIME_LOG_FORMAT, test_time_millis, header.sequence_number))
 
         # Check metrics triggered by elapsed device time.
-        for metric in cls._metrics.values():
-            if not metric.is_disabled:
-                metric._time_elapsed()
+        if updated:
+            for metric in cls._metrics.values():
+                if not metric.is_disabled:
+                    metric._time_elapsed()
 
     @classmethod
     def register_environment_config_customizations(cls, callback: Callable[[HitlEnvArgs], None]):
@@ -278,9 +316,13 @@ class MetricController:
         '''!
         Call metric `_finalize()` functions for processing metrics that are only checked on test completion.
         '''
+        if cls._time_log_fd is not None:
+            cls._time_log_fd.close()
         for metric in cls._metrics.values():
             if not metric.is_disabled:
                 metric._finalize()
+                if metric._log_fd:
+                    metric._log_fd.close()
                 if not metric.was_checked and metric.is_required:
                     metric.failure_time = cls._current_time
                     metric.failure_context = 'not_checked'
@@ -376,9 +418,7 @@ class MetricBase:
             if self._log_fd is None:
                 file_path = MetricController._log_dir / (self.name + '.bin')
                 self._log_fd = open(file_path, 'wb')
-            elapsed = MetricController._current_time.get_max_elapsed(
-                MetricController._start_time,
-                TimeSource.ANY)
+            elapsed = MetricController._current_time.get_max_elapsed(MetricController._start_time)
             test_time_millis = 0 if elapsed is None else round(elapsed * 1000.0)
             self._log_fd.write(struct.pack(_METRIC_LOG_FORMAT, test_time_millis, value))
 
@@ -477,7 +517,7 @@ class MaxElapsedTimeMetric(MetricBase):
     def check(self) -> Optional[float]:
         elapsed = None
         if isinstance(self.__last_time, Timestamp):
-            elapsed = MetricController._current_time.get_max_elapsed(self.__last_time, self.time_source)
+            elapsed = MetricController._current_time.get_elapsed(self.__last_time, self.time_source)
             if elapsed is None:
                 return None
             # Failures are updated in _time_elapsed() function.
@@ -488,14 +528,14 @@ class MaxElapsedTimeMetric(MetricBase):
     def _time_elapsed(self):
         if isinstance(self.__last_time, Timestamp):
             if self.max_time_between_checks_sec is not None:
-                elapsed = MetricController._current_time.get_max_elapsed(self.__last_time, self.time_source)
+                elapsed = MetricController._current_time.get_elapsed(self.__last_time, self.time_source)
                 if elapsed is None:
                     return
                 self._update_failure(elapsed > self.max_time_between_checks_sec,
                                      f'time between checks: {elapsed} > {self.max_time_between_checks_sec}')
         else:
             if self.max_time_to_first_check_sec is not None:
-                elapsed = MetricController._current_time.get_max_elapsed(MetricController._start_time, self.time_source)
+                elapsed = MetricController._current_time.get_elapsed(MetricController._start_time, self.time_source)
                 if elapsed is None:
                     return
                 self._update_failure(elapsed > self.max_time_to_first_check_sec,

@@ -35,15 +35,26 @@ metric_error_msg_count = EqualValueMetric(
     not_logged=True
 )
 
-metric_pose_time_elapsed = MaxElapsedTimeMetric(
-    'pose_time_elapsed',
-    'Max time to first message, and between subsequent messages.',
-    TimeSource.DEVICE,
+metric_pose_host_time_elapsed = MaxElapsedTimeMetric(
+    'pose_host_time_elapsed',
+    'Max host time to first message, and between subsequent messages.',
+    TimeSource.HOST,
     max_time_to_first_check_sec=10,
     # Ideally, this should be specified for each device. I'm going to set this
     # conservatively initially, and bring down once we have better testing
     # integration and can make sure it doesn't generate false positives.
-    max_time_between_checks_sec=1,
+    max_time_between_checks_sec=0.5,
+    not_logged=True
+)
+
+metric_pose_p1_time_elapsed = MaxElapsedTimeMetric(
+    'pose_time_elapsed',
+    'Max P1 time between pose messages.',
+    TimeSource.P1,
+    # Ideally, this should be specified for each device. I'm going to set this
+    # conservatively initially, and bring down once we have better testing
+    # integration and can make sure it doesn't generate false positives.
+    max_time_between_checks_sec=0.3,
     not_logged=True
 )
 
@@ -74,6 +85,7 @@ class SanityAnalyzer(AnalyzerBase):
                 if signed_flag < 0:
                     self.error_count += 1
             elif isinstance(payload, PoseMessage):
-                metric_pose_time_elapsed.check()
+                metric_pose_host_time_elapsed.check()
+                metric_pose_p1_time_elapsed.check()
 
             metric_error_msg_count.check(self.error_count)
