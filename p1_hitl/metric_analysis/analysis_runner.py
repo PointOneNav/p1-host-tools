@@ -45,8 +45,9 @@ metric_message_host_time_elapsed_test_stop = MaxElapsedTimeMetric(
 
 # TODO: Figure out way to measure message latency
 
-LOGGER_UPDATE_INTERVAL_SEC = 30
+CONSOLE_UPDATE_INTERVAL_SEC = 30
 PLAYBACK_READ_SIZE = 1024
+REALTIME_POLL_INTERVAL = 0.05
 
 
 def _setup_analysis(env_args: HitlEnvArgs) -> List[AnalyzerBase]:
@@ -120,7 +121,7 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs,
         last_logger_update = time.monotonic()
         while time.monotonic() - start_time < params.duration_sec:
             try:
-                msgs = interface.wait_for_any_fe_message(response_timeout=0.1)
+                msgs = interface.poll_messages(response_timeout=REALTIME_POLL_INTERVAL)
             except Exception as e:
                 logger.error(f'Exception collecting FusionEngine messages from device {exception_to_str(e)}')
                 return None
@@ -135,7 +136,7 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs,
                     analyzer.update(msg)
 
             now = time.monotonic()
-            if now - last_logger_update > LOGGER_UPDATE_INTERVAL_SEC:
+            if now - last_logger_update > CONSOLE_UPDATE_INTERVAL_SEC:
                 elapsed = now - start_time
                 logger.info(f'{round(elapsed)}/{params.duration_sec} elapsed. {msg_count} messages from device.')
                 last_logger_update = now
@@ -164,7 +165,7 @@ def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs,
 
         def update(self):
             now = time.monotonic()
-            if now - self.last_logger_update > LOGGER_UPDATE_INTERVAL_SEC:
+            if now - self.last_logger_update > CONSOLE_UPDATE_INTERVAL_SEC:
                 elapsed_sec = now - self.start_time
                 total_bytes_read = self.in_fd.tell()
                 logger.log(
