@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import json
 import logging
 import os
 import subprocess
@@ -42,7 +43,7 @@ def report_failure(msg: str, env_args: Optional[HitlEnvArgs] = None, log_base_di
     channel = os.getenv('HITL_SLACK_CHANNEL')
     token = os.getenv('HITL_SLACK_BOT_TOKEN')
     if channel is None or token is None:
-        logger.warning('Missing environment parameter "SLACK_CHANNEL" and/or "SLACK_BOT_TOKEN". Cannot post to slack.')
+        logger.warning('Missing environment parameter "HITL_SLACK_CHANNEL" and/or "HITL_SLACK_BOT_TOKEN". Cannot post to slack.')
         return
 
     if env_args:
@@ -153,7 +154,7 @@ def main():
 
                 if ret_status is None:
                     report_failure(
-                        'HITL runner timed out, killing process. See attached console output in reply for details.',
+                        f'HITL runner timed out, killing process. See attached `{CONSOLE_FILE}` in reply for details.',
                         env_args=env_args,
                         log_base_dir=cli_args.logs_base_dir,
                         log_dir=log_dir)
@@ -162,7 +163,7 @@ def main():
                     sys.exit(1)
                 elif ret_status != 0:
                     report_failure(
-                        f'HITL process exited with error code {ret_status}. See attached console output in reply for details.',
+                        f'HITL process exited with error code {ret_status}. See attached `{CONSOLE_FILE}` in reply for details.',
                         env_args=env_args,
                         log_base_dir=cli_args.logs_base_dir,
                         log_dir=log_dir)
@@ -175,14 +176,19 @@ def main():
                         report_path = log_dir / FULL_REPORT
                         if not report_path.exists():
                             report_failure(
-                                'Failed to generate report. See attached console output in reply for details.',
+                                f'Failed to generate report. See attached `{CONSOLE_FILE}` in reply for details.',
                                 env_args=env_args,
                                 log_base_dir=cli_args.logs_base_dir,
                                 log_dir=log_dir)
                         else:
                             if failure_path.exists():
+                                with open(failure_path) as fd:
+                                    failures = json.load(fd)
+                                failed_tests = ['* ' + f['name'] for f in failures]
+                                failed_tests_str = '\n'.join(failed_tests)
                                 report_failure(
-                                    'Failures detected. See attached failure report in reply for details.',
+                                    f'Test metric failures detected:\n{failed_tests_str}\n'
+                                    f'See attached `{FAILURE_REPORT}` in reply for details.',
                                     env_args=env_args,
                                     log_base_dir=cli_args.logs_base_dir,
                                     log_dir=log_dir)
