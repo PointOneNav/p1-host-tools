@@ -39,8 +39,8 @@ def report_failure(msg: str, env_args: Optional[HitlEnvArgs] = None, log_base_di
     logger.warning(msg)
 
     # Try to post to slack
-    channel = os.getenv('SLACK_CHANNEL')
-    token = os.getenv('SLACK_BOT_TOKEN')
+    channel = os.getenv('HITL_SLACK_CHANNEL')
+    token = os.getenv('HITL_SLACK_BOT_TOKEN')
     if channel is None or token is None:
         logger.warning('Missing environment parameter "SLACK_CHANNEL" and/or "SLACK_BOT_TOKEN". Cannot post to slack.')
         return
