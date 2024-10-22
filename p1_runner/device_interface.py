@@ -145,7 +145,7 @@ class DeviceInterface:
         return []
 
     def poll_messages(self, read_buffer_size=MAX_FE_MSG_SIZE, response_timeout=0.0) -> List[MessageWithBytesTuple]:
-        return self.fe_decoder.on_data(self.data_source.read(read_buffer_size, response_timeout)) # type: ignore
+        return self.fe_decoder.on_data(self.data_source.read(read_buffer_size, response_timeout))  # type: ignore
 
     def wait_for_message(self, msg_type, response_timeout=RESPONSE_TIMEOUT):
         if isinstance(msg_type, MessageType):

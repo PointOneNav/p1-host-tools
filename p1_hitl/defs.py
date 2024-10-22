@@ -94,12 +94,6 @@ class HitlEnvArgs(NamedTuple):
     # Only for Atlas Tests
     JENKINS_ATLAS_LAN_IP: Optional[str] = None
     JENKINS_ATLAS_BALENA_UUID: Optional[str] = None
-    # Slack Credentials
-    JENKINS_SLACK_CLIENT_ID: Optional[str] = None
-    JENKINS_SLACK_CLIENT_SECRET: Optional[str] = None
-    JENKINS_SLACK_VERIFICATION_TOKEN: Optional[str] = None
-    JENKINS_SLACK_BOT_TOKEN: Optional[str] = None
-    JENKINS_SLACK_CHANNEL: Optional[str] = None
 
     def check_fields(self, required_fields: List[str]) -> bool:
         ret = True
