@@ -71,7 +71,7 @@ Software Version: `{env_args.HITL_DUT_VERSION}`
     if log_dir:
         log_directory = log_dir.relative_to(log_base_dir)
         slack_mrkdwn += f'''\
-Console output, configuration, and data logged to:
+Console output, configuration, and data uploaded to:
 <s3://{S3_DEFAULT_INGEST_BUCKET}/{log_directory}>
 
 See attachments in reply for more details.
@@ -153,7 +153,7 @@ def main():
 
                 if ret_status is None:
                     report_failure(
-                        'HITL runner timed out, killing process. See attached console output for details.',
+                        'HITL runner timed out, killing process. See attached console output in reply for details.',
                         env_args=env_args,
                         log_base_dir=cli_args.logs_base_dir,
                         log_dir=log_dir)
@@ -162,7 +162,7 @@ def main():
                     sys.exit(1)
                 elif ret_status != 0:
                     report_failure(
-                        f'HITL process exited with error code {ret_status}. See attached console output for details.',
+                        f'HITL process exited with error code {ret_status}. See attached console output in reply for details.',
                         env_args=env_args,
                         log_base_dir=cli_args.logs_base_dir,
                         log_dir=log_dir)
@@ -175,14 +175,14 @@ def main():
                         report_path = log_dir / FULL_REPORT
                         if not report_path.exists():
                             report_failure(
-                                'Failed to generate report. See attached console output for details.',
+                                'Failed to generate report. See attached console output in reply for details.',
                                 env_args=env_args,
                                 log_base_dir=cli_args.logs_base_dir,
                                 log_dir=log_dir)
                         else:
                             if failure_path.exists():
                                 report_failure(
-                                    'Failures detected. See attached failure report for details.',
+                                    'Failures detected. See attached failure report in reply for details.',
                                     env_args=env_args,
                                     log_base_dir=cli_args.logs_base_dir,
                                     log_dir=log_dir)
