@@ -174,8 +174,11 @@ version specific. This value can be:
 
 
 @lru_cache
-def _get_config_loader_class(user_config_loader_source: str, user_config_loader_cache_dir: Path,
-                             user_config_loader_nautilus_dir: Path, device_version: Optional[str]) -> Type[UserConfigType]:
+def _get_config_loader_class(
+        user_config_loader_source: str,
+        user_config_loader_cache_dir: Path,
+        user_config_loader_nautilus_dir: Path,
+        device_version: Optional[str]) -> Type[UserConfigType]:
     source_parts = user_config_loader_source.split(":")
     if source_parts[0] == 'none':
         raise ValueError('UserConfig loader disabled by --user-config-loader-source.')

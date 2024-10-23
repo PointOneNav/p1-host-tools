@@ -1,14 +1,34 @@
 import json
 import logging
 import os
-import re
+from argparse import ArgumentParser, Namespace
 from enum import Enum, auto
 from pathlib import Path
 from typing import List, NamedTuple, Optional
 
+from fusion_engine_client.utils.log import DEFAULT_LOG_BASE_DIR
+
 from p1_runner.device_type import DeviceType
 
 logger = logging.getLogger('point_one.hitl.runner')
+
+
+PLAYBACK_DIR = 'playback'
+FAILURE_REPORT = 'hitl_failures.json'
+FULL_REPORT = 'hitl_report.json'
+CONSOLE_FILE = 'hitl_console.txt'
+UPLOADED_LOG_LIST_FILE = 'uploaded_device_logs.txt'
+MSG_TIME_LOG_FILENAME = 'msg_times.bin'
+ENV_DUMP_FILE = 'env.json'
+BUILD_INFO_FILE = 'build-info.json'
+LOG_FILES = [
+    FAILURE_REPORT,
+    FULL_REPORT,
+    CONSOLE_FILE,
+    UPLOADED_LOG_LIST_FILE,
+    MSG_TIME_LOG_FILENAME,
+    ENV_DUMP_FILE,
+    BUILD_INFO_FILE]
 
 
 class TestParams(NamedTuple):
@@ -126,3 +146,37 @@ class HitlEnvArgs(NamedTuple):
         with open(in_path, 'r') as fd:
             env = json.load(fd)
             return cls.get_env_args(env)
+
+
+def get_args() -> tuple[Namespace, Optional[HitlEnvArgs]]:
+    parser = ArgumentParser()
+    parser.add_argument(
+        '-v',
+        '--verbose',
+        action='count',
+        default=0,
+        help="Print verbose/trace debugging messages. May be specified multiple times to increase verbosity.",
+    )
+    parser.add_argument(
+        '--log-metric-values', action='store_true',
+        help="Generate CSV's for each metric in the output directory.")
+    parser.add_argument(
+        '--logs-base-dir', default=DEFAULT_LOG_BASE_DIR,
+        help="The base directory containing FusionEngine logs to be searched and written to.")
+    parser.add_argument(
+        '--reuse-log-dir', default=None,
+        help="Use this directory instead of generating a new log directory.")
+    parser.add_argument(
+        '-p', '--playback-log',
+        help="Rather than connect to a device, re-analyze a log instead.")
+    parser.add_argument(
+        '-e', '--env-file', type=Path,
+        help="Rather than load args from environment, use a JSON file.")
+    cli_args = parser.parse_args()
+
+    if cli_args.env_file:
+        env_args = HitlEnvArgs.load_env_json_file(cli_args.env_file)
+    else:
+        env_args = HitlEnvArgs.get_env_args()
+
+    return cli_args, env_args

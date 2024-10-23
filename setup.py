@@ -33,6 +33,7 @@ internal_only_requirements = [
     "boto3>=1.34",
     "pydantic>=2.9.1",
     "jenkinsapi>=0.3.13",
+    "slack_sdk>=3.33.1",
 ]
 
 all_requirements = requirements + dev_requirements + internal_only_requirements

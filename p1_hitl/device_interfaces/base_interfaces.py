@@ -6,13 +6,20 @@ from p1_runner.device_interface import DeviceInterface
 from p1_test_automation.devices_config import DeviceConfig
 
 
-class DeviceInterfaceBase(ABC):
+class HitlDeviceInterfaceBase(ABC):
     @staticmethod
     @abstractmethod
     def get_device_config(args: HitlEnvArgs) -> Optional[DeviceConfig]:
         ...
 
-    @staticmethod
     @abstractmethod
-    def init_device(config: DeviceConfig, build_info: Dict[str, Any]) -> Optional[DeviceInterface]:
+    def __init__(self, config: DeviceConfig):
+        ...
+
+    @abstractmethod
+    def init_device(self, build_info: Dict[str, Any]) -> Optional[DeviceInterface]:
+        ...
+
+    @abstractmethod
+    def shutdown_device(self, tests_passed: bool) -> Optional[DeviceInterface]:
         ...
