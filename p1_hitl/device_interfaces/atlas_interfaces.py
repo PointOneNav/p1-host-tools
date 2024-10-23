@@ -1,5 +1,4 @@
 import logging
-import socket
 import time
 from argparse import Namespace
 from pathlib import Path
@@ -22,19 +21,6 @@ UPDATE_WAIT_TIME_SEC = 60
 RESTART_WAIT_TIME_SEC = 30
 
 logger = logging.getLogger('point_one.hitl.atlas_interface')
-
-
-def _is_atlas_online(ip_addr: str, port: int, timeout: float = 1):
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.settimeout(timeout)
-    try:
-        s.connect((ip_addr, int(port)))
-        s.shutdown(socket.SHUT_RDWR)
-        return True
-    except:
-        return False
-    finally:
-        s.close()
 
 
 class HitlAtlasInterface(HitlDeviceInterfaceBase):

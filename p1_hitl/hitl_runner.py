@@ -198,7 +198,8 @@ def main():
                     env_args,
                     output_dir,
                     cli_args.log_metric_values,
-                    host_tools_commit)
+                    host_tools_commit,
+                    release_str)
         finally:
             if tests_passed is not None:
                 ran_successfully = True

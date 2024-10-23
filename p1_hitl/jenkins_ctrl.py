@@ -26,6 +26,7 @@ NUM_OLD_BUILDS_TO_CHECK = 10
 CONNECTION_ATTEMPTS = 10
 RETRY_DELAY_SEC = 2
 
+
 def _get_build_params(git_commitish: str, build_type: DeviceType) -> Dict[str, str]:
     params = {'BRANCH': git_commitish}
     if build_type in list(QUECTEL_BUILD_TYPE_MAP.keys()):
@@ -42,8 +43,7 @@ def run_build(git_commitish: str, build_type: DeviceType) -> bool:
         return False
 
     try:
-        # Sometimes see spurious error:
-        # 403 Client Error: Forbidden for url: https://build.pointonenav.com/api/python?tree=jobs%5Bname%2Ccolor%2Curl%5D
+        # Sometimes see spurious error: 403 Client Error
         for _ in range(CONNECTION_ATTEMPTS):
             try:
                 jenkins = Jenkins(JENKINS_BASE_URL, username=JENKINS_API_USERNAME, password=JENKINS_API_TOKEN)
