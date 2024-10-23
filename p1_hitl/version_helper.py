@@ -2,7 +2,7 @@ import logging
 import re
 from typing import Optional
 
-from p1_hitl.defs import DeviceType, HitlEnvArgs, TestType
+from p1_hitl.defs import DeviceType, HitlEnvArgs
 from p1_hitl.git_cmds import GitWrapper
 
 DEVICE_TAG_GLOB = {

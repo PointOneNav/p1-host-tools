@@ -16,9 +16,9 @@ from p1_test_automation.devices_config import (BalenaConfig, DeviceConfig,
 
 from .base_interfaces import HitlDeviceInterfaceBase
 
-UPDATE_TIMEOUT_SEC = 60 * 10
-UPDATE_WAIT_TIME_SEC = 30
-RESTART_WAIT_TIME_SEC = 10
+UPDATE_TIMEOUT_SEC = 60 * 15
+UPDATE_WAIT_TIME_SEC = 60
+RESTART_WAIT_TIME_SEC = 30
 
 logger = logging.getLogger('point_one.hitl.atlas_interface')
 

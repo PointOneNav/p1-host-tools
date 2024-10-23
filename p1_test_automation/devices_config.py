@@ -179,6 +179,7 @@ def open_data_source(device_config: DeviceConfig) -> Optional[DataSource]:
         logger.info('Connecting to %s using TCP address %s.' % (device_config.name, device_config.tcp_address))
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(5)
             s.connect((device_config.tcp_address, device_config.port))
             data_source = SocketDataSource(s)
         except Exception as e:

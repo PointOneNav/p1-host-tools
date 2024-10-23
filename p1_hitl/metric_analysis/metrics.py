@@ -705,8 +705,8 @@ class AlwaysTrueMetric(MetricBase):
     Checks that a value is always `True`.
     '''
 
-    def check(self, value: bool):
-        self._update_status(value, not value)
+    def check(self, value: bool, failure_context: Optional[str] = None):
+        self._update_status(value, not value, failure_context)
 
 
 def _main():

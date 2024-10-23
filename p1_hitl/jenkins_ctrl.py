@@ -1,8 +1,10 @@
 import logging
 import os
+import time
 import traceback
 from typing import Dict
 
+import requests
 from jenkinsapi.jenkins import Jenkins
 
 from p1_hitl.defs import DeviceType
@@ -21,6 +23,8 @@ QUECTEL_BUILD_TYPE_MAP = {
 }
 
 NUM_OLD_BUILDS_TO_CHECK = 10
+CONNECTION_ATTEMPTS = 10
+RETRY_DELAY_SEC = 2
 
 
 def _get_build_params(git_commitish: str, build_type: DeviceType) -> Dict[str, str]:
@@ -39,7 +43,14 @@ def run_build(git_commitish: str, build_type: DeviceType) -> bool:
         return False
 
     try:
-        jenkins = Jenkins(JENKINS_BASE_URL, username=JENKINS_API_USERNAME, password=JENKINS_API_TOKEN)
+        # Sometimes see spurious error: 403 Client Error
+        for _ in range(CONNECTION_ATTEMPTS):
+            try:
+                jenkins = Jenkins(JENKINS_BASE_URL, username=JENKINS_API_USERNAME, password=JENKINS_API_TOKEN)
+                break
+            except requests.exceptions.HTTPError as e:
+                logger.error(f'Problem connecting to Jenkins: {e}')
+                time.sleep(RETRY_DELAY_SEC)
 
         job_name = BUILD_JOB_MAP[build_type]
         params = _get_build_params(git_commitish, build_type)
@@ -89,11 +100,14 @@ def run_build(git_commitish: str, build_type: DeviceType) -> bool:
         # Block this script until build is finished
         tracked_build.block_until_complete()
 
+        # For some reason need to explicitly call this to get the new status.
+        tracked_build.poll()
         if not tracked_build.is_good():
             logger.warning(f'Build failed, see {tracked_build.get_build_url()}')
-            return True
-        else:
             return False
+        else:
+            logger.info('Build succeeded.')
+            return True
     except Exception as e:
         logger.error(f'Problem running Jenkins build: {traceback.format_exc()}')
         return False

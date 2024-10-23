@@ -18,6 +18,7 @@ from p1_hitl.defs import (BUILD_INFO_FILE, CONSOLE_FILE, ENV_DUMP_FILE,
                           TestType, get_args)
 from p1_hitl.device_interfaces import HitlAtlasInterface
 from p1_hitl.get_build_artifacts import get_build_info
+from p1_hitl.git_cmds import GitWrapper
 from p1_hitl.jenkins_ctrl import run_build
 from p1_hitl.metric_analysis.analysis_runner import (run_analysis,
                                                      run_analysis_playback)
@@ -40,18 +41,24 @@ def main():
     if env_args is None:
         sys.exit(1)
 
-    if cli_args.verbose == 0:
-        logging.basicConfig(level=logging.INFO, format='%(message)s', stream=sys.stdout)
-    else:
-        logging.basicConfig(
-            level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', stream=sys.stdout
-        )
+    logging.basicConfig(
+        level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', stream=sys.stdout
+    )
+    if cli_args.verbose > 0:
         logger.setLevel(logging.DEBUG)
         logging.getLogger('point_one.hitl').setLevel(logging.DEBUG)
         if cli_args.verbose > 1:
             logging.getLogger().setLevel(logging.DEBUG)
 
     logger.info(env_args)
+
+    host_tools_commit = 'Unknown'
+    try:
+        git = GitWrapper(repo_root)
+        host_tools_commit = git.describe()
+        logger.info(f'p1-host-tools git commit: "{host_tools_commit}"')
+    except RuntimeError as e:
+        logger.warning(f'Unable to git describe p1-host-tools repo: {e}')
 
     ################# Setup log directory #################
     log_manager = None
@@ -181,12 +188,18 @@ def main():
         try:
             if cli_args.playback_log:
                 tests_passed = run_analysis_playback(
-                    playback_file, env_args, output_dir, cli_args.log_metric_values)
+                    playback_file, env_args, output_dir, cli_args.log_metric_values, host_tools_commit)
             else:
                 if log_manager is not None:
                     log_manager.start()
                     device_interface.data_source.rx_log = log_manager  # type: ignore
-                tests_passed = run_analysis(device_interface, env_args, output_dir, cli_args.log_metric_values)
+                tests_passed = run_analysis(
+                    device_interface,
+                    env_args,
+                    output_dir,
+                    cli_args.log_metric_values,
+                    host_tools_commit,
+                    release_str)
         finally:
             if tests_passed is not None:
                 ran_successfully = True

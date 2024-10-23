@@ -6,11 +6,13 @@ import traceback
 from pathlib import Path
 from typing import Iterator, List, Optional
 
-from fusion_engine_client.messages import MessageHeader, message_type_to_class
+from fusion_engine_client.messages import (MessageHeader, VersionInfoMessage,
+                                           message_type_to_class)
 from fusion_engine_client.parsers import fast_indexer
 
 from p1_hitl.defs import FAILURE_REPORT, FULL_REPORT, HitlEnvArgs
-from p1_hitl.metric_analysis.metrics import (FatalMetricException,
+from p1_hitl.metric_analysis.metrics import (AlwaysTrueMetric,
+                                             FatalMetricException,
                                              MaxElapsedTimeMetric,
                                              MetricController, TimeSource,
                                              Timestamp)
@@ -24,6 +26,8 @@ from .position_analysis import PositionAnalyzer
 from .sanity_analysis import SanityAnalyzer
 
 logger = logging.getLogger('point_one.hitl.analysis')
+
+MAX_SEC_TO_VERSION_MESSAGE = 60
 
 metric_message_host_time_elapsed = MaxElapsedTimeMetric(
     'message_host_time_elapsed',
@@ -41,6 +45,11 @@ metric_message_host_time_elapsed_test_stop = MaxElapsedTimeMetric(
     max_time_between_checks_sec=60,
     is_fatal=True,
     not_logged=True
+)
+metric_version_check = AlwaysTrueMetric(
+    'version_check',
+    'Check that the version message matches the expected value.',
+    is_fatal=True
 )
 
 # TODO: Figure out way to measure message latency
@@ -66,9 +75,11 @@ def custom_json(obj):
         return str(obj)
 
 
-def _finish_analysis(output_dir: Path) -> bool:
+def _finish_analysis(output_dir: Path, analysis_commit: str) -> bool:
     MetricController.finalize()
     report = MetricController.generate_report()
+    # Add git describe of host tools repo to report.
+    report['analysis_commit'] = analysis_commit
     results = report['results']
 
     skipped = 0
@@ -110,10 +121,13 @@ def _finish_analysis(output_dir: Path) -> bool:
 
 
 def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs,
-                 output_dir: Path, log_metric_values: bool) -> Optional[bool]:
+                 output_dir: Path, log_metric_values: bool, analysis_commit: str, release_str: str) -> Optional[bool]:
     try:
         params = env_args.HITL_TEST_TYPE.get_test_params()
         MetricController.enable_logging(output_dir, True, log_metric_values)
+        if params.duration_sec < MAX_SEC_TO_VERSION_MESSAGE:
+            metric_version_check.is_disabled = True
+
         analyzers = _setup_analysis(env_args)
         start_time = time.monotonic()
         logger.info(f'Monitoring device for {params.duration_sec} sec.')
@@ -132,6 +146,10 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs,
                 MetricController.update_device_time(msg)
                 metric_message_host_time_elapsed.check()
                 metric_message_host_time_elapsed_test_stop.check()
+                payload = msg[1]
+                if isinstance(payload, VersionInfoMessage):
+                    context = f'Received: {payload.engine_version_str} != Expected: {release_str}'
+                    metric_version_check.check(payload.engine_version_str == release_str, context)
                 for analyzer in analyzers:
                     analyzer.update(msg)
 
@@ -147,11 +165,11 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs,
         logger.error(f'Exception while analyzing FE messages:\n{traceback.format_exc()}')
         return None
 
-    return _finish_analysis(output_dir)
+    return _finish_analysis(output_dir, analysis_commit)
 
 
 def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs,
-                          output_dir: Path, log_metric_values: bool) -> Optional[bool]:
+                          output_dir: Path, log_metric_values: bool, analysis_commit: str) -> Optional[bool]:
     class _PlaybackStatus:
         def __init__(self, in_fd) -> None:
             self.in_fd = in_fd
@@ -220,6 +238,7 @@ def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs,
 
         metric_message_host_time_elapsed.is_disabled = True
         metric_message_host_time_elapsed_test_stop.is_disabled = True
+        metric_version_check.is_disabled = True
 
         for msg in _fast_decoder(playback_path):
             MetricController.update_device_time(msg)
@@ -233,4 +252,4 @@ def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs,
         logger.error(f'Exception while analyzing FE messages:\n{traceback.format_exc()}')
         return None
 
-    return _finish_analysis(output_dir)
+    return _finish_analysis(output_dir, analysis_commit)
