@@ -43,12 +43,13 @@ def report_failure(msg: str, env_args: Optional[HitlEnvArgs] = None, log_base_di
     channel = os.getenv('HITL_SLACK_CHANNEL')
     token = os.getenv('HITL_SLACK_BOT_TOKEN')
     if channel is None or token is None:
-        logger.warning('Missing environment parameter "HITL_SLACK_CHANNEL" and/or "HITL_SLACK_BOT_TOKEN". Cannot post to slack.')
+        logger.warning(
+            'Missing environment parameter "HITL_SLACK_CHANNEL" and/or "HITL_SLACK_BOT_TOKEN". Cannot post to slack.')
         return
 
     if env_args:
         slack_mrkdwn = f'''\
-*HITL {env_args.HITL_TEST_TYPE.name} Test Failed Failed*
+*HITL {env_args.HITL_TEST_TYPE.name} Test Failed*
 Node: `{env_args.HITL_NAME}`
 Platform Config: `{env_args.HITL_BUILD_TYPE.name}`
 Software Version: `{env_args.HITL_DUT_VERSION}`
@@ -73,7 +74,7 @@ Software Version: `{env_args.HITL_DUT_VERSION}`
         log_directory = log_dir.relative_to(log_base_dir)
         slack_mrkdwn += f'''\
 Console output, configuration, and data uploaded to:
-<https://console.aws.amazon.com/s3/buckets/pointone-ingest-landingpad/{S3_DEFAULT_INGEST_BUCKET}/{log_directory}>
+<https://console.aws.amazon.com/s3/{S3_DEFAULT_INGEST_BUCKET}/{log_directory}>
 
 See attachments in reply for more details.
 '''
