@@ -66,9 +66,11 @@ def custom_json(obj):
         return str(obj)
 
 
-def _finish_analysis(output_dir: Path) -> bool:
+def _finish_analysis(output_dir: Path, analysis_commit: str) -> bool:
     MetricController.finalize()
     report = MetricController.generate_report()
+    # Add git describe of host tools repo to report.
+    report['analysis_commit'] = analysis_commit
     results = report['results']
 
     skipped = 0
@@ -110,7 +112,7 @@ def _finish_analysis(output_dir: Path) -> bool:
 
 
 def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs,
-                 output_dir: Path, log_metric_values: bool) -> Optional[bool]:
+                 output_dir: Path, log_metric_values: bool, analysis_commit: str) -> Optional[bool]:
     try:
         params = env_args.HITL_TEST_TYPE.get_test_params()
         MetricController.enable_logging(output_dir, True, log_metric_values)
@@ -147,11 +149,11 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs,
         logger.error(f'Exception while analyzing FE messages:\n{traceback.format_exc()}')
         return None
 
-    return _finish_analysis(output_dir)
+    return _finish_analysis(output_dir, analysis_commit)
 
 
 def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs,
-                          output_dir: Path, log_metric_values: bool) -> Optional[bool]:
+                          output_dir: Path, log_metric_values: bool, analysis_commit: str) -> Optional[bool]:
     class _PlaybackStatus:
         def __init__(self, in_fd) -> None:
             self.in_fd = in_fd
@@ -233,4 +235,4 @@ def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs,
         logger.error(f'Exception while analyzing FE messages:\n{traceback.format_exc()}')
         return None
 
-    return _finish_analysis(output_dir)
+    return _finish_analysis(output_dir, analysis_commit)
