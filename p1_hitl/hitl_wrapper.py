@@ -58,7 +58,7 @@ Software Version: `{env_args.HITL_DUT_VERSION}`
 
     jenkins_build_url = os.getenv('BUILD_URL')
     if jenkins_build_url is not None:
-        build_url_line = f'See [Jenkins Build]({jenkins_build_url}) for info on PR and full job log.'
+        build_url_line = f'See <{jenkins_build_url}> for info on PR and full job log.'
     else:
         build_url_line = f'Job was run outside Jenkins.'
 
@@ -73,7 +73,7 @@ Software Version: `{env_args.HITL_DUT_VERSION}`
         log_directory = log_dir.relative_to(log_base_dir)
         slack_mrkdwn += f'''\
 Console output, configuration, and data uploaded to:
-<s3://{S3_DEFAULT_INGEST_BUCKET}/{log_directory}>
+<https://console.aws.amazon.com/s3/buckets/pointone-ingest-landingpad/{S3_DEFAULT_INGEST_BUCKET}/{log_directory}>
 
 See attachments in reply for more details.
 '''
