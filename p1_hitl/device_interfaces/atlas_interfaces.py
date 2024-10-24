@@ -16,7 +16,8 @@ from p1_test_automation.devices_config import (BalenaConfig, DeviceConfig,
 
 from .base_interfaces import HitlDeviceInterfaceBase
 
-UPDATE_TIMEOUT_SEC = 60 * 15
+UPDATE_TIMEOUT_SEC = 60 * 20
+UPDATE_POLL_INTERVAL_SEC = 10
 UPDATE_WAIT_TIME_SEC = 60
 RESTART_WAIT_TIME_SEC = 30
 
@@ -86,8 +87,11 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
 
                 if target_release == balena_status.current_release:
                     logger.info(f'{balena_status.name} finished updating.')
+                    # Sleep to give updated software a chance to get up and running.
+                    time.sleep(UPDATE_WAIT_TIME_SEC)
                     break
-                time.sleep(UPDATE_WAIT_TIME_SEC)
+                else:
+                    time.sleep(UPDATE_POLL_INTERVAL_SEC)
 
         data_source = open_data_source(self.config)
         if data_source is None:
@@ -119,6 +123,7 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
         if not restart_application(self.config.tcp_address, log_on_startup=True):
             logger.error('Atlas restart failed.')
             return None
+        # Sleep to give restarted software a chance to get up and running.
         time.sleep(RESTART_WAIT_TIME_SEC)
 
         data_source = open_data_source(self.config)

@@ -25,8 +25,8 @@ from p1_runner.log_manager import LogManager
 
 # TODO: Slack integration.
 
-# Give the process 30 minutes above the test duration for build and setup.
-BUILD_AND_SETUP_TIMEOUT_SEC = 30 * 60
+# Give the process 40 minutes above the test duration for build and setup.
+BUILD_AND_SETUP_TIMEOUT_SEC = 40 * 60
 KILL_TIMEOUT_SEC = 10
 UPDATE_INTERVAL_SEC = 1
 RUNNER_SCRIPT_PATH = repo_root / 'p1_hitl/hitl_runner.py'
