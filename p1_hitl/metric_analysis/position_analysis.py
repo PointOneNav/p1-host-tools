@@ -55,6 +55,12 @@ metric_3d_fixed_pos_error = StatsMetric(
     is_required=True
 )
 
+metric_no_nan_in_position = AlwaysTrueMetric(
+    'non_nan_position',
+    'All positions should be non-nan values.',
+    is_required=True,
+    not_logged=True
+)
 
 def configure_metrics(env_args: HitlEnvArgs):
     params = env_args.HITL_TEST_TYPE.get_test_params()
@@ -103,6 +109,9 @@ class PositionAnalyzer(AnalyzerBase):
             is_valid = payload.solution_type != SolutionType.Invalid
             metric_fix_rate.check(is_fixed)
             metric_position_valid.check(is_valid)
+
+            position_is_non_nan = not np.any(np.isnan(payload.lla_deg))
+            metric_no_nan_in_position(position_is_non_nan)
 
             if is_valid:
                 velocity_mps = float(np.linalg.norm(payload.velocity_body_mps))
