@@ -31,10 +31,6 @@ from p1_test_automation.devices_config_test import \
 
 logger = logging.getLogger('point_one.hitl.runner')
 
-# TODO:
-# - Generate report from metrics
-# - Update configuration test to use metrics
-
 
 def main():
     cli_args, env_args = get_args()

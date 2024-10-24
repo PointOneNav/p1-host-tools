@@ -6,7 +6,7 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import List, NamedTuple, Optional
 
-from fusion_engine_client.utils.log import DEFAULT_LOG_BASE_DIR
+from fusion_engine_client.utils.log import DEFAULT_LOG_BASE_DIR, find_log_file
 
 from p1_runner.device_type import DeviceType
 
@@ -174,8 +174,26 @@ def get_args() -> tuple[Namespace, Optional[HitlEnvArgs]]:
         help="Rather than load args from environment, use a JSON file.")
     cli_args = parser.parse_args()
 
-    if cli_args.env_file:
-        env_args = HitlEnvArgs.load_env_json_file(cli_args.env_file)
+    env_file = cli_args.env_file
+    # During playback, if required environment value is not found, and not specified over CLI, check playback directory.
+    if cli_args.playback_log and env_file is None and os.getenv('HITL_NAME') is None:
+        try:
+            _, log_dir = find_log_file(
+                cli_args.playback_log,
+                return_output_dir=True,
+                log_base_dir=cli_args.logs_base_dir,
+                candidate_files=[
+                    'input.raw',
+                    'input.p1bin'])
+            tmp_env = Path(log_dir) / ENV_DUMP_FILE
+            if tmp_env.exists():
+                logger.info('Env data not specified in CLI or environment, so loading from playback directory.')
+                env_file = tmp_env
+        except FileNotFoundError as e:
+            pass
+
+    if env_file:
+        env_args = HitlEnvArgs.load_env_json_file(env_file)
     else:
         env_args = HitlEnvArgs.get_env_args()
 
