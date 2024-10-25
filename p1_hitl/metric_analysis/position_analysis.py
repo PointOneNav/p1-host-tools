@@ -63,6 +63,53 @@ metric_no_nan_in_position = AlwaysTrueMetric(
     not_logged=True
 )
 
+metric_pose_dt_sec = MaxValueMetric(
+    'max_pose_dt_sec',
+    'DT between pose messages should be near 0.1 seconds.',
+    0.2,
+    is_required=True,
+    not_logged=True
+)
+
+metric_pose_dt_positive = AlwaysTrueMetric(
+    'pose_dt_positive',
+    'DT between pose messages should be positive.',
+    is_required=True,
+    not_logged=True
+)
+
+metric_delta_ypr_deg = MaxArrayValueMetric(
+    'delta_ypr_deg',
+    'Max jumps in YPR values should be lower than [5.0, 5.0, 5.0]',
+    [5.0, 5.0, 5.0],
+    is_required=True,
+    not_logged=True
+)
+
+metric_pos_std_enu = MaxArrayValueMetric(
+    'pos_std_enu',
+    'ENU position standard deviations should be less than [2.0, 2.0, 2.0]',
+    [2.0, 2.0, 2.0],
+    is_required=True,
+    not_logged=True
+)
+
+metric_ypr_std_deg = MaxArrayValueMetric(
+    'ypr_std_deg',
+    'Max YPR standard deviations should be lower than [5.0, 5.0, 5.0]',
+    [5.0, 5.0, 5.0],
+    is_required=True,
+    not_logged=True
+)
+
+metric_vel_std_mps = MaxArrayValueMetric(
+    'vel_std_mps',
+    'Max velocity standard deviations should be lower than [3.0, 3.0, 3.0]',
+    [3.0, 3.0, 3.0],
+    is_required=True,
+    not_logged=True
+)
+
 def configure_metrics(env_args: HitlEnvArgs):
     params = env_args.HITL_TEST_TYPE.get_test_params()
     position_metrics = MetricController.get_metrics_in_this_file()
@@ -100,6 +147,9 @@ class PositionAnalyzer(AnalyzerBase):
             raise KeyError(
                 f'JENKINS_ANTENNA_LOCATION must be specified test {env_args.HITL_TEST_TYPE.name} with position checking.')
 
+        self.last_message_p1_time = None
+        self.last_message_ypr = None
+
     def update(self, msg: MessageWithBytesTuple):
         if self.params.check_position is False:
             return
@@ -124,3 +174,15 @@ class PositionAnalyzer(AnalyzerBase):
                 if is_fixed:
                     metric_2d_fixed_pos_error.check(error_2d_m)
                     metric_3d_fixed_pos_error.check(error_3d_m)
+
+                if self.last_message_p1_time is None:
+                    self.last_message_p1_time = payload.p1_time
+                    self.last_message_ypr = payload.ypr_deg
+                else:
+                    metric_pose_dt_sec.check(payload.p1_time - self.last_message_p1_time)
+                    metric_pose_dt_positive.check(payload.p1_time > self.last_message_p1_time)
+                    metric_delta_ypr_deg.check(abs(np.subtract(payload.ypr_deg, self.last_message_ypr)))
+
+                metric_pos_std_enu.check(payload.position_std_enu_m)
+                metric_ypr_std_deg.check(payload.ypr_std_deg)
+                metric_vel_std_mps.check(payload.velocity_std_body_mps)
