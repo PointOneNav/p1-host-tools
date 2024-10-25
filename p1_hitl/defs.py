@@ -94,7 +94,8 @@ class HitlEnvArgs(NamedTuple):
     HITL_NAME: str
     # Path to nautilus repo. Just used to check git info.
     HITL_NAUTILUS_PATH: str
-    # The HITL test set to perform.
+    # The HITL test set to perform. NOTE: To get the individual test that is currently running in the case of a
+    # multi-scenario set, use `get_selected_test_type()`.
     HITL_TEST_TYPE: TestType
     # The @ref DeviceType being tested.
     HITL_BUILD_TYPE: DeviceType
