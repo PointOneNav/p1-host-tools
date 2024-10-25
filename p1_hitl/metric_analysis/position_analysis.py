@@ -27,6 +27,20 @@ metric_position_valid = AlwaysTrueMetric(
     not_logged=True
 )
 
+metric_p1_time_valid = AlwaysTrueMetric(
+    'p1_time_valid',
+    'All P1 times should be valid.',
+    is_required=True,
+    not_logged=True
+)
+
+metric_gps_time_valid = AlwaysTrueMetric(
+    'gps_time_valid',
+    'All GPS times should be valid.',
+    is_required=True,
+    not_logged=True
+)
+
 metric_max_velocity = MaxValueMetric(
     'max_velocity',
     'Velocity (mps) should be near 0.',
@@ -161,10 +175,13 @@ class PositionAnalyzer(AnalyzerBase):
             metric_fix_rate.check(is_fixed)
             metric_position_valid.check(is_valid)
 
-            position_is_non_nan = not np.any(np.isnan(payload.lla_deg))
-            metric_no_nan_in_position(position_is_non_nan)
-
             if is_valid:
+                position_is_non_nan = not np.any(np.isnan(payload.lla_deg))
+                metric_no_nan_in_position(position_is_non_nan)
+
+                metric_p1_time_valid.check(not np.isnan(payload.p1_time))
+                metric_gps_time_valid.check(not np.isnan(payload.gps_time))
+
                 velocity_mps = float(np.linalg.norm(payload.velocity_body_mps))
                 metric_max_velocity.check(velocity_mps)
 
