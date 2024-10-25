@@ -154,7 +154,7 @@ def main():
             sys.exit(1)
 
     ################# Run tests #################
-    if env_args.HITL_TEST_TYPE == TestType.CONFIGURATION:
+    if env_args.get_selected_test_type() == TestType.CONFIGURATION:
         if cli_args.playback_log:
             logger.error(f'HITL_TEST_TYPE "CONFIGURATION" does not support playback.')
             sys.exit(1)
