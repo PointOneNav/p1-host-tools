@@ -6,8 +6,9 @@ from pymap3d import geodetic2ecef
 
 from p1_hitl.defs import HitlEnvArgs
 from p1_hitl.metric_analysis.metrics import (AlwaysTrueMetric, CdfThreshold,
-                                             MaxValueMetric, MetricController,
-                                             PercentTrueMetric, StatsMetric)
+                                             MaxValueMetric, MaxArrayValueMetric,
+                                             MetricController, PercentTrueMetric,
+                                             StatsMetric)
 
 from .base_analysis import AnalyzerBase
 

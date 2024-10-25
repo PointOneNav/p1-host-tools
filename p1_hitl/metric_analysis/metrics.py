@@ -495,6 +495,14 @@ class MaxValueMetric(MetricBase):
     def check(self, value: float):
         self._update_status(value, value > self.threshold)
 
+@dataclass
+class MaxArrayValueMetric(MetricBase):
+    '''!
+    Checks that an array of values never exceeds a specified array of value thresholds, element-wise.
+    '''
+    thresholds: List[float]
+    def check(self, values: List[float]):
+        self._update_status(any([x > y for x, y in zip(values, self.thresholds)]))
 
 @dataclass
 class MaxElapsedTimeMetric(MetricBase):
