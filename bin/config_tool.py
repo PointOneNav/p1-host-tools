@@ -2036,9 +2036,9 @@ The type of startup to be performed: {''.join([f'{newline}- {k} - {v}' for k, v 
         passed = query_device_id(config_interface, args)
     elif args.command == "reset":
         passed = request_reset(config_interface, args)
-    elif args.command == "shutdown":
+    elif args.command in ["stop", "shutdown"]:
         passed = request_shutdown(config_interface, args)
-    elif args.command == "startup":
+    elif args.command in ["start", "startup"]:
         passed = request_startup(config_interface, args)
     elif args.command == "fault":
         passed = request_fault(config_interface, args)
