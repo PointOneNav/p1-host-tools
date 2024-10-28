@@ -721,6 +721,20 @@ class AlwaysTrueMetric(MetricBase):
     def check(self, value: bool, failure_context: Optional[str] = None):
         self._update_status(value, not value, failure_context)
 
+@dataclass
+class AlwaysTrueArrayMetric(MetricBase):
+    '''!
+    Checks that all elements of an array of values are always `True`.
+    '''
+
+    def check(self, values: List[bool]):
+        context = None
+        failed = not any(values)
+        if failed:
+            context = f'Boolean check did not pass for arrray input: {values}'
+
+        self._update_status(values, failed, context)
+
 
 def _main():
     test1 = MaxValueMetric('test1', 'test1 description', 10)
