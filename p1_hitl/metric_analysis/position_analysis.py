@@ -7,8 +7,9 @@ from pymap3d import geodetic2ecef
 from p1_hitl.defs import HitlEnvArgs
 from p1_hitl.metric_analysis.metrics import (AlwaysTrueMetric, CdfThreshold,
                                              MaxValueMetric, MaxArrayValueMetric,
+                                             MinValueMetric, MaxElapsedTimeMetric,
                                              MetricController, PercentTrueMetric,
-                                             StatsMetric)
+                                             StatsMetric, TimeSource)
 
 from .base_analysis import AnalyzerBase
 
@@ -31,6 +32,36 @@ metric_p1_time_valid = AlwaysTrueMetric(
     'p1_time_valid',
     'All P1 times should be valid.',
     is_required=True,
+    not_logged=True
+)
+
+metric_monotonic_p1time = MinValueMetric(
+    'monotonic_p1time',
+    'Check P1Time goes forward monotonically.',
+    0,
+    not_logged=True
+)
+
+metric_pose_host_time_elapsed = MaxElapsedTimeMetric(
+    'pose_host_time_elapsed',
+    'Max host time to first message, and between subsequent messages.',
+    TimeSource.HOST,
+    max_time_to_first_check_sec=10,
+    # Ideally, this should be specified for each device. I'm going to set this
+    # conservatively initially, and bring down once we have better testing
+    # integration and can make sure it doesn't generate false positives.
+    max_time_between_checks_sec=0.5,
+    not_logged=True
+)
+
+metric_pose_p1_time_elapsed = MaxElapsedTimeMetric(
+    'pose_time_elapsed',
+    'Max P1 time between pose messages.',
+    TimeSource.P1,
+    # Ideally, this should be specified for each device. I'm going to set this
+    # conservatively initially, and bring down once we have better testing
+    # integration and can make sure it doesn't generate false positives.
+    max_time_between_checks_sec=0.3,
     not_logged=True
 )
 
@@ -73,21 +104,6 @@ metric_3d_fixed_pos_error = StatsMetric(
 metric_no_nan_in_position = AlwaysTrueMetric(
     'non_nan_position',
     'All positions should be non-nan values.',
-    is_required=True,
-    not_logged=True
-)
-
-metric_pose_dt_sec = MaxValueMetric(
-    'max_pose_dt_sec',
-    'DT between pose messages should be near 0.1 seconds.',
-    0.2,
-    is_required=True,
-    not_logged=True
-)
-
-metric_pose_dt_positive = AlwaysTrueMetric(
-    'pose_dt_positive',
-    'DT between pose messages should be positive.',
     is_required=True,
     not_logged=True
 )
@@ -161,8 +177,8 @@ class PositionAnalyzer(AnalyzerBase):
             raise KeyError(
                 f'JENKINS_ANTENNA_LOCATION must be specified test {env_args.HITL_TEST_TYPE.name} with position checking.')
 
-        self.last_message_p1_time = None
-        self.last_message_ypr = None
+        self.last_p1_time = None
+        self.last_ypr = None
 
     def update(self, msg: MessageWithBytesTuple):
         if self.params.check_position is False:
@@ -192,13 +208,14 @@ class PositionAnalyzer(AnalyzerBase):
                     metric_2d_fixed_pos_error.check(error_2d_m)
                     metric_3d_fixed_pos_error.check(error_3d_m)
 
-                if self.last_message_p1_time is None:
-                    self.last_message_p1_time = payload.p1_time
-                    self.last_message_ypr = payload.ypr_deg
+                if self.last_p1_time is None:
+                    self.last_p1_time = payload.p1_time
+                    self.last_ypr = payload.ypr_deg
                 else:
-                    metric_pose_dt_sec.check(payload.p1_time - self.last_message_p1_time)
-                    metric_pose_dt_positive.check(payload.p1_time > self.last_message_p1_time)
-                    metric_delta_ypr_deg.check(abs(np.subtract(payload.ypr_deg, self.last_message_ypr)))
+                    metric_pose_host_time_elapsed.check()
+                    metric_pose_p1_time_elapsed.check()
+                    metric_monotonic_p1time.check(payload.p1_time - self.last_p1_time)
+                    metric_delta_ypr_deg.check(abs(np.subtract(payload.ypr_deg, self.last_ypr)))
 
                 metric_pos_std_enu.check(payload.position_std_enu_m)
                 metric_ypr_std_deg.check(payload.ypr_std_deg)

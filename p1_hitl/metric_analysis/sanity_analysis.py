@@ -21,13 +21,6 @@ metric_seq_num_gap = EqualValueMetric(
     not_logged=True
 )
 
-metric_monotonic_p1time = MinValueMetric(
-    'monotonic_p1time',
-    'Check P1Time goes forward monotonically.',
-    0,
-    not_logged=True
-)
-
 metric_error_msg_count = EqualValueMetric(
     'error_msg_count',
     'Number of error notification messages received.',
@@ -35,34 +28,9 @@ metric_error_msg_count = EqualValueMetric(
     not_logged=True
 )
 
-metric_pose_host_time_elapsed = MaxElapsedTimeMetric(
-    'pose_host_time_elapsed',
-    'Max host time to first message, and between subsequent messages.',
-    TimeSource.HOST,
-    max_time_to_first_check_sec=10,
-    # Ideally, this should be specified for each device. I'm going to set this
-    # conservatively initially, and bring down once we have better testing
-    # integration and can make sure it doesn't generate false positives.
-    max_time_between_checks_sec=0.5,
-    not_logged=True
-)
-
-metric_pose_p1_time_elapsed = MaxElapsedTimeMetric(
-    'pose_time_elapsed',
-    'Max P1 time between pose messages.',
-    TimeSource.P1,
-    # Ideally, this should be specified for each device. I'm going to set this
-    # conservatively initially, and bring down once we have better testing
-    # integration and can make sure it doesn't generate false positives.
-    max_time_between_checks_sec=0.3,
-    not_logged=True
-)
-
-
 class SanityAnalyzer(AnalyzerBase):
     def __init__(self) -> None:
         self.last_seq_num: Optional[int] = None
-        self.last_p1_time: Optional[Timestamp] = None
         self.error_count = 0
 
     def update(self, msg: MessageWithBytesTuple):
@@ -73,19 +41,10 @@ class SanityAnalyzer(AnalyzerBase):
         self.last_seq_num = header.sequence_number
 
         if isinstance(payload, MessagePayload):
-            p1_time = payload.get_p1_time()
-            if p1_time is not None:
-                if self.last_p1_time is not None:
-                    metric_monotonic_p1time.check(p1_time.seconds - self.last_p1_time.seconds)
-                self.last_p1_time = p1_time
-
             if isinstance(payload, EventNotificationMessage):
                 # Convert the unsigned event_flags to a signed value.
                 signed_flag = struct.unpack('q', struct.pack('Q', payload.event_flags))[0]
                 if signed_flag < 0:
                     self.error_count += 1
-            elif isinstance(payload, PoseMessage):
-                metric_pose_host_time_elapsed.check()
-                metric_pose_p1_time_elapsed.check()
 
             metric_error_msg_count.check(self.error_count)
