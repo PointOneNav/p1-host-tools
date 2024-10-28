@@ -5,11 +5,12 @@ from fusion_engine_client.parsers.decoder import MessageWithBytesTuple
 from pymap3d import geodetic2ecef
 
 from p1_hitl.defs import HitlEnvArgs
-from p1_hitl.metric_analysis.metrics import (AlwaysTrueMetric, CdfThreshold,
-                                             MaxValueMetric, MaxArrayValueMetric,
-                                             MinValueMetric, MaxElapsedTimeMetric,
-                                             MetricController, PercentTrueMetric,
-                                             StatsMetric, TimeSource)
+from p1_hitl.metric_analysis.metrics import (AlwaysTrueMetric, AlwaysTrueArrayMetric,
+                                             CdfThreshold, MaxValueMetric,
+                                             MaxArrayValueMetric, MinValueMetric,
+                                             MaxElapsedTimeMetric, MetricController,
+                                             PercentTrueMetric, StatsMetric,
+                                             TimeSource)
 
 from .base_analysis import AnalyzerBase
 
@@ -101,7 +102,7 @@ metric_3d_fixed_pos_error = StatsMetric(
     is_required=True
 )
 
-metric_no_nan_in_position = AlwaysTrueMetric(
+metric_non_nan_position = AlwaysTrueMetric(
     'non_nan_position',
     'All positions should be non-nan values.',
     is_required=True,
@@ -136,6 +137,34 @@ metric_vel_std_mps = MaxArrayValueMetric(
     'vel_std_mps',
     'Max velocity standard deviations should be lower than [3.0, 3.0, 3.0]',
     [3.0, 3.0, 3.0],
+    is_required=True,
+    not_logged=True
+)
+
+metric_non_nan_pos_std_enu = AlwaysTrueArrayMetric(
+    'non_nan_pos_std_enu',
+    'ENU position standard deviations should be non-nan values.',
+    is_required=True,
+    not_logged=True
+)
+
+metric_non_nan_ypr_std_deg = AlwaysTrueArrayMetric(
+    'non_nan_ypr_std_deg',
+    'YPR standard deviations should be non-nan values.',
+    is_required=True,
+    not_logged=True
+)
+
+metric_non_nan_vel_std_mps = AlwaysTrueArrayMetric(
+    'non_nan_vel_std_mps',
+    'Velocity standard deviations should be non-nan values.',
+    is_required=True,
+    not_logged=True
+)
+
+metric_non_nan_undulation = AlwaysTrueMetric(
+    'non_nan_undulation',
+    'Undulation should be non-nan value.',
     is_required=True,
     not_logged=True
 )
@@ -193,7 +222,7 @@ class PositionAnalyzer(AnalyzerBase):
 
             if is_valid:
                 position_is_non_nan = not np.any(np.isnan(payload.lla_deg))
-                metric_no_nan_in_position(position_is_non_nan)
+                metric_non_nan_position(position_is_non_nan)
 
                 metric_p1_time_valid.check(not np.isnan(payload.p1_time))
                 metric_gps_time_valid.check(not np.isnan(payload.gps_time))
@@ -217,6 +246,12 @@ class PositionAnalyzer(AnalyzerBase):
                     metric_monotonic_p1time.check(payload.p1_time - self.last_p1_time)
                     metric_delta_ypr_deg.check(abs(np.subtract(payload.ypr_deg, self.last_ypr)))
 
+                metric_non_nan_pos_std_enu.check(not any(np.isnan(payload.position_std_enu_m)))
+                metric_non_nan_ypr_std_deg.check(not any(np.isnan(payload.ypr_std_deg)))
+                metric_non_nan_vel_std_mps.check(not any(np.isnan(payload.velocity_std_body_mps)))
+
                 metric_pos_std_enu.check(payload.position_std_enu_m)
                 metric_ypr_std_deg.check(payload.ypr_std_deg)
                 metric_vel_std_mps.check(payload.velocity_std_body_mps)
+
+                metric_non_nan_undulation.check(not np.isnan(payload.undulation_m))
