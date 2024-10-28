@@ -502,7 +502,12 @@ class MaxArrayValueMetric(MetricBase):
     '''
     thresholds: List[float]
     def check(self, values: List[float]):
-        self._update_status(any([x > y for x, y in zip(values, self.thresholds)]))
+        context = None
+        exceeds_threshold = any([x > y for x, y in zip(values, self.thresholds)])
+        if exceeds_threshold:
+            context = f'At least one provided value exceeds threshold value. Values={values}, Thresholds={self.thresholds}'
+
+        self._update_status(values, exceeds_threshold, context)
 
 @dataclass
 class MaxElapsedTimeMetric(MetricBase):
