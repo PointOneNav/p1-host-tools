@@ -5,9 +5,12 @@ from fusion_engine_client.parsers.decoder import MessageWithBytesTuple
 from pymap3d import geodetic2ecef
 
 from p1_hitl.defs import HitlEnvArgs
-from p1_hitl.metric_analysis.metrics import (AlwaysTrueMetric, CdfThreshold,
-                                             MaxValueMetric, MetricController,
-                                             PercentTrueMetric, StatsMetric)
+from p1_hitl.metric_analysis.metrics import (AlwaysTrueMetric, AlwaysTrueArrayMetric,
+                                             CdfThreshold, MaxValueMetric,
+                                             MaxArrayValueMetric, MinValueMetric,
+                                             MaxElapsedTimeMetric, MetricController,
+                                             PercentTrueMetric, StatsMetric,
+                                             TimeSource)
 
 from .base_analysis import AnalyzerBase
 
@@ -22,6 +25,50 @@ metric_fix_rate = PercentTrueMetric(
 metric_position_valid = AlwaysTrueMetric(
     'position_valid',
     'All positions should be valid.',
+    is_required=True,
+    not_logged=True
+)
+
+metric_p1_time_valid = AlwaysTrueMetric(
+    'p1_time_valid',
+    'All P1 times should be valid.',
+    is_required=True,
+    not_logged=True
+)
+
+metric_monotonic_p1time = MinValueMetric(
+    'monotonic_p1time',
+    'Check P1Time goes forward monotonically.',
+    0,
+    not_logged=True
+)
+
+metric_pose_host_time_elapsed = MaxElapsedTimeMetric(
+    'pose_host_time_elapsed',
+    'Max host time to first message, and between subsequent messages.',
+    TimeSource.HOST,
+    max_time_to_first_check_sec=10,
+    # Ideally, this should be specified for each device. I'm going to set this
+    # conservatively initially, and bring down once we have better testing
+    # integration and can make sure it doesn't generate false positives.
+    max_time_between_checks_sec=0.5,
+    not_logged=True
+)
+
+metric_pose_p1_time_elapsed = MaxElapsedTimeMetric(
+    'pose_time_elapsed',
+    'Max P1 time between pose messages.',
+    TimeSource.P1,
+    # Ideally, this should be specified for each device. I'm going to set this
+    # conservatively initially, and bring down once we have better testing
+    # integration and can make sure it doesn't generate false positives.
+    max_time_between_checks_sec=0.3,
+    not_logged=True
+)
+
+metric_gps_time_valid = AlwaysTrueMetric(
+    'gps_time_valid',
+    'All GPS times should be valid.',
     is_required=True,
     not_logged=True
 )
@@ -55,6 +102,72 @@ metric_3d_fixed_pos_error = StatsMetric(
     is_required=True
 )
 
+metric_non_nan_position = AlwaysTrueMetric(
+    'non_nan_position',
+    'All positions should be non-nan values.',
+    is_required=True,
+    not_logged=True
+)
+
+metric_delta_ypr_deg = MaxArrayValueMetric(
+    'delta_ypr_deg',
+    'Max jumps in YPR values should be lower than [5.0, 5.0, 5.0]',
+    [5.0, 5.0, 5.0],
+    is_required=True,
+    not_logged=True
+)
+
+metric_pos_std_enu = MaxArrayValueMetric(
+    'pos_std_enu',
+    'ENU position standard deviations should be less than [2.0, 2.0, 2.0]',
+    [2.0, 2.0, 2.0],
+    is_required=True,
+    not_logged=True
+)
+
+metric_ypr_std_deg = MaxArrayValueMetric(
+    'ypr_std_deg',
+    'Max YPR standard deviations should be lower than [5.0, 5.0, 5.0]',
+    [5.0, 5.0, 5.0],
+    is_required=True,
+    not_logged=True
+)
+
+metric_vel_std_mps = MaxArrayValueMetric(
+    'vel_std_mps',
+    'Max velocity standard deviations should be lower than [3.0, 3.0, 3.0]',
+    [3.0, 3.0, 3.0],
+    is_required=True,
+    not_logged=True
+)
+
+metric_non_nan_pos_std_enu = AlwaysTrueArrayMetric(
+    'non_nan_pos_std_enu',
+    'ENU position standard deviations should be non-nan values.',
+    is_required=True,
+    not_logged=True
+)
+
+metric_non_nan_ypr_std_deg = AlwaysTrueArrayMetric(
+    'non_nan_ypr_std_deg',
+    'YPR standard deviations should be non-nan values.',
+    is_required=True,
+    not_logged=True
+)
+
+metric_non_nan_vel_std_mps = AlwaysTrueArrayMetric(
+    'non_nan_vel_std_mps',
+    'Velocity standard deviations should be non-nan values.',
+    is_required=True,
+    not_logged=True
+)
+
+metric_non_nan_undulation = AlwaysTrueMetric(
+    'non_nan_undulation',
+    'Undulation should be non-nan value.',
+    is_required=True,
+    not_logged=True
+)
 
 def configure_metrics(env_args: HitlEnvArgs):
     params = env_args.HITL_TEST_TYPE.get_test_params()
@@ -67,6 +180,10 @@ def configure_metrics(env_args: HitlEnvArgs):
         metric_2d_fixed_pos_error.is_disabled = True
         metric_3d_fixed_pos_error.is_disabled = True
 
+    if params.is_stationary:
+        metric_delta_ypr_deg.is_disabled = True
+        metric_ypr_std_deg.is_disabled = True
+        metric_non_nan_ypr_std_deg.is_disabled = True
 
 MetricController.register_environment_config_customizations(configure_metrics)
 
@@ -93,6 +210,9 @@ class PositionAnalyzer(AnalyzerBase):
             raise KeyError(
                 f'JENKINS_ANTENNA_LOCATION must be specified test {env_args.HITL_TEST_TYPE.name} with position checking.')
 
+        self.last_p1_time = None
+        self.last_ypr = None
+
     def update(self, msg: MessageWithBytesTuple):
         if self.params.check_position is False:
             return
@@ -105,6 +225,12 @@ class PositionAnalyzer(AnalyzerBase):
             metric_position_valid.check(is_valid)
 
             if is_valid:
+                position_is_non_nan = not np.any(np.isnan(payload.lla_deg))
+                metric_non_nan_position(position_is_non_nan)
+
+                metric_p1_time_valid.check(not np.isnan(payload.p1_time))
+                metric_gps_time_valid.check(not np.isnan(payload.gps_time))
+
                 velocity_mps = float(np.linalg.norm(payload.velocity_body_mps))
                 metric_max_velocity.check(velocity_mps)
 
@@ -114,3 +240,22 @@ class PositionAnalyzer(AnalyzerBase):
                 if is_fixed:
                     metric_2d_fixed_pos_error.check(error_2d_m)
                     metric_3d_fixed_pos_error.check(error_3d_m)
+
+                if self.last_p1_time is None:
+                    self.last_p1_time = payload.p1_time
+                    self.last_ypr = payload.ypr_deg
+                else:
+                    metric_pose_host_time_elapsed.check()
+                    metric_pose_p1_time_elapsed.check()
+                    metric_monotonic_p1time.check(payload.p1_time - self.last_p1_time)
+                    metric_delta_ypr_deg.check(abs(np.subtract(payload.ypr_deg, self.last_ypr)))
+
+                metric_non_nan_pos_std_enu.check(not any(np.isnan(payload.position_std_enu_m)))
+                metric_non_nan_ypr_std_deg.check(not any(np.isnan(payload.ypr_std_deg)))
+                metric_non_nan_vel_std_mps.check(not any(np.isnan(payload.velocity_std_body_mps)))
+
+                metric_pos_std_enu.check(payload.position_std_enu_m)
+                metric_ypr_std_deg.check(payload.ypr_std_deg)
+                metric_vel_std_mps.check(payload.velocity_std_body_mps)
+
+                metric_non_nan_undulation.check(not np.isnan(payload.undulation_m))

@@ -495,6 +495,19 @@ class MaxValueMetric(MetricBase):
     def check(self, value: float):
         self._update_status(value, value > self.threshold)
 
+@dataclass
+class MaxArrayValueMetric(MetricBase):
+    '''!
+    Checks that an array of values never exceeds a specified array of value thresholds, element-wise.
+    '''
+    thresholds: List[float]
+    def check(self, values: List[float]):
+        context = None
+        exceeds_threshold = any([x > y for x, y in zip(values, self.thresholds)])
+        if exceeds_threshold:
+            context = f'At least one provided value exceeds threshold value. Values={values}, Thresholds={self.thresholds}'
+
+        self._update_status(values, exceeds_threshold, context)
 
 @dataclass
 class MaxElapsedTimeMetric(MetricBase):
@@ -707,6 +720,20 @@ class AlwaysTrueMetric(MetricBase):
 
     def check(self, value: bool, failure_context: Optional[str] = None):
         self._update_status(value, not value, failure_context)
+
+@dataclass
+class AlwaysTrueArrayMetric(MetricBase):
+    '''!
+    Checks that all elements of an array of values are always `True`.
+    '''
+
+    def check(self, values: List[bool]):
+        context = None
+        failed = not any(values)
+        if failed:
+            context = f'Boolean check did not pass for arrray input: {values}'
+
+        self._update_status(values, failed, context)
 
 
 def _main():
