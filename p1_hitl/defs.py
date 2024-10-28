@@ -41,6 +41,8 @@ class TestParams(NamedTuple):
     check_position: bool
     # Will the device be expected to generate corrected solutions.
     has_corrections: bool
+    # Will the device be stationary.
+    is_stationary: bool
 
 
 class TestType(Enum):
@@ -63,13 +65,13 @@ class TestType(Enum):
         if self == TestType.CONFIGURATION:
             # This test doesn't have a fixed duration. The duration is determined by
             # how long the device takes to respond to commands.
-            return TestParams(0, False, False)
+            return TestParams(0, False, False, True)
         elif self == TestType.SANITY:
-            return TestParams(5 * 60, False, False)
+            return TestParams(5 * 60, False, False, True)
         elif self == TestType.ROOF_15_MIN:
-            return TestParams(15 * 60, True, True)
+            return TestParams(15 * 60, True, True, True)
         elif self == TestType.ROOF_NO_CORRECTIONS_15_MIN:
-            return TestParams(15 * 60, True, False)
+            return TestParams(15 * 60, True, False, True)
         else:
             raise NotImplementedError(f'Metric configuration for {self.name} is not implemented.')
 

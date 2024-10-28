@@ -180,6 +180,10 @@ def configure_metrics(env_args: HitlEnvArgs):
         metric_2d_fixed_pos_error.is_disabled = True
         metric_3d_fixed_pos_error.is_disabled = True
 
+    if params.is_stationary:
+        metric_delta_ypr_deg.is_disabled = True
+        metric_ypr_std_deg.is_disabled = True
+        metric_non_nan_ypr_std_deg.is_disabled = True
 
 MetricController.register_environment_config_customizations(configure_metrics)
 
