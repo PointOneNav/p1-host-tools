@@ -49,7 +49,7 @@ def report_failure(msg: str, env_args: Optional[HitlEnvArgs] = None, log_base_di
 
     if env_args:
         slack_mrkdwn = f'''\
-*HITL {env_args.HITL_TEST_TYPE.name} Test Failed*
+*HITL {env_args.get_selected_test_type().name} Test Failed*
 Node: `{env_args.HITL_NAME}`
 Platform Config: `{env_args.HITL_BUILD_TYPE.name}`
 Software Version: `{env_args.HITL_DUT_VERSION}`
@@ -106,97 +106,112 @@ def main():
 
     try:
         cmd_args = sys.argv
-        extra_args = []
-        log_dir = Path()
+        test_set = env_args.HITL_TEST_TYPE.get_test_set()
+        is_multi_test_set = len(
+            test_set) > 1 and env_args.HITL_TEST_SET_INDEX is None and cli_args.test_set_index is None
+        if is_multi_test_set:
+            logger.info(f'Starting multi-test set {(t.name for t in test_set)}.')
 
-        # There's no real reason to run playback through the wrapper, but don't create a log directory if it occurs.
-        logger.info('Creating log directory.')
-        if not cli_args.playback_log:
-            log_manager = LogManager(
-                device_id=env_args.HITL_NAME,
-                device_type=env_args.HITL_BUILD_TYPE.name,
-                logs_base_dir=cli_args.logs_base_dir,
-                directory_to_reuse=cli_args.reuse_log_dir)
-            log_manager.create_log_dir()
-            log_dir = Path(log_manager.log_dir)  # type: ignore
-            if cli_args.reuse_log_dir is None:
-                extra_args.append(f'--reuse-log-dir={log_dir}')
-        else:
-            playback_log_path = Path(cli_args.playback_log)
-            # True if full log path is specified.
-            if playback_log_path.exists():
-                if playback_log_path.is_dir():
-                    log_dir = playback_log_path / PLAYBACK_DIR
-                else:
-                    log_dir = playback_log_path.parent / PLAYBACK_DIR
-                os.makedirs(log_dir, exist_ok=True)
-            # Fallback to write the console output to /tmp.
+        env_args_dict = dict(env_args._asdict())
+        # Iterate over tests that make up the test set. These will be totally independent HITL runner processes.
+        for i, test_type in enumerate(test_set):
+            extra_args = []
+            # Setup log directory to capture full console output (this directory is passed to child process to keep
+            # using).
+            log_dir = Path()
+            # There's no real reason to run playback through the wrapper, but don't create a log directory if it occurs.
+            logger.info('Creating log directory.')
+            if not cli_args.playback_log:
+                log_manager = LogManager(
+                    device_id=env_args.HITL_NAME,
+                    device_type=env_args.HITL_BUILD_TYPE.name,
+                    logs_base_dir=cli_args.logs_base_dir,
+                    directory_to_reuse=cli_args.reuse_log_dir)
+                log_manager.create_log_dir()
+                log_dir = Path(log_manager.log_dir)  # type: ignore
+                if cli_args.reuse_log_dir is None:
+                    extra_args.append(f'--reuse-log-dir={log_dir}')
             else:
-                log_dir = Path(gettempdir())
-
-        # Start HITL as subprocess and monitor it. Write all the output to a console file.
-        logger.info('Starting HITL runner.')
-        with open(log_dir / CONSOLE_FILE, 'w') as console_out:
-            process_timeout_sec = env_args.HITL_TEST_TYPE.get_test_params().duration_sec + BUILD_AND_SETUP_TIMEOUT_SEC
-            cmd_args[0] = str(RUNNER_SCRIPT_PATH)
-            CMD_ARGS = cmd_args + extra_args
-            start_time = time.monotonic()
-            ret_status = None
-            with subprocess.Popen(CMD_ARGS, stdout=console_out, stderr=subprocess.STDOUT, text=True) as proc:
-                with open(log_dir / CONSOLE_FILE, 'r') as console_out_reader:
-                    while time.monotonic() - start_time < process_timeout_sec:
-                        ret_status = proc.poll()
-                        new_text = console_out_reader.read()
-                        print(new_text, end='')
-                        if ret_status is None:
-                            time.sleep(UPDATE_INTERVAL_SEC)
-                        else:
-                            break
-
-                if ret_status is None:
-                    report_failure(
-                        f'HITL runner timed out, killing process. See attached `{CONSOLE_FILE}` in reply for details.',
-                        env_args=env_args,
-                        log_base_dir=cli_args.logs_base_dir,
-                        log_dir=log_dir)
-                    proc.kill()
-                    time.sleep(KILL_TIMEOUT_SEC)
-                    sys.exit(1)
-                elif ret_status != 0:
-                    report_failure(
-                        f'HITL process exited with error code {ret_status}. See attached `{CONSOLE_FILE}` in reply for details.',
-                        env_args=env_args,
-                        log_base_dir=cli_args.logs_base_dir,
-                        log_dir=log_dir)
-                    sys.exit(ret_status)
+                playback_log_path = Path(cli_args.playback_log)
+                # True if full log path is specified.
+                if playback_log_path.exists():
+                    if playback_log_path.is_dir():
+                        log_dir = playback_log_path / PLAYBACK_DIR
+                    else:
+                        log_dir = playback_log_path.parent / PLAYBACK_DIR
+                    os.makedirs(log_dir, exist_ok=True)
+                # Fallback to write the console output to /tmp.
                 else:
-                    logger.info('HITL ran successfully.')
-                    # Don't bother trying to track down report for playback if log was specified by GUID.
-                    if str(log_dir) != gettempdir():
-                        failure_path = log_dir / FAILURE_REPORT
-                        report_path = log_dir / FULL_REPORT
-                        if not report_path.exists():
-                            report_failure(
-                                f'Failed to generate report. See attached `{CONSOLE_FILE}` in reply for details.',
-                                env_args=env_args,
-                                log_base_dir=cli_args.logs_base_dir,
-                                log_dir=log_dir)
-                        else:
-                            if failure_path.exists():
-                                with open(failure_path) as fd:
-                                    failures = json.load(fd)
-                                failed_tests = ['* ' + f['name'] for f in failures]
-                                failed_tests_str = '\n'.join(failed_tests)
+                    log_dir = Path(gettempdir())
+
+            # Check to see if we need to pass an index CLI arg to the child process.
+            if is_multi_test_set:
+                env_args_dict['HITL_TEST_SET_INDEX'] = i
+                extra_args.append('--test-set-index')
+                extra_args.append(str(i))
+
+            # Start HITL as subprocess and monitor it. Write all the output to a console file.
+            run_env_args = HitlEnvArgs(**env_args_dict)
+            logger.info(f'Starting HITL runner run {i}: {test_type.name}')
+            with open(log_dir / CONSOLE_FILE, 'w') as console_out:
+                process_timeout_sec = test_type.get_test_params().duration_sec + BUILD_AND_SETUP_TIMEOUT_SEC
+                cmd_args[0] = str(RUNNER_SCRIPT_PATH)
+                CMD_ARGS = cmd_args + extra_args
+                start_time = time.monotonic()
+                ret_status = None
+                with subprocess.Popen(CMD_ARGS, stdout=console_out, stderr=subprocess.STDOUT, text=True) as proc:
+                    with open(log_dir / CONSOLE_FILE, 'r') as console_out_reader:
+                        while time.monotonic() - start_time < process_timeout_sec:
+                            ret_status = proc.poll()
+                            new_text = console_out_reader.read()
+                            print(new_text, end='')
+                            if ret_status is None:
+                                time.sleep(UPDATE_INTERVAL_SEC)
+                            else:
+                                break
+
+                    if ret_status is None:
+                        report_failure(
+                            f'HITL runner timed out, killing process. See attached `{CONSOLE_FILE}` in reply for details.',
+                            env_args=run_env_args,
+                            log_base_dir=cli_args.logs_base_dir,
+                            log_dir=log_dir)
+                        proc.kill()
+                        time.sleep(KILL_TIMEOUT_SEC)
+                        sys.exit(1)
+                    elif ret_status != 0:
+                        report_failure(
+                            f'HITL process exited with error code {ret_status}. See attached `{CONSOLE_FILE}` in reply for details.',
+                            env_args=run_env_args,
+                            log_base_dir=cli_args.logs_base_dir,
+                            log_dir=log_dir)
+                        sys.exit(ret_status)
+                    else:
+                        logger.info('HITL ran successfully.')
+                        # Don't bother trying to track down report for playback if log was specified by GUID.
+                        if str(log_dir) != gettempdir():
+                            failure_path = log_dir / FAILURE_REPORT
+                            report_path = log_dir / FULL_REPORT
+                            if not report_path.exists():
                                 report_failure(
-                                    f'Test metric failures detected:\n{failed_tests_str}\n'
-                                    f'See attached `{FAILURE_REPORT}` in reply for details.',
-                                    env_args=env_args,
+                                    f'Failed to generate report. See attached `{CONSOLE_FILE}` in reply for details.',
+                                    env_args=run_env_args,
                                     log_base_dir=cli_args.logs_base_dir,
                                     log_dir=log_dir)
                             else:
-                                logger.info('All tests passed.')
-                                sys.exit(0)
-                    sys.exit(1)
+                                if failure_path.exists():
+                                    with open(failure_path) as fd:
+                                        failures = json.load(fd)
+                                    failed_tests = ['* ' + f['name'] for f in failures]
+                                    failed_tests_str = '\n'.join(failed_tests)
+                                    report_failure(
+                                        f'Test metric failures detected:\n{failed_tests_str}\n'
+                                        f'See attached `{FAILURE_REPORT}` in reply for details.',
+                                        env_args=run_env_args,
+                                        log_base_dir=cli_args.logs_base_dir,
+                                        log_dir=log_dir)
+                                else:
+                                    logger.info('All tests passed.')
     # The exit calls trigger this exception.
     except SystemExit:
         raise
@@ -205,6 +220,7 @@ def main():
             'Problem running HITL subprocess. This is likely an issue with the HITL SW:\n```' + traceback.format_exc() +
             '```', env_args=env_args, log_base_dir=cli_args.logs_base_dir, log_dir=log_dir)
         raise
+    sys.exit(0)
 
 
 if __name__ == '__main__':

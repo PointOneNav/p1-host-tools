@@ -123,7 +123,7 @@ def _finish_analysis(output_dir: Path, analysis_commit: str) -> bool:
 def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs,
                  output_dir: Path, log_metric_values: bool, analysis_commit: str, release_str: str) -> Optional[bool]:
     try:
-        params = env_args.HITL_TEST_TYPE.get_test_params()
+        params = env_args.get_selected_test_type().get_test_params()
         MetricController.enable_logging(output_dir, True, log_metric_values)
         if params.duration_sec < MAX_SEC_TO_VERSION_MESSAGE:
             metric_version_check.is_disabled = True

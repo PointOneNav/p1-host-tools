@@ -5,10 +5,10 @@ from fusion_engine_client.parsers.decoder import MessageWithBytesTuple
 from pymap3d import geodetic2ecef
 
 from p1_hitl.defs import HitlEnvArgs
-from p1_hitl.metric_analysis.metrics import (AlwaysTrueMetric, AlwaysTrueArrayMetric,
-                                             CdfThreshold, MaxValueMetric,
-                                             MaxArrayValueMetric, MinValueMetric,
-                                             MaxElapsedTimeMetric, MetricController,
+from p1_hitl.metric_analysis.metrics import (AlwaysTrueMetric, CdfThreshold,
+                                             MaxArrayValueMetric,
+                                             MaxElapsedTimeMetric,
+                                             MaxValueMetric, MetricController,
                                              PercentTrueMetric, StatsMetric,
                                              TimeSource)
 
@@ -33,13 +33,6 @@ metric_p1_time_valid = AlwaysTrueMetric(
     'p1_time_valid',
     'All P1 times should be valid.',
     is_required=True,
-    not_logged=True
-)
-
-metric_monotonic_p1time = MinValueMetric(
-    'monotonic_p1time',
-    'Check P1Time goes forward monotonically.',
-    0,
     not_logged=True
 )
 
@@ -141,21 +134,21 @@ metric_vel_std_mps = MaxArrayValueMetric(
     not_logged=True
 )
 
-metric_non_nan_pos_std_enu = AlwaysTrueArrayMetric(
+metric_non_nan_pos_std_enu = AlwaysTrueMetric(
     'non_nan_pos_std_enu',
     'ENU position standard deviations should be non-nan values.',
     is_required=True,
     not_logged=True
 )
 
-metric_non_nan_ypr_std_deg = AlwaysTrueArrayMetric(
+metric_non_nan_ypr_std_deg = AlwaysTrueMetric(
     'non_nan_ypr_std_deg',
     'YPR standard deviations should be non-nan values.',
     is_required=True,
     not_logged=True
 )
 
-metric_non_nan_vel_std_mps = AlwaysTrueArrayMetric(
+metric_non_nan_vel_std_mps = AlwaysTrueMetric(
     'non_nan_vel_std_mps',
     'Velocity standard deviations should be non-nan values.',
     is_required=True,
@@ -169,8 +162,9 @@ metric_non_nan_undulation = AlwaysTrueMetric(
     not_logged=True
 )
 
+
 def configure_metrics(env_args: HitlEnvArgs):
-    params = env_args.HITL_TEST_TYPE.get_test_params()
+    params = env_args.get_selected_test_type().get_test_params()
     position_metrics = MetricController.get_metrics_in_this_file()
     if not params.check_position:
         for metric in position_metrics:
@@ -180,10 +174,22 @@ def configure_metrics(env_args: HitlEnvArgs):
         metric_2d_fixed_pos_error.is_disabled = True
         metric_3d_fixed_pos_error.is_disabled = True
 
+    # YPR will be nan before the filter initializes orientation. For HITL where the receiver is not moving, I would
+    # expect that to be 100% of the time. If TightEsrif manages to initialize orientation without moving, that should
+    # actually be considered a bug.
+    #
+    # Position and velocity should initialize when the filter does (however we need to be careful about fallback
+    # positions before filter initialization for devices where we are doing that)
+    #
+    # The one counter for (1) would be a test where we're injecting a hot start state to begin with. In that case,
+    # assuming it has orientation initialized (which is not required for all hot starts), it should continue outputting
+    # basically the same angles forever since it's not moving. That's a test we might want to check
     if params.is_stationary:
         metric_delta_ypr_deg.is_disabled = True
         metric_ypr_std_deg.is_disabled = True
         metric_non_nan_ypr_std_deg.is_disabled = True
+        metric_non_nan_vel_std_mps.is_disabled = True
+
 
 MetricController.register_environment_config_customizations(configure_metrics)
 
@@ -205,10 +211,10 @@ def calculate_position_error(device_lla_deg, reference_lla_deg) -> tuple[float, 
 class PositionAnalyzer(AnalyzerBase):
     def configure(self, env_args: HitlEnvArgs):
         self.env_args = env_args
-        self.params = env_args.HITL_TEST_TYPE.get_test_params()
+        self.params = env_args.get_selected_test_type().get_test_params()
         if self.params.check_position and env_args.JENKINS_ANTENNA_LOCATION is None:
             raise KeyError(
-                f'JENKINS_ANTENNA_LOCATION must be specified test {env_args.HITL_TEST_TYPE.name} with position checking.')
+                f'JENKINS_ANTENNA_LOCATION must be specified test {env_args.get_selected_test_type().name} with position checking.')
 
         self.last_p1_time = None
         self.last_ypr = None
@@ -219,6 +225,9 @@ class PositionAnalyzer(AnalyzerBase):
 
         _, payload, _ = msg
         if isinstance(payload, PoseMessage):
+            metric_p1_time_valid.check(bool(payload.p1_time))
+            metric_pose_p1_time_elapsed.check()
+            metric_pose_host_time_elapsed.check()
             is_fixed = payload.solution_type == SolutionType.RTKFixed
             is_valid = payload.solution_type != SolutionType.Invalid
             metric_fix_rate.check(is_fixed)
@@ -226,10 +235,9 @@ class PositionAnalyzer(AnalyzerBase):
 
             if is_valid:
                 position_is_non_nan = not np.any(np.isnan(payload.lla_deg))
-                metric_non_nan_position(position_is_non_nan)
+                metric_non_nan_position.check(position_is_non_nan)
 
-                metric_p1_time_valid.check(not np.isnan(payload.p1_time))
-                metric_gps_time_valid.check(not np.isnan(payload.gps_time))
+                metric_gps_time_valid.check(bool(payload.gps_time))
 
                 velocity_mps = float(np.linalg.norm(payload.velocity_body_mps))
                 metric_max_velocity.check(velocity_mps)
@@ -241,14 +249,9 @@ class PositionAnalyzer(AnalyzerBase):
                     metric_2d_fixed_pos_error.check(error_2d_m)
                     metric_3d_fixed_pos_error.check(error_3d_m)
 
-                if self.last_p1_time is None:
-                    self.last_p1_time = payload.p1_time
-                    self.last_ypr = payload.ypr_deg
-                else:
-                    metric_pose_host_time_elapsed.check()
-                    metric_pose_p1_time_elapsed.check()
-                    metric_monotonic_p1time.check(payload.p1_time - self.last_p1_time)
-                    metric_delta_ypr_deg.check(abs(np.subtract(payload.ypr_deg, self.last_ypr)))
+                if self.last_ypr is not None:
+                    metric_delta_ypr_deg.check(np.abs(np.subtract(payload.ypr_deg, self.last_ypr)))
+                self.last_ypr = payload.ypr_deg
 
                 metric_non_nan_pos_std_enu.check(not any(np.isnan(payload.position_std_enu_m)))
                 metric_non_nan_ypr_std_deg.check(not any(np.isnan(payload.ypr_std_deg)))

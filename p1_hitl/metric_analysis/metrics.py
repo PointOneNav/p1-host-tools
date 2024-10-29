@@ -44,7 +44,8 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from enum import IntEnum, auto
 from pathlib import Path
-from typing import Any, BinaryIO, ClassVar, Dict, List, NamedTuple, Optional
+from typing import (Any, BinaryIO, ClassVar, Dict, Iterable, List, NamedTuple,
+                    Optional)
 
 from fusion_engine_client.messages import MessagePayload
 from fusion_engine_client.parsers.decoder import MessageWithBytesTuple
@@ -495,19 +496,26 @@ class MaxValueMetric(MetricBase):
     def check(self, value: float):
         self._update_status(value, value > self.threshold)
 
+
 @dataclass
 class MaxArrayValueMetric(MetricBase):
     '''!
     Checks that an array of values never exceeds a specified array of value thresholds, element-wise.
     '''
     thresholds: List[float]
-    def check(self, values: List[float]):
+
+    def _initialize(self):
+        if not self.not_logged:
+            raise ValueError(f'Logging not supported for MaxArrayValueMetric {self.name}.')
+
+    def check(self, values: Iterable[float]):
         context = None
         exceeds_threshold = any([x > y for x, y in zip(values, self.thresholds)])
         if exceeds_threshold:
             context = f'At least one provided value exceeds threshold value. Values={values}, Thresholds={self.thresholds}'
+        # Can't call _update_status since currently only single float values can be logged.
+        self._update_failure(exceeds_threshold, context)
 
-        self._update_status(values, exceeds_threshold, context)
 
 @dataclass
 class MaxElapsedTimeMetric(MetricBase):
@@ -720,20 +728,6 @@ class AlwaysTrueMetric(MetricBase):
 
     def check(self, value: bool, failure_context: Optional[str] = None):
         self._update_status(value, not value, failure_context)
-
-@dataclass
-class AlwaysTrueArrayMetric(MetricBase):
-    '''!
-    Checks that all elements of an array of values are always `True`.
-    '''
-
-    def check(self, values: List[bool]):
-        context = None
-        failed = not any(values)
-        if failed:
-            context = f'Boolean check did not pass for arrray input: {values}'
-
-        self._update_status(values, failed, context)
 
 
 def _main():

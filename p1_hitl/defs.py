@@ -57,11 +57,24 @@ class TestType(Enum):
     # Check for positioning performance with stationary clear sky with corrections disabled.
     ROOF_NO_CORRECTIONS_15_MIN = auto()
 
+    # Multi-test scenarios
+    QUICK_TESTS = auto()
+
     @classmethod
     def from_string(cls, val: str):
         return cls[val.upper()]
 
+    def get_test_set(self) -> List['TestType']:
+        if self == TestType.QUICK_TESTS:
+            return [self.SANITY, self.CONFIGURATION]
+        else:
+            return [self]
+
     def get_test_params(self) -> TestParams:
+        if len(self.get_test_set()) > 1:
+            raise ValueError(f"TestType {self.name} is a multi test set. It can't be run directly, and must be"
+                             "interpreted by hitl_wrapper.py into its individual tests.")
+
         if self == TestType.CONFIGURATION:
             # This test doesn't have a fixed duration. The duration is determined by
             # how long the device takes to respond to commands.
@@ -81,7 +94,8 @@ class HitlEnvArgs(NamedTuple):
     HITL_NAME: str
     # Path to nautilus repo. Just used to check git info.
     HITL_NAUTILUS_PATH: str
-    # The HITL test set to perform.
+    # The HITL test set to perform. NOTE: To get the individual test that is currently running in the case of a
+    # multi-scenario set, use `get_selected_test_type()`.
     HITL_TEST_TYPE: TestType
     # The @ref DeviceType being tested.
     HITL_BUILD_TYPE: DeviceType
@@ -89,6 +103,8 @@ class HitlEnvArgs(NamedTuple):
     # 1. The version string of an existing build to provision the device with (e.x. v2.1.0-920-g6090626b66).
     # 2. The commit-ish of the nautilus repo to get a version string from.
     HITL_DUT_VERSION: str
+    # For a multi-test set, which test in the set to perform.
+    HITL_TEST_SET_INDEX: Optional[int] = None
     # The truth location of the device antenna. It is specified as a the
     # geodetic latitude, longitude, and altitude (in degrees/degrees/meters),
     # expressed using the WGS-84 reference ellipsoid.
@@ -96,6 +112,12 @@ class HitlEnvArgs(NamedTuple):
     # Only for Atlas Tests
     JENKINS_ATLAS_LAN_IP: Optional[str] = None
     JENKINS_ATLAS_BALENA_UUID: Optional[str] = None
+
+    def get_selected_test_type(self) -> TestType:
+        if self.HITL_TEST_SET_INDEX is None:
+            return self.HITL_TEST_TYPE
+        else:
+            return self.HITL_TEST_TYPE.get_test_set()[self.HITL_TEST_SET_INDEX]
 
     def check_fields(self, required_fields: List[str]) -> bool:
         ret = True
@@ -108,7 +130,7 @@ class HitlEnvArgs(NamedTuple):
         return ret
 
     @classmethod
-    def get_env_args(cls, env_in_dict=os.environ) -> Optional['HitlEnvArgs']:
+    def get_env_args(cls, env_in_dict=os.environ, test_set_index: Optional[int] = None) -> Optional['HitlEnvArgs']:
         env_dict = {}
         for arg in HitlEnvArgs._fields:
             if arg in env_in_dict:
@@ -129,7 +151,16 @@ class HitlEnvArgs(NamedTuple):
                     logger.error(f'Invalid value "{env_in_dict[arg]}" for {arg}')
                     return None
         try:
-            return HitlEnvArgs(**env_dict)
+            if test_set_index is not None:
+                env_dict['HITL_TEST_SET_INDEX'] = test_set_index
+            env_args = HitlEnvArgs(**env_dict)
+            try:
+                env_args.get_selected_test_type()
+            except IndexError:
+                logger.error(f'HITL_TEST_SET_INDEX of {env_args.HITL_TEST_SET_INDEX} is out of range for test set'
+                             f'{env_args.HITL_TEST_TYPE.name} length {len(env_args.HITL_TEST_TYPE.get_test_set())}.')
+                return None
+            return env_args
         except Exception as e:
             logger.error(f'Failure loading expected environment variables: {e}')
             return None
@@ -144,10 +175,10 @@ class HitlEnvArgs(NamedTuple):
             json.dump(env_dict, fd)
 
     @classmethod
-    def load_env_json_file(cls, in_path: Path) -> Optional['HitlEnvArgs']:
+    def load_env_json_file(cls, in_path: Path, test_set_index: Optional[int] = None) -> Optional['HitlEnvArgs']:
         with open(in_path, 'r') as fd:
             env = json.load(fd)
-            return cls.get_env_args(env)
+            return cls.get_env_args(env, test_set_index=test_set_index)
 
 
 def get_args() -> tuple[Namespace, Optional[HitlEnvArgs]]:
@@ -174,6 +205,10 @@ def get_args() -> tuple[Namespace, Optional[HitlEnvArgs]]:
     parser.add_argument(
         '-e', '--env-file', type=Path,
         help="Rather than load args from environment, use a JSON file.")
+    parser.add_argument(
+        '-i', '--test-set-index', type=int,
+        help="Override the HITL_TEST_SET_INDEX environment value to set which test in a set to perform.")
+
     cli_args = parser.parse_args()
 
     env_file = cli_args.env_file
@@ -195,8 +230,8 @@ def get_args() -> tuple[Namespace, Optional[HitlEnvArgs]]:
             pass
 
     if env_file:
-        env_args = HitlEnvArgs.load_env_json_file(env_file)
+        env_args = HitlEnvArgs.load_env_json_file(env_file, test_set_index=cli_args.test_set_index)
     else:
-        env_args = HitlEnvArgs.get_env_args()
+        env_args = HitlEnvArgs.get_env_args(test_set_index=cli_args.test_set_index)
 
     return cli_args, env_args
