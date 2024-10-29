@@ -153,7 +153,14 @@ class HitlEnvArgs(NamedTuple):
         try:
             if test_set_index is not None:
                 env_dict['HITL_TEST_SET_INDEX'] = test_set_index
-            return HitlEnvArgs(**env_dict)
+            env_args = HitlEnvArgs(**env_dict)
+            try:
+                env_args.get_selected_test_type()
+            except IndexError:
+                logger.error(f'HITL_TEST_SET_INDEX of {env_args.HITL_TEST_SET_INDEX} is out of range for test set'
+                             f'{env_args.HITL_TEST_TYPE.name} length {len(env_args.HITL_TEST_TYPE.get_test_set())}.')
+                return None
+            return env_args
         except Exception as e:
             logger.error(f'Failure loading expected environment variables: {e}')
             return None

@@ -157,7 +157,6 @@ def main():
                 process_timeout_sec = test_type.get_test_params().duration_sec + BUILD_AND_SETUP_TIMEOUT_SEC
                 cmd_args[0] = str(RUNNER_SCRIPT_PATH)
                 CMD_ARGS = cmd_args + extra_args
-                print(CMD_ARGS)
                 start_time = time.monotonic()
                 ret_status = None
                 with subprocess.Popen(CMD_ARGS, stdout=console_out, stderr=subprocess.STDOUT, text=True) as proc:
