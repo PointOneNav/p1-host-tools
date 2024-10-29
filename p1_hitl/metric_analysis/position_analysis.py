@@ -174,10 +174,21 @@ def configure_metrics(env_args: HitlEnvArgs):
         metric_2d_fixed_pos_error.is_disabled = True
         metric_3d_fixed_pos_error.is_disabled = True
 
+    # YPR will be nan before the filter initializes orientation. For HITL where the receiver is not moving, I would
+    # expect that to be 100% of the time. If TightEsrif manages to initialize orientation without moving, that should
+    # actually be considered a bug.
+    #
+    # Position and velocity should initialize when the filter does (however we need to be careful about fallback
+    # positions before filter initialization for devices where we are doing that)
+    #
+    # The one counter for (1) would be a test where we're injecting a hot start state to begin with. In that case,
+    # assuming it has orientation initialized (which is not required for all hot starts), it should continue outputting
+    # basically the same angles forever since it's not moving. That's a test we might want to check
     if params.is_stationary:
         metric_delta_ypr_deg.is_disabled = True
         metric_ypr_std_deg.is_disabled = True
         metric_non_nan_ypr_std_deg.is_disabled = True
+        metric_non_nan_vel_std_mps.is_disabled = True
 
 
 MetricController.register_environment_config_customizations(configure_metrics)
