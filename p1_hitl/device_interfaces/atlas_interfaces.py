@@ -8,7 +8,7 @@ from bin.config_tool import apply_config, request_shutdown, save_config
 from p1_hitl.defs import UPLOADED_LOG_LIST_FILE, HitlEnvArgs
 from p1_runner.device_interface import DeviceInterface
 from p1_test_automation.atlas_device_ctrl import (AtlasBalenaController,
-                                                  get_log_status,
+                                                  get_log_status, set_crash_log_action, CrashLogAction,
                                                   restart_application,
                                                   upload_log)
 from p1_test_automation.devices_config import (BalenaConfig, DeviceConfig,
@@ -97,6 +97,8 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
         if data_source is None:
             logger.error(f"Can't open Atlas TCP interface: {self.config.tcp_address}.")
             return None
+
+        set_crash_log_action(self.config.tcp_address, CrashLogAction.FULL_LOG)  # type: ignore
 
         device_interface = DeviceInterface(data_source)
         logger.info('Clearing FE settings.')
