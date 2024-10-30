@@ -8,8 +8,10 @@ from bin.config_tool import apply_config, request_shutdown, save_config
 from p1_hitl.defs import UPLOADED_LOG_LIST_FILE, HitlEnvArgs
 from p1_runner.device_interface import DeviceInterface
 from p1_test_automation.atlas_device_ctrl import (AtlasBalenaController,
-                                                  get_log_status, set_crash_log_action, CrashLogAction,
+                                                  CrashLogAction,
+                                                  get_log_status,
                                                   restart_application,
+                                                  set_crash_log_action,
                                                   upload_log)
 from p1_test_automation.devices_config import (BalenaConfig, DeviceConfig,
                                                open_data_source)

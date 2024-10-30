@@ -191,6 +191,9 @@ def get_args() -> tuple[Namespace, Optional[HitlEnvArgs]]:
         help="Print verbose/trace debugging messages. May be specified multiple times to increase verbosity.",
     )
     parser.add_argument(
+        '--list-metric-only', action='store_true',
+        help="Don't perform HITL test. Instead just generate a report with the expected HITL metrics.")
+    parser.add_argument(
         '--log-metric-values', action='store_true',
         help="Generate CSV's for each metric in the output directory.")
     parser.add_argument(

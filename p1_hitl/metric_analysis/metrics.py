@@ -35,6 +35,7 @@ environment.
 '''
 
 import inspect
+import json
 import logging
 import math
 import struct
@@ -50,7 +51,8 @@ from typing import (Any, BinaryIO, ClassVar, Dict, Iterable, List, NamedTuple,
 from fusion_engine_client.messages import MessagePayload
 from fusion_engine_client.parsers.decoder import MessageWithBytesTuple
 
-from p1_hitl.defs import MSG_TIME_LOG_FILENAME, HitlEnvArgs
+from p1_hitl.defs import (FAILURE_REPORT, FULL_REPORT, MSG_TIME_LOG_FILENAME,
+                          HitlEnvArgs)
 
 logger = logging.getLogger('point_one.hitl.metrics')
 
@@ -62,6 +64,13 @@ _MSG_TIME_LOG_FORMAT = '<II'
 # Format for metric log:
 # [u32 test time elapsed in milliseconds (host if available, or device for playback)][f64 metric value]
 _METRIC_LOG_FORMAT = '<Id'
+
+
+def custom_json(obj):
+    if isinstance(obj, Timestamp):
+        return {'host_time': obj.host_time, 'p1_time': obj.p1_time, 'system_time': obj.system_time}
+    else:
+        return str(obj)
 
 
 class FatalMetricException(Exception):
@@ -182,6 +191,9 @@ class MetricController:
     _current_time: ClassVar[Timestamp] = Timestamp(None, None, None)
     # Controls if host time should be played back.
     _playback_host_times: ClassVar[bool] = False
+
+    # Set this to record a commit in the report.
+    analysis_commit: ClassVar[str] = 'Unknown'
 
     @classmethod
     def enable_logging(cls, log_dir: Path, log_msg_times: bool, log_metric_values: bool):
@@ -345,15 +357,52 @@ class MetricController:
     def generate_report(cls) -> Dict[str, Any]:
         '''!
         Generate dict with the configuration and results from all the active metrics.
+
+        Write out report log and failure log JSON files.
         '''
         results = {}
-        has_failures = False
+        skipped = 0
+        failed = 0
+        passed = 0
         for name, metric in cls._metrics.items():
             if not metric.is_disabled:
                 results[name] = asdict(metric)
-                has_failures |= metric.failure_time is not None
+                if metric.failure_time is None:
+                    if not metric.was_checked:
+                        skipped += 1
+                    else:
+                        passed += 1
+                else:
+                    logger.warning(f'[FAIL]: {name}')
+                    failed += 1
+        has_failures = failed > 0
+        report = {'results': results, 'test_start': cls._start_time, 'has_failures': has_failures}
+        # Add git describe of host tools repo to report.
+        report['analysis_commit'] = cls.analysis_commit
 
-        return {'results': results, 'test_start': cls._start_time, 'has_failures': has_failures}
+        logger.info(f'{passed} tests passed')
+        logger.info(f'{skipped} tests skipped')
+        logger.info(f'{failed} tests failed')
+
+        if cls._log_dir:
+            if has_failures:
+                with open(cls._log_dir / FAILURE_REPORT, 'w') as fd:
+                    errors = []
+                    for name, metric in MetricController._metrics.items():
+                        if metric.failure_time is not None:
+                            errors.append(
+                                {
+                                    'name': name,
+                                    'type': type(metric).__name__,
+                                    'context': metric.failure_context
+                                }
+                            )
+                    json.dump(errors, fd, indent=2)
+
+            with open(cls._log_dir / FULL_REPORT, 'w') as fd:
+                json.dump(report, fd, indent=2, default=custom_json)
+
+        return report
 
 
 @dataclass

@@ -14,14 +14,15 @@ sys.path.append(str(repo_root))
 from fusion_engine_client.utils.log import find_log_file
 
 from p1_hitl.defs import (BUILD_INFO_FILE, CONSOLE_FILE, ENV_DUMP_FILE,
-                          LOG_FILES, PLAYBACK_DIR, DeviceType, HitlEnvArgs,
-                          TestType, get_args)
+                          FULL_REPORT, LOG_FILES, PLAYBACK_DIR, DeviceType,
+                          HitlEnvArgs, TestType, get_args)
 from p1_hitl.device_interfaces import HitlAtlasInterface
 from p1_hitl.get_build_artifacts import get_build_info
 from p1_hitl.git_cmds import GitWrapper
 from p1_hitl.jenkins_ctrl import run_build
 from p1_hitl.metric_analysis.analysis_runner import (run_analysis,
                                                      run_analysis_playback)
+from p1_hitl.metric_analysis.metrics import MetricController
 from p1_hitl.version_helper import git_describe_dut_version
 from p1_runner.log_manager import LogManager
 from p1_test_automation.devices_config_test import (ConfigSet, InterfaceTests,
@@ -53,6 +54,7 @@ def main():
         git = GitWrapper(repo_root)
         host_tools_commit = git.describe()
         logger.info(f'p1-host-tools git commit: "{host_tools_commit}"')
+        MetricController.analysis_commit = host_tools_commit
     except RuntimeError as e:
         logger.warning(f'Unable to git describe p1-host-tools repo: {e}')
 
@@ -88,6 +90,13 @@ def main():
 
     env_file_dump = output_dir / ENV_DUMP_FILE
     HitlEnvArgs.dump_env_to_json_file(env_file_dump)
+
+    if cli_args.list_metric_only:
+        MetricController.enable_logging(output_dir, False, False)
+        MetricController.apply_environment_config_customizations(env_args)
+        MetricController.generate_report()
+        print(open(output_dir / FULL_REPORT, 'r').read())
+        sys.exit(0)
 
     ################# Get build to provision device under test #################
     if not cli_args.playback_log:
@@ -184,7 +193,7 @@ def main():
         try:
             if cli_args.playback_log:
                 tests_passed = run_analysis_playback(
-                    playback_file, env_args, output_dir, cli_args.log_metric_values, host_tools_commit)
+                    playback_file, env_args, output_dir, cli_args.log_metric_values)
             else:
                 if log_manager is not None:
                     log_manager.start()
@@ -194,7 +203,6 @@ def main():
                     env_args,
                     output_dir,
                     cli_args.log_metric_values,
-                    host_tools_commit,
                     release_str)
         finally:
             if tests_passed is not None:
