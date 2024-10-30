@@ -163,34 +163,37 @@ def main():
             sys.exit(1)
 
     ################# Run tests #################
-    if env_args.get_selected_test_type() == TestType.CONFIGURATION:
-        if cli_args.playback_log:
-            logger.error(f'HITL_TEST_TYPE "CONFIGURATION" does not support playback.')
-            sys.exit(1)
-        # The config test exercises starting the data source as part of its test.
-        device_interface.data_source.stop()
-        interface_name = {DeviceType.ATLAS: 'tcp1'}.get(env_args.HITL_BUILD_TYPE)
-        test_set = ["fe_version", "interface_ids", "expected_storage", "msg_rates", "set_config",
-                    "import_config", "save_config"]
-        # TODO: Figure out what to do about Atlas reboot.
-        if env_args.HITL_BUILD_TYPE != DeviceType.ATLAS:
-            test_set += ["reboot", "watchdog_fault", "expected_storage"]
-        test_config = TestConfig(
-            config=ConfigSet(
-                devices=[device_config]
-            ),
-            tests=[
-                InterfaceTests(
-                    name=device_config.name,
-                    interface_name=interface_name,
-                    tests=test_set
-                )
-            ])
-        run_config_tests(test_config)
-    else:
-        ran_successfully = False
-        tests_passed = False
-        try:
+    ran_successfully = False
+    tests_passed = False
+    try:
+        if env_args.get_selected_test_type() == TestType.CONFIGURATION:
+            if cli_args.playback_log:
+                logger.error(f'HITL_TEST_TYPE "CONFIGURATION" does not support playback.')
+                sys.exit(1)
+            if log_manager is None:
+                logger.error(f'HITL_TEST_TYPE "CONFIGURATION" expects active LogManager.')
+                sys.exit(1)
+            # The config test exercises starting the data source as part of its test.
+            device_interface.data_source.stop()
+            interface_name = {DeviceType.ATLAS: 'tcp1'}.get(env_args.HITL_BUILD_TYPE)
+            test_set = ["fe_version", "interface_ids", "expected_storage", "msg_rates", "set_config",
+                        "import_config", "save_config"]
+            # TODO: Figure out what to do about Atlas reboot.
+            if env_args.HITL_BUILD_TYPE != DeviceType.ATLAS:
+                test_set += ["reboot", "watchdog_fault", "expected_storage"]
+            test_config = TestConfig(
+                config=ConfigSet(
+                    devices=[device_config]
+                ),
+                tests=[
+                    InterfaceTests(
+                        name=device_config.name,
+                        interface_name=interface_name,
+                        tests=test_set
+                    )
+                ])
+            tests_passed = run_config_tests(test_config, log_manager)
+        else:
             if cli_args.playback_log:
                 tests_passed = run_analysis_playback(
                     playback_file, env_args, output_dir, cli_args.log_metric_values)
@@ -204,20 +207,20 @@ def main():
                     output_dir,
                     cli_args.log_metric_values,
                     release_str)
-        finally:
-            if tests_passed is not None:
-                ran_successfully = True
-            else:
-                tests_passed = False
-            try:
-                hitl_device_interface.shutdown_device(tests_passed, output_dir)
-            except:
-                pass
-            if log_manager is not None:
-                log_manager.stop()
+    finally:
+        if tests_passed is not None:
+            ran_successfully = True
+        else:
+            tests_passed = False
+        try:
+            hitl_device_interface.shutdown_device(tests_passed, output_dir)
+        except:
+            pass
+        if log_manager is not None:
+            log_manager.stop()
 
-        if not ran_successfully:
-            sys.exit(1)
+    if not ran_successfully:
+        sys.exit(1)
 
     sys.exit(0)
 

@@ -200,7 +200,7 @@ class MetricController:
         '''!
         @param log_dir - Directory to write log files to.
         @param log_msg_times - Should the host time of each FE message be logged.
-        @param log_metric_values - Should the value of each metric with `not_logged==False` be logged.
+        @param log_metric_values - Should the value of each metric with `is_logged==True` be logged.
         '''
         cls._log_dir = log_dir
         cls._log_msg_times = log_msg_times
@@ -425,8 +425,8 @@ class MetricBase:
     is_required: bool = field(default=False, kw_only=True)
     # The metric should be ignored.
     is_disabled: bool = field(default=False, kw_only=True)
-    # Should this metric be exempt from logging
-    not_logged: bool = field(default=False, kw_only=True)
+    # Should this metric be logged
+    is_logged: bool = field(default=False, kw_only=True)
 
     ## Set automatically, do not set manually. ##
     # Context on where the metric was declared.
@@ -485,7 +485,7 @@ class MetricBase:
         if self.is_disabled:
             return
 
-        if not self.not_logged:
+        if self.is_logged:
             self.__log(value)
 
         if context is None:
@@ -554,7 +554,7 @@ class MaxArrayValueMetric(MetricBase):
     thresholds: List[float]
 
     def _initialize(self):
-        if not self.not_logged:
+        if self.is_logged:
             raise ValueError(f'Logging not supported for MaxArrayValueMetric {self.name}.')
 
     def check(self, values: Iterable[float]):
