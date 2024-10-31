@@ -17,7 +17,7 @@ class HitlDeviceInterfaceBase(ABC):
         ...
 
     @abstractmethod
-    def init_device(self, build_info: Dict[str, Any]) -> Optional[DeviceInterface]:
+    def init_device(self, build_info: Dict[str, Any], skip_reset=False) -> Optional[DeviceInterface]:
         ...
 
     @abstractmethod

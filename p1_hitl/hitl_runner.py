@@ -5,29 +5,27 @@ import os
 import sys
 from pathlib import Path
 
+from fusion_engine_client.utils.log import find_log_file
+
 # isort: split
 
 # Add the host tool root directory and device_interfaces to the python path.
 repo_root = Path(__file__).parents[1].resolve()
 sys.path.append(str(repo_root))
 
-from fusion_engine_client.utils.log import find_log_file
-
 from p1_hitl.defs import (BUILD_INFO_FILE, CONSOLE_FILE, ENV_DUMP_FILE,
-                          LOG_FILES, PLAYBACK_DIR, DeviceType, HitlEnvArgs,
-                          TestType, get_args)
+                          FULL_REPORT, LOG_FILES, PLAYBACK_DIR, DeviceType,
+                          HitlEnvArgs, TestType, get_args)
 from p1_hitl.device_interfaces import HitlAtlasInterface
 from p1_hitl.get_build_artifacts import get_build_info
 from p1_hitl.git_cmds import GitWrapper
 from p1_hitl.jenkins_ctrl import run_build
 from p1_hitl.metric_analysis.analysis_runner import (run_analysis,
                                                      run_analysis_playback)
+from p1_hitl.metric_analysis.config_test import run_tests as run_config_tests
+from p1_hitl.metric_analysis.metrics import MetricController
 from p1_hitl.version_helper import git_describe_dut_version
 from p1_runner.log_manager import LogManager
-from p1_test_automation.devices_config_test import (ConfigSet, InterfaceTests,
-                                                    TestConfig)
-from p1_test_automation.devices_config_test import \
-    run_tests as run_config_tests
 
 logger = logging.getLogger('point_one.hitl.runner')
 
@@ -51,8 +49,9 @@ def main():
     host_tools_commit = 'Unknown'
     try:
         git = GitWrapper(repo_root)
-        host_tools_commit = git.describe()
+        host_tools_commit = git.describe(always=True)
         logger.info(f'p1-host-tools git commit: "{host_tools_commit}"')
+        MetricController.analysis_commit = host_tools_commit
     except RuntimeError as e:
         logger.warning(f'Unable to git describe p1-host-tools repo: {e}')
 
@@ -88,6 +87,14 @@ def main():
 
     env_file_dump = output_dir / ENV_DUMP_FILE
     HitlEnvArgs.dump_env_to_json_file(env_file_dump)
+    MetricController.set_root_code_location(repo_root)
+    MetricController.apply_environment_config_customizations(env_args)
+
+    if cli_args.list_metric_only:
+        MetricController.enable_logging(output_dir, False, False)
+        MetricController.generate_report()
+        print(open(output_dir / FULL_REPORT, 'r').read())
+        sys.exit(0)
 
     ################# Get build to provision device under test #################
     if not cli_args.playback_log:
@@ -148,68 +155,54 @@ def main():
             logger.error('Failure configuring device for HITL testing.')
             sys.exit(1)
         hitl_device_interface = hitl_device_interface_cls(device_config)
-        device_interface = hitl_device_interface.init_device(build_info)
+        device_interface = hitl_device_interface.init_device(build_info, cli_args.skip_reset)
         if device_interface is None:
             logger.error('Failure initializing device for HITL testing.')
             sys.exit(1)
 
     ################# Run tests #################
-    if env_args.get_selected_test_type() == TestType.CONFIGURATION:
-        if cli_args.playback_log:
-            logger.error(f'HITL_TEST_TYPE "CONFIGURATION" does not support playback.')
-            sys.exit(1)
-        # The config test exercises starting the data source as part of its test.
-        device_interface.data_source.stop()
-        interface_name = {DeviceType.ATLAS: 'tcp1'}.get(env_args.HITL_BUILD_TYPE)
-        test_set = ["fe_version", "interface_ids", "expected_storage", "msg_rates", "set_config",
-                    "import_config", "save_config"]
-        # TODO: Figure out what to do about Atlas reboot.
-        if env_args.HITL_BUILD_TYPE != DeviceType.ATLAS:
-            test_set += ["reboot", "watchdog_fault", "expected_storage"]
-        test_config = TestConfig(
-            config=ConfigSet(
-                devices=[device_config]
-            ),
-            tests=[
-                InterfaceTests(
-                    name=device_config.name,
-                    interface_name=interface_name,
-                    tests=test_set
-                )
-            ])
-        run_config_tests(test_config)
-    else:
-        ran_successfully = False
-        tests_passed = False
-        try:
+    tests_completed = False
+    tests_passed = False
+    MetricController.enable_logging(output_dir, cli_args.playback_log, cli_args.log_metric_values)
+    if cli_args.playback_log:
+        MetricController.playback_host_time(output_dir.parent)
+
+    try:
+        if env_args.get_selected_test_type() == TestType.CONFIGURATION:
             if cli_args.playback_log:
-                tests_passed = run_analysis_playback(
-                    playback_file, env_args, output_dir, cli_args.log_metric_values, host_tools_commit)
+                logger.error(f'HITL_TEST_TYPE "CONFIGURATION" does not support playback.')
+                sys.exit(1)
+            if log_manager is None:
+                logger.error(f'HITL_TEST_TYPE "CONFIGURATION" expects active LogManager.')
+                sys.exit(1)
+            # The config test exercises starting the data source as part of its test.
+            device_interface.data_source.stop()
+            tests_completed = run_config_tests(env_args, device_config, log_manager)
+        else:
+            if cli_args.playback_log:
+                tests_completed = run_analysis_playback(playback_file, env_args)
             else:
                 if log_manager is not None:
                     log_manager.start()
                     device_interface.data_source.rx_log = log_manager  # type: ignore
-                tests_passed = run_analysis(
+                tests_completed = run_analysis(
                     device_interface,
                     env_args,
-                    output_dir,
-                    cli_args.log_metric_values,
-                    host_tools_commit,
                     release_str)
-        finally:
-            if tests_passed is not None:
-                ran_successfully = True
-            else:
-                tests_passed = False
-            try:
-                hitl_device_interface.shutdown_device(tests_passed, output_dir)
-            except:
-                pass
-            if log_manager is not None:
-                log_manager.stop()
+        if tests_completed:
+            MetricController.finalize()
+            report = MetricController.generate_report()
+            tests_passed = not report['has_failures']
+    finally:
+        try:
+            hitl_device_interface.shutdown_device(tests_passed, output_dir)
+        except:
+            pass
+        if log_manager is not None:
+            log_manager.stop()
 
-        if not ran_successfully:
-            sys.exit(1)
+    if not tests_completed:
+        sys.exit(1)
 
     sys.exit(0)
 

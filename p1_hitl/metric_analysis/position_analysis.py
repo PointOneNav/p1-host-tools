@@ -19,21 +19,21 @@ metric_fix_rate = PercentTrueMetric(
     'Percent of solutions in fix mode.',
     90.0,
     is_required=True,
-    not_logged=True
+
 )
 
 metric_position_valid = AlwaysTrueMetric(
     'position_valid',
     'All positions should be valid.',
     is_required=True,
-    not_logged=True
+
 )
 
 metric_p1_time_valid = AlwaysTrueMetric(
     'p1_time_valid',
     'All P1 times should be valid.',
     is_required=True,
-    not_logged=True
+
 )
 
 metric_pose_host_time_elapsed = MaxElapsedTimeMetric(
@@ -45,7 +45,7 @@ metric_pose_host_time_elapsed = MaxElapsedTimeMetric(
     # conservatively initially, and bring down once we have better testing
     # integration and can make sure it doesn't generate false positives.
     max_time_between_checks_sec=0.5,
-    not_logged=True
+
 )
 
 metric_pose_p1_time_elapsed = MaxElapsedTimeMetric(
@@ -56,14 +56,14 @@ metric_pose_p1_time_elapsed = MaxElapsedTimeMetric(
     # conservatively initially, and bring down once we have better testing
     # integration and can make sure it doesn't generate false positives.
     max_time_between_checks_sec=0.3,
-    not_logged=True
+
 )
 
 metric_gps_time_valid = AlwaysTrueMetric(
     'gps_time_valid',
     'All GPS times should be valid.',
     is_required=True,
-    not_logged=True
+
 )
 
 metric_max_velocity = MaxValueMetric(
@@ -71,6 +71,7 @@ metric_max_velocity = MaxValueMetric(
     'Velocity (mps) should be near 0.',
     0.01,
     is_required=True,
+    is_logged=True,
 )
 
 metric_2d_fixed_pos_error = StatsMetric(
@@ -81,7 +82,8 @@ metric_2d_fixed_pos_error = StatsMetric(
         CdfThreshold(90, .1),
         CdfThreshold(50, .08),
     ],
-    is_required=True
+    is_required=True,
+    is_logged=True,
 )
 
 metric_3d_fixed_pos_error = StatsMetric(
@@ -92,14 +94,15 @@ metric_3d_fixed_pos_error = StatsMetric(
         CdfThreshold(90, .1),
         CdfThreshold(50, .08),
     ],
-    is_required=True
+    is_required=True,
+    is_logged=True,
 )
 
 metric_non_nan_position = AlwaysTrueMetric(
     'non_nan_position',
     'All positions should be non-nan values.',
     is_required=True,
-    not_logged=True
+
 )
 
 metric_delta_ypr_deg = MaxArrayValueMetric(
@@ -107,7 +110,7 @@ metric_delta_ypr_deg = MaxArrayValueMetric(
     'Max jumps in YPR values should be lower than [5.0, 5.0, 5.0]',
     [5.0, 5.0, 5.0],
     is_required=True,
-    not_logged=True
+
 )
 
 metric_pos_std_enu = MaxArrayValueMetric(
@@ -115,7 +118,7 @@ metric_pos_std_enu = MaxArrayValueMetric(
     'ENU position standard deviations should be less than [2.0, 2.0, 2.0]',
     [2.0, 2.0, 2.0],
     is_required=True,
-    not_logged=True
+
 )
 
 metric_ypr_std_deg = MaxArrayValueMetric(
@@ -123,7 +126,7 @@ metric_ypr_std_deg = MaxArrayValueMetric(
     'Max YPR standard deviations should be lower than [5.0, 5.0, 5.0]',
     [5.0, 5.0, 5.0],
     is_required=True,
-    not_logged=True
+
 )
 
 metric_vel_std_mps = MaxArrayValueMetric(
@@ -131,35 +134,35 @@ metric_vel_std_mps = MaxArrayValueMetric(
     'Max velocity standard deviations should be lower than [3.0, 3.0, 3.0]',
     [3.0, 3.0, 3.0],
     is_required=True,
-    not_logged=True
+
 )
 
 metric_non_nan_pos_std_enu = AlwaysTrueMetric(
     'non_nan_pos_std_enu',
     'ENU position standard deviations should be non-nan values.',
     is_required=True,
-    not_logged=True
+
 )
 
 metric_non_nan_ypr_std_deg = AlwaysTrueMetric(
     'non_nan_ypr_std_deg',
     'YPR standard deviations should be non-nan values.',
     is_required=True,
-    not_logged=True
+
 )
 
 metric_non_nan_vel_std_mps = AlwaysTrueMetric(
     'non_nan_vel_std_mps',
     'Velocity standard deviations should be non-nan values.',
     is_required=True,
-    not_logged=True
+
 )
 
 metric_non_nan_undulation = AlwaysTrueMetric(
     'non_nan_undulation',
     'Undulation should be non-nan value.',
     is_required=True,
-    not_logged=True
+
 )
 
 

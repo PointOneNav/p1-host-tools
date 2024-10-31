@@ -1,21 +1,19 @@
 import io
-import json
 import logging
 import time
 import traceback
 from pathlib import Path
-from typing import Iterator, List, Optional
+from typing import Iterator, List
 
 from fusion_engine_client.messages import (MessageHeader, VersionInfoMessage,
                                            message_type_to_class)
 from fusion_engine_client.parsers import fast_indexer
 
-from p1_hitl.defs import FAILURE_REPORT, FULL_REPORT, HitlEnvArgs
+from p1_hitl.defs import HitlEnvArgs
 from p1_hitl.metric_analysis.metrics import (AlwaysTrueMetric,
                                              FatalMetricException,
                                              MaxElapsedTimeMetric,
-                                             MetricController, TimeSource,
-                                             Timestamp)
+                                             MetricController, TimeSource)
 from p1_runner.device_interface import (MAX_FE_MSG_SIZE, DeviceInterface,
                                         FusionEngineDecoder,
                                         MessageWithBytesTuple)
@@ -35,7 +33,7 @@ metric_message_host_time_elapsed = MaxElapsedTimeMetric(
     TimeSource.HOST,
     max_time_to_first_check_sec=10,
     max_time_between_checks_sec=0.2,
-    not_logged=True
+
 )
 metric_message_host_time_elapsed_test_stop = MaxElapsedTimeMetric(
     'message_host_time_elapsed_test_stop',
@@ -44,7 +42,7 @@ metric_message_host_time_elapsed_test_stop = MaxElapsedTimeMetric(
     max_time_to_first_check_sec=60,
     max_time_between_checks_sec=60,
     is_fatal=True,
-    not_logged=True
+
 )
 metric_version_check = AlwaysTrueMetric(
     'version_check',
@@ -60,71 +58,16 @@ REALTIME_POLL_INTERVAL = 0.05
 
 
 def _setup_analysis(env_args: HitlEnvArgs) -> List[AnalyzerBase]:
-    MetricController.apply_environment_config_customizations(env_args)
-
     analyzers = [SanityAnalyzer(), PositionAnalyzer()]
     for analyzer in analyzers:
         analyzer.configure(env_args)
     return analyzers
 
 
-def custom_json(obj):
-    if isinstance(obj, Timestamp):
-        return {'host_time': obj.host_time, 'p1_time': obj.p1_time, 'system_time': obj.system_time}
-    else:
-        return str(obj)
-
-
-def _finish_analysis(output_dir: Path, analysis_commit: str) -> bool:
-    MetricController.finalize()
-    report = MetricController.generate_report()
-    # Add git describe of host tools repo to report.
-    report['analysis_commit'] = analysis_commit
-    results = report['results']
-
-    skipped = 0
-    failed = 0
-    passed = 0
-    for k, v in results.items():
-        if v['failure_time'] is None:
-            if not v['was_checked']:
-                skipped += 1
-            else:
-                passed += 1
-        else:
-            logger.warning(f'[FAIL]: {k}')
-            failed += 1
-    logger.info(f'{passed} tests passed')
-    logger.info(f'{skipped} tests skipped')
-    logger.info(f'{failed} tests failed')
-
-    had_failures = failed > 0
-
-    if had_failures:
-        with open(output_dir / FAILURE_REPORT, 'w') as fd:
-            errors = []
-            for name, metric in MetricController._metrics.items():
-                if metric.failure_time is not None:
-                    errors.append(
-                        {
-                            'name': name,
-                            'type': type(metric).__name__,
-                            'context': metric.failure_context
-                        }
-                    )
-            json.dump(errors, fd, indent=2)
-
-    with open(output_dir / FULL_REPORT, 'w') as fd:
-        json.dump(report, fd, indent=2, default=custom_json)
-
-    return not had_failures
-
-
 def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs,
-                 output_dir: Path, log_metric_values: bool, analysis_commit: str, release_str: str) -> Optional[bool]:
+                 release_str: str) -> bool:
     try:
         params = env_args.get_selected_test_type().get_test_params()
-        MetricController.enable_logging(output_dir, True, log_metric_values)
         if params.duration_sec < MAX_SEC_TO_VERSION_MESSAGE:
             metric_version_check.is_disabled = True
 
@@ -138,7 +81,7 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs,
                 msgs = interface.poll_messages(response_timeout=REALTIME_POLL_INTERVAL)
             except Exception as e:
                 logger.error(f'Exception collecting FusionEngine messages from device {exception_to_str(e)}')
-                return None
+                return False
             MetricController.update_host_time()
 
             for msg in msgs:
@@ -163,13 +106,12 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs,
         pass
     except Exception as e:
         logger.error(f'Exception while analyzing FE messages:\n{traceback.format_exc()}')
-        return None
+        return False
 
-    return _finish_analysis(output_dir, analysis_commit)
+    return True
 
 
-def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs,
-                          output_dir: Path, log_metric_values: bool, analysis_commit: str) -> Optional[bool]:
+def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs) -> bool:
     class _PlaybackStatus:
         def __init__(self, in_fd) -> None:
             self.in_fd = in_fd
@@ -232,8 +174,6 @@ def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs,
                 status.update()
 
     try:
-        MetricController.enable_logging(output_dir, False, log_metric_values)
-        MetricController.playback_host_time(output_dir.parent)
         analyzers = _setup_analysis(env_args)
 
         metric_message_host_time_elapsed.is_disabled = True
@@ -250,6 +190,6 @@ def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs,
         pass
     except Exception as e:
         logger.error(f'Exception while analyzing FE messages:\n{traceback.format_exc()}')
-        return None
+        return False
 
-    return _finish_analysis(output_dir, analysis_commit)
+    return True

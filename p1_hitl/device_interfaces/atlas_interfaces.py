@@ -8,8 +8,10 @@ from bin.config_tool import apply_config, request_shutdown, save_config
 from p1_hitl.defs import UPLOADED_LOG_LIST_FILE, HitlEnvArgs
 from p1_runner.device_interface import DeviceInterface
 from p1_test_automation.atlas_device_ctrl import (AtlasBalenaController,
-                                                  get_log_status, set_crash_log_action, CrashLogAction,
+                                                  CrashLogAction,
+                                                  get_log_status,
                                                   restart_application,
+                                                  set_crash_log_action,
                                                   upload_log)
 from p1_test_automation.devices_config import (BalenaConfig, DeviceConfig,
                                                open_data_source)
@@ -41,7 +43,7 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
         self.config = config
         self.device_interface: Optional[DeviceInterface] = None
 
-    def init_device(self, build_info: Dict[str, Any]) -> Optional[DeviceInterface]:
+    def init_device(self, build_info: Dict[str, Any], skip_reset=False) -> Optional[DeviceInterface]:
         # build_info example:
         # {
         #     "timestamp": 1725918926,
@@ -120,13 +122,14 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
             return None
         self.old_log_guids = {l['guid'] for l in log_status['logs']}
 
-        logger.info('Restarting Atlas with diagnostic logging')
-        # Restart nautilus container with logging enabled at startup.
-        if not restart_application(self.config.tcp_address, log_on_startup=True):
-            logger.error('Atlas restart failed.')
-            return None
-        # Sleep to give restarted software a chance to get up and running.
-        time.sleep(RESTART_WAIT_TIME_SEC)
+        if not skip_reset:
+            logger.info('Restarting Atlas with diagnostic logging')
+            # Restart nautilus container with logging enabled at startup.
+            if not restart_application(self.config.tcp_address, log_on_startup=True):
+                logger.error('Atlas restart failed.')
+                return None
+            # Sleep to give restarted software a chance to get up and running.
+            time.sleep(RESTART_WAIT_TIME_SEC)
 
         data_source = open_data_source(self.config)
         if data_source is None:

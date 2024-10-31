@@ -66,7 +66,7 @@ class TestType(Enum):
 
     def get_test_set(self) -> List['TestType']:
         if self == TestType.QUICK_TESTS:
-            return [self.SANITY, self.CONFIGURATION]
+            return [self.CONFIGURATION, self.SANITY]
         else:
             return [self]
 
@@ -190,6 +190,12 @@ def get_args() -> tuple[Namespace, Optional[HitlEnvArgs]]:
         default=0,
         help="Print verbose/trace debugging messages. May be specified multiple times to increase verbosity.",
     )
+    parser.add_argument(
+        '--list-metric-only', action='store_true',
+        help="Don't perform HITL test. Instead just generate a report with the expected HITL metrics.")
+    parser.add_argument(
+        '--skip-reset', action='store_true',
+        help="Don't reset DUT (used for faster development testing).")
     parser.add_argument(
         '--log-metric-values', action='store_true',
         help="Generate CSV's for each metric in the output directory.")
