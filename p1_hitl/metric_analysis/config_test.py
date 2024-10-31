@@ -41,13 +41,11 @@ from p1_hitl.metric_analysis.metrics import (AlwaysTrueMetric, CodeLocation,
                                              FatalMetricException,
                                              MetricController)
 from p1_runner import trace as logging
-from p1_runner.argument_parser import ArgumentParser
 from p1_runner.device_interface import DeviceInterface
 from p1_runner.exported_data import load_saved_data
 from p1_runner.log_manager import LogManager
 from p1_test_automation.devices_config import (ConfigSet, DeviceConfig,
                                                copy_shared_settings_to_devices,
-                                               load_json_with_comments,
                                                open_data_source)
 
 metric_run_configuration_check = AlwaysTrueMetric(
