@@ -194,6 +194,9 @@ def get_args() -> tuple[Namespace, Optional[HitlEnvArgs]]:
         '--list-metric-only', action='store_true',
         help="Don't perform HITL test. Instead just generate a report with the expected HITL metrics.")
     parser.add_argument(
+        '--skip-reset', action='store_true',
+        help="Don't reset DUT (used for faster development testing).")
+    parser.add_argument(
         '--log-metric-values', action='store_true',
         help="Generate CSV's for each metric in the output directory.")
     parser.add_argument(

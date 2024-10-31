@@ -154,7 +154,7 @@ def main():
             logger.error('Failure configuring device for HITL testing.')
             sys.exit(1)
         hitl_device_interface = hitl_device_interface_cls(device_config)
-        device_interface = hitl_device_interface.init_device(build_info)
+        device_interface = hitl_device_interface.init_device(build_info, cli_args.skip_reset)
         if device_interface is None:
             logger.error('Failure initializing device for HITL testing.')
             sys.exit(1)

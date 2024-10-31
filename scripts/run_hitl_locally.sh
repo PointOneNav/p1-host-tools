@@ -14,7 +14,7 @@ export JENKINS_ATLAS_BALENA_UUID=c646a700525b361b1648fe1fd7f7b997
 export JENKINS_ANTENNA_LOCATION='37.84729032,-122.27868986,-7.96772104'
 
 # python p1_hitl/hitl_runner.py -v --log-metric-values
-python p1_hitl/hitl_wrapper.py -v --log-metric-values
+python p1_hitl/hitl_wrapper.py -v --log-metric-values --skip-reset
 # python p1_hitl/hitl_runner.py -v --list-metric-only
 
 

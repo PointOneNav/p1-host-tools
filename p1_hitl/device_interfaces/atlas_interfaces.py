@@ -43,7 +43,7 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
         self.config = config
         self.device_interface: Optional[DeviceInterface] = None
 
-    def init_device(self, build_info: Dict[str, Any]) -> Optional[DeviceInterface]:
+    def init_device(self, build_info: Dict[str, Any], skip_reset=False) -> Optional[DeviceInterface]:
         # build_info example:
         # {
         #     "timestamp": 1725918926,
@@ -122,13 +122,14 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
             return None
         self.old_log_guids = {l['guid'] for l in log_status['logs']}
 
-        logger.info('Restarting Atlas with diagnostic logging')
-        # Restart nautilus container with logging enabled at startup.
-        if not restart_application(self.config.tcp_address, log_on_startup=True):
-            logger.error('Atlas restart failed.')
-            return None
-        # Sleep to give restarted software a chance to get up and running.
-        time.sleep(RESTART_WAIT_TIME_SEC)
+        if not skip_reset:
+            logger.info('Restarting Atlas with diagnostic logging')
+            # Restart nautilus container with logging enabled at startup.
+            if not restart_application(self.config.tcp_address, log_on_startup=True):
+                logger.error('Atlas restart failed.')
+                return None
+            # Sleep to give restarted software a chance to get up and running.
+            time.sleep(RESTART_WAIT_TIME_SEC)
 
         data_source = open_data_source(self.config)
         if data_source is None:
