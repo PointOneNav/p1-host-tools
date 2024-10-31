@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 
+import inspect
 import math
 import os
 import re
 import struct
 import sys
 import time
+import traceback
 from argparse import Namespace
 from dataclasses import dataclass
 from enum import IntEnum
+from pathlib import Path
 from typing import List, Optional
 
 from fusion_engine_client.messages import (ConfigResponseMessage, DataType,
@@ -33,8 +36,8 @@ from bin.config_tool import (PARAM_DEFINITION, apply_config, query_fe_version,
                              query_nmea_versions, read_config, request_export,
                              request_fault, request_import, request_reset,
                              save_config)
-from p1_hitl.defs import HitlEnvArgs, TestType
-from p1_hitl.metric_analysis.metrics import (AlwaysTrueMetric,
+from p1_hitl.defs import DeviceType, HitlEnvArgs, TestType
+from p1_hitl.metric_analysis.metrics import (AlwaysTrueMetric, CodeLocation,
                                              FatalMetricException,
                                              MetricController)
 from p1_runner import trace as logging
@@ -137,6 +140,8 @@ def get_calibration_stage(data: bytes) -> CalibrationStage:
 
 def ConfigCheck(name: str, description: str, passed: bool, context: Optional[str] = None):
     metric = AlwaysTrueMetric(name, description, is_fatal=True)
+    frame = inspect.stack()[-2]
+    metric.code_location = CodeLocation(Path(frame.filename), frame.lineno)
     metric.check(passed, context)
 
 
@@ -209,14 +214,15 @@ def test_interface_ids(state: TestState) -> None:
 #     """
 #     active_config_path = state.test_logger.get_abs_file_path('active_config.p1nvm')
 
+#     metric_name = 'expected_storage'
+#     metric_description = 'Read and validate device storage.'
+
 #     logger.debug("Reading active UserConfig on device.")
 #     args = Namespace(type='user_config', format="p1nvm", export_file=active_config_path, export_source='active')
 #     active_storage: Optional[List[PlatformStorageDataMessage]] = request_export(state.device_interface, args)
 #     active_config = None
 #     if active_storage is None:
-#         logger.error('Request failed.')
-#         state.passed = False
-#         check_exit(state)
+#         ConfigCheck(metric_name, metric_description, False, 'Request failed.')
 #     else:
 #         active_config = active_storage[0].data
 
@@ -227,9 +233,7 @@ def test_interface_ids(state: TestState) -> None:
 #     saved_config = None
 #     saved_calibration = None
 #     if saved_storage is None:
-#         logger.error('Request failed.')
-#         state.passed = False
-#         check_exit(state)
+#         ConfigCheck(metric_name, metric_description, False, 'Request failed.')
 #     else:
 #         for storage in saved_storage:
 #             if storage.data_type == DataType.CALIBRATION_STATE:
@@ -841,173 +845,94 @@ def logged_data_check(state: TestState, log_start_offset: int) -> None:
             f"Expected {state.expected_resets} jumps in sequence count, but saw {sequence_jump_count}.")
 
 
-def run_tests(config: TestConfig, logger_manager: LogManager) -> Optional[bool]:
+def run_tests(env_args: HitlEnvArgs, device_config: DeviceConfig, logger_manager: LogManager) -> bool:
     module = sys.modules[__name__]
 
+    interface_name = {DeviceType.ATLAS: 'tcp1'}.get(env_args.HITL_BUILD_TYPE)
+    test_set = ["fe_version", "interface_ids", "expected_storage", "msg_rates", "set_config",
+                "import_config", "save_config"]
+    # TODO: Figure out what to do about Atlas reboot.
+    if env_args.HITL_BUILD_TYPE != DeviceType.ATLAS:
+        test_set += ["reboot", "watchdog_fault", "expected_storage"]
+    test_config = TestConfig(
+        config=ConfigSet(
+            devices=[device_config]
+        ),
+        tests=[
+            InterfaceTests(
+                name=device_config.name,
+                interface_name=interface_name,
+                tests=test_set
+            )
+        ])
+
     # Copy shared settings to each interface to simplify checks.
-    copy_shared_settings_to_devices(config.config)
-
-    for interface_tests in config.tests:
-        set_logging_indent(0)
-        logger.info(f'Running tests on device {interface_tests.name} ({interface_tests.interface_name}).')
-
-        device_to_test_config: Optional[DeviceConfig] = None
-        for device_config in config.config.devices:
-            if device_config.name == interface_tests.name:
-                device_to_test_config = device_config
-                break
-
-        if device_to_test_config is None:
-            logger.error(f'No device config name matched name for tests: {interface_tests.name}')
-            return None
-
-        interface_idx = None
-        if interface_tests.interface_name is not None:
-            interface_idx = INTERFACE_MAP.get(interface_tests.interface_name)
-            if interface_idx is None:
-                logger.error(f'No interface known with name: {interface_tests.interface_name}')
-                return None
-
-        log_start_data_offset = get_log_size(logger_manager)
-
-        data_source = open_data_source(device_to_test_config)
-        if data_source is None:
-            return None
-
-        try:
-            data_source.rx_log = logger_manager  # type: ignore
-            interface = DeviceInterface(data_source)
-
-            interface_name = interface_tests.interface_name if interface_tests.interface_name is not None else "current"
-
-            state = TestState(
-                device_interface=interface, test_logger=logger_manager, interface_name=interface_name,
-                interface_idx=interface_idx, config=device_to_test_config)
-
-            time.sleep(0.2)
-            for test_name in interface_tests.tests:
-                set_logging_indent(2)
-                logger.info(f"Checking {test_name}.")
-                set_logging_indent(4)
-                # This is the magic that checks the tests against the functions in this file.
-                test_func = getattr(module, 'test_' + test_name, None)
-                if test_func is None:
-                    logger.error('Invalid test %s.', test_name)
-                    return None
-                else:
-                    try:
-                        test_func(state)
-                    except FatalMetricException:
-                        return False
-                # Make sure there's some time between each test.
-                time.sleep(0.2)
-
-            set_logging_indent(2)
-            logger.info("Checking captured log.")
-            logged_data_check(state, log_start_data_offset)
-        finally:
-            data_source.stop()
-
-    set_logging_indent(0)
-    logger.info('Test SUCCESS')
-    return True
-
-
-def main():
-    if getattr(sys, 'frozen', False):
-        execute_command = os.path.basename(sys.executable)
-    else:
-        execute_command = os.path.basename(sys.executable)
-        if execute_command.startswith('python'):
-            execute_command += ' ' + os.path.basename(__file__)
-
-    parser = ArgumentParser(
-        usage='%s COMMAND [OPTIONS]...' % execute_command,
-        description='Run configuration interface validation tests.',
-        epilog='''\
-EXAMPLE USAGE
-
-Run the default test sets on a device connected using automatic serial port
-detection:
-    %(command)s
-
-Run a test set specified in config_examples/config_test.json:
-    %(command)s -t config_examples/config_test.json
-
-JSON FORMAT
-
-{
-    "config": See ConfigSet class in p1_test_automation/devices_config_test.py
-    "tests": [
-        {
-        "name": Name of device in config to run these test on.
-        "tests": subset of tests to run ["fe_version", "interface_ids", "expected_storage", "reboot", "watchdog_fault", "msg_rates", "set_config", "import_config", "save_config"]
-        "interface_name": [Optional] the interface name to expect the device to identify with.
-        },
-        ...
-    ]
-}
-
-NOTES
-
-Device or test failures may leave the device with a modified configuration.
-Backing up the configuration and pointing to the backup with the
-`expected_config_save` flag is recommended to validate config is set to expected
-values.
-
-TEST SIDE EFFECTS
-
- - reboot and watchdog_fault: Cause the device to reboot.
- - msg_rates and set_config and import_config: Will temporarily modify the active configuration.
- - save_config: Will temporarily modify the saved and active configuration and set it back to the saved values.
-''' % {'command': execute_command})
-
-    parser.add_argument('-v', '--verbose', action='count', default=0,
-                        help="Print verbose/trace debugging messages. May be specified multiple times to increase "
-                             "verbosity.")
-    parser.add_argument(
-        '-t', '--test-configuration', required=True,
-        help="A JSON file with the configuration for the tests to run. See the TestConfig class for the structure or config_examples/config_test.json.")
-    args = parser.parse_args()
-
-    if args.verbose == 0:
-        logger.setLevel(logging.INFO)
-        logging.basicConfig(level=logging.INFO,
-                            format='[%(filename)s:%(lineno)d] %(extra)s%(message)s', stream=sys.stdout)
-    else:
-        logger.setLevel(logging.DEBUG)
-        logging.basicConfig(level=logging.INFO,
-                            format='[%(filename)s:%(lineno)-4d] %(asctime)s - %(levelname)-8s - %(extra)s%(message)s',
-                            stream=sys.stdout)
-
-    if args.verbose < 2:
-        logging.getLogger('point_one.config_tool').setLevel(logging.WARNING)
-        logging.getLogger('point_one.exported_data').setLevel(logging.WARNING)
-        logging.getLogger('point_one.log_manager').setLevel(logging.WARNING)
-    elif args.verbose == 2:
-        pass
-    elif args.verbose == 3:
-        logging.getLogger('point_one.fusion_engine.parsers.decoder').setLevel(logging.DEBUG)
-        logging.getLogger('point_one.device_interface').setLevel(logging.DEBUG)
-    else:
-        logging.getLogger('point_one.fusion_engine.parsers.decoder').setLevel(logging.TRACE)
-        logging.getLogger('point_one.device_interface').setLevel(logging.TRACE)
-
-    for handler in logging.Logger.root.handlers:
-        handler.addFilter(indent_filter)
-
-    data = load_json_with_comments(args.test_configuration)
-    config = TestConfig.model_validate(data)
-
-    logger_manager = LogManager('config_test')
-    logger_manager.start()
-
+    copy_shared_settings_to_devices(test_config.config)
     try:
-        if not run_tests(config, logger_manager):
-            sys.exit(1)
-    finally:
-        logger_manager.stop()
+        for interface_tests in test_config.tests:
+            set_logging_indent(0)
+            logger.info(f'Running tests on device {interface_tests.name} ({interface_tests.interface_name}).')
 
+            device_to_test_config: Optional[DeviceConfig] = None
+            for device_config in test_config.config.devices:
+                if device_config.name == interface_tests.name:
+                    device_to_test_config = device_config
+                    break
 
-if __name__ == "__main__":
-    main()
+            if device_to_test_config is None:
+                logger.error(f'No device config name matched name for tests: {interface_tests.name}')
+                return False
+
+            interface_idx = None
+            if interface_tests.interface_name is not None:
+                interface_idx = INTERFACE_MAP.get(interface_tests.interface_name)
+                if interface_idx is None:
+                    logger.error(f'No interface known with name: {interface_tests.interface_name}')
+                    return False
+
+            log_start_data_offset = get_log_size(logger_manager)
+
+            data_source = open_data_source(device_to_test_config)
+            if data_source is None:
+                return False
+
+            try:
+                data_source.rx_log = logger_manager  # type: ignore
+                interface = DeviceInterface(data_source)
+
+                interface_name = interface_tests.interface_name if interface_tests.interface_name is not None else "current"
+
+                state = TestState(
+                    device_interface=interface, test_logger=logger_manager, interface_name=interface_name,
+                    interface_idx=interface_idx, config=device_to_test_config)
+
+                time.sleep(0.2)
+                for test_name in interface_tests.tests:
+                    set_logging_indent(2)
+                    logger.info(f"Checking {test_name}.")
+                    set_logging_indent(4)
+                    # This is the magic that checks the tests against the functions in this file.
+                    test_func = getattr(module, 'test_' + test_name, None)
+                    if test_func is None:
+                        logger.error('Invalid test %s.', test_name)
+                        break
+                        return False
+                    else:
+                        # Raise FatalMetricException on failures
+                        test_func(state)
+                    # Make sure there's some time between each test.
+                    time.sleep(0.2)
+
+                set_logging_indent(2)
+                logger.info("Checking captured log.")
+                logged_data_check(state, log_start_data_offset)
+            finally:
+                data_source.stop()
+    except FatalMetricException:
+        pass
+    except Exception as e:
+        logger.error(f'Exception while running config tests:\n{traceback.format_exc()}')
+        return False
+
+    metric_run_configuration_check.check(True)
+    return True

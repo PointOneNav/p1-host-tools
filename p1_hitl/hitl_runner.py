@@ -90,10 +90,10 @@ def main():
 
     env_file_dump = output_dir / ENV_DUMP_FILE
     HitlEnvArgs.dump_env_to_json_file(env_file_dump)
+    MetricController.apply_environment_config_customizations(env_args)
 
     if cli_args.list_metric_only:
         MetricController.enable_logging(output_dir, False, False)
-        MetricController.apply_environment_config_customizations(env_args)
         MetricController.generate_report()
         print(open(output_dir / FULL_REPORT, 'r').read())
         sys.exit(0)
@@ -163,8 +163,12 @@ def main():
             sys.exit(1)
 
     ################# Run tests #################
-    ran_successfully = False
+    tests_completed = False
     tests_passed = False
+    MetricController.enable_logging(output_dir, cli_args.playback_log, cli_args.log_metric_values)
+    if cli_args.playback_log:
+        MetricController.playback_host_time(output_dir.parent)
+
     try:
         if env_args.get_selected_test_type() == TestType.CONFIGURATION:
             if cli_args.playback_log:
@@ -175,43 +179,23 @@ def main():
                 sys.exit(1)
             # The config test exercises starting the data source as part of its test.
             device_interface.data_source.stop()
-            interface_name = {DeviceType.ATLAS: 'tcp1'}.get(env_args.HITL_BUILD_TYPE)
-            test_set = ["fe_version", "interface_ids", "expected_storage", "msg_rates", "set_config",
-                        "import_config", "save_config"]
-            # TODO: Figure out what to do about Atlas reboot.
-            if env_args.HITL_BUILD_TYPE != DeviceType.ATLAS:
-                test_set += ["reboot", "watchdog_fault", "expected_storage"]
-            test_config = TestConfig(
-                config=ConfigSet(
-                    devices=[device_config]
-                ),
-                tests=[
-                    InterfaceTests(
-                        name=device_config.name,
-                        interface_name=interface_name,
-                        tests=test_set
-                    )
-                ])
-            tests_passed = run_config_tests(test_config, log_manager)
+            tests_completed = run_config_tests(env_args, device_config, log_manager)
         else:
             if cli_args.playback_log:
-                tests_passed = run_analysis_playback(
-                    playback_file, env_args, output_dir, cli_args.log_metric_values)
+                tests_completed = run_analysis_playback(playback_file, env_args)
             else:
                 if log_manager is not None:
                     log_manager.start()
                     device_interface.data_source.rx_log = log_manager  # type: ignore
-                tests_passed = run_analysis(
+                tests_completed = run_analysis(
                     device_interface,
                     env_args,
-                    output_dir,
-                    cli_args.log_metric_values,
                     release_str)
+        if tests_completed:
+            MetricController.finalize()
+            report = MetricController.generate_report()
+            tests_passed = not report['has_failures']
     finally:
-        if tests_passed is not None:
-            ran_successfully = True
-        else:
-            tests_passed = False
         try:
             hitl_device_interface.shutdown_device(tests_passed, output_dir)
         except:
@@ -219,7 +203,7 @@ def main():
         if log_manager is not None:
             log_manager.stop()
 
-    if not ran_successfully:
+    if not tests_completed:
         sys.exit(1)
 
     sys.exit(0)

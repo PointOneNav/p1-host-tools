@@ -3,7 +3,7 @@ import logging
 import time
 import traceback
 from pathlib import Path
-from typing import Iterator, List, Optional
+from typing import Iterator, List
 
 from fusion_engine_client.messages import (MessageHeader, VersionInfoMessage,
                                            message_type_to_class)
@@ -13,8 +13,7 @@ from p1_hitl.defs import HitlEnvArgs
 from p1_hitl.metric_analysis.metrics import (AlwaysTrueMetric,
                                              FatalMetricException,
                                              MaxElapsedTimeMetric,
-                                             MetricController, TimeSource,
-                                             Timestamp)
+                                             MetricController, TimeSource)
 from p1_runner.device_interface import (MAX_FE_MSG_SIZE, DeviceInterface,
                                         FusionEngineDecoder,
                                         MessageWithBytesTuple)
@@ -59,32 +58,16 @@ REALTIME_POLL_INTERVAL = 0.05
 
 
 def _setup_analysis(env_args: HitlEnvArgs) -> List[AnalyzerBase]:
-    MetricController.apply_environment_config_customizations(env_args)
-
     analyzers = [SanityAnalyzer(), PositionAnalyzer()]
     for analyzer in analyzers:
         analyzer.configure(env_args)
     return analyzers
 
 
-def custom_json(obj):
-    if isinstance(obj, Timestamp):
-        return {'host_time': obj.host_time, 'p1_time': obj.p1_time, 'system_time': obj.system_time}
-    else:
-        return str(obj)
-
-
-def _finish_analysis() -> bool:
-    MetricController.finalize()
-    report = MetricController.generate_report()
-    return report['has_failures']
-
-
 def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs,
-                 output_dir: Path, log_metric_values: bool, release_str: str) -> Optional[bool]:
+                 release_str: str) -> bool:
     try:
         params = env_args.get_selected_test_type().get_test_params()
-        MetricController.enable_logging(output_dir, True, log_metric_values)
         if params.duration_sec < MAX_SEC_TO_VERSION_MESSAGE:
             metric_version_check.is_disabled = True
 
@@ -98,7 +81,7 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs,
                 msgs = interface.poll_messages(response_timeout=REALTIME_POLL_INTERVAL)
             except Exception as e:
                 logger.error(f'Exception collecting FusionEngine messages from device {exception_to_str(e)}')
-                return None
+                return False
             MetricController.update_host_time()
 
             for msg in msgs:
@@ -123,13 +106,12 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs,
         pass
     except Exception as e:
         logger.error(f'Exception while analyzing FE messages:\n{traceback.format_exc()}')
-        return None
+        return False
 
-    return _finish_analysis()
+    return True
 
 
-def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs,
-                          output_dir: Path, log_metric_values: bool) -> Optional[bool]:
+def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs) -> bool:
     class _PlaybackStatus:
         def __init__(self, in_fd) -> None:
             self.in_fd = in_fd
@@ -192,8 +174,6 @@ def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs,
                 status.update()
 
     try:
-        MetricController.enable_logging(output_dir, False, log_metric_values)
-        MetricController.playback_host_time(output_dir.parent)
         analyzers = _setup_analysis(env_args)
 
         metric_message_host_time_elapsed.is_disabled = True
@@ -210,6 +190,6 @@ def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs,
         pass
     except Exception as e:
         logger.error(f'Exception while analyzing FE messages:\n{traceback.format_exc()}')
-        return None
+        return False
 
-    return _finish_analysis()
+    return True
