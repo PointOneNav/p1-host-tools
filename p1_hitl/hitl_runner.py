@@ -130,14 +130,17 @@ def main():
                 json.dump(build_info, fd)
         else:
             if git_commitish is not None:
+                # NOTE: Return error code 10 to indicate that the test was aborted. This will indicate that this run
+                # shouldn't trigger an error report. This is done since Jenkins will sometimes either not trigger the
+                # expected build commit, or the API may give repeated 500 errors for an unknown reason.
                 if not run_build(git_commitish, env_args.HITL_BUILD_TYPE):
-                    sys.exit(1)
+                    sys.exit(10)
                 build_info = get_build_info(release_str, env_args.HITL_BUILD_TYPE)
                 if build_info is None:
                     logger.error(
                         'Build artifacts still missing after successful Jenkins build. This may occur if several merges'
                         ' occurred in rapid succession and mapping of the branch to a release changed.')
-                    sys.exit(1)
+                    sys.exit(10)
             else:
                 logger.error(
                     f'HITL_DUT_VERSION {release_str} not found in build artifacts. Generate build artifacts, or rerun'

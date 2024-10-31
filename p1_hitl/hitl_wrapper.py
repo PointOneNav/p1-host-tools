@@ -180,11 +180,16 @@ def main():
                         time.sleep(KILL_TIMEOUT_SEC)
                         sys.exit(1)
                     elif ret_status != 0:
-                        report_failure(
-                            f'HITL process exited with error code {ret_status}. See attached `{CONSOLE_FILE}` in reply for details.',
-                            env_args=run_env_args,
-                            log_base_dir=cli_args.logs_base_dir,
-                            log_dir=log_dir)
+                        # Suppress error report for exit code "10".
+                        if ret_status != 10:
+                            report_failure(
+                                f'HITL process exited with error code {ret_status}. See attached `{CONSOLE_FILE}` in'
+                                f' reply for details.',
+                                env_args=run_env_args,
+                                log_base_dir=cli_args.logs_base_dir,
+                                log_dir=log_dir)
+                        else:
+                            logger.warning('HITL process exited with error code 10. Suppressing failure report.')
                         sys.exit(ret_status)
                     else:
                         logger.info('HITL ran successfully.')
