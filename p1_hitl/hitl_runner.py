@@ -5,13 +5,13 @@ import os
 import sys
 from pathlib import Path
 
+from fusion_engine_client.utils.log import find_log_file
+
 # isort: split
 
 # Add the host tool root directory and device_interfaces to the python path.
 repo_root = Path(__file__).parents[1].resolve()
 sys.path.append(str(repo_root))
-
-from fusion_engine_client.utils.log import find_log_file
 
 from p1_hitl.defs import (BUILD_INFO_FILE, CONSOLE_FILE, ENV_DUMP_FILE,
                           FULL_REPORT, LOG_FILES, PLAYBACK_DIR, DeviceType,
@@ -22,13 +22,10 @@ from p1_hitl.git_cmds import GitWrapper
 from p1_hitl.jenkins_ctrl import run_build
 from p1_hitl.metric_analysis.analysis_runner import (run_analysis,
                                                      run_analysis_playback)
+from p1_hitl.metric_analysis.config_test import run_tests as run_config_tests
 from p1_hitl.metric_analysis.metrics import MetricController
 from p1_hitl.version_helper import git_describe_dut_version
 from p1_runner.log_manager import LogManager
-from p1_test_automation.devices_config_test import (ConfigSet, InterfaceTests,
-                                                    TestConfig)
-from p1_test_automation.devices_config_test import \
-    run_tests as run_config_tests
 
 logger = logging.getLogger('point_one.hitl.runner')
 
