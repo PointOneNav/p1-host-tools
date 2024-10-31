@@ -94,15 +94,23 @@ class TimeSource(IntEnum):
     SYSTEM = auto()
 
 
-class CodeLocation(NamedTuple):
+class CodeLocation:
+    code_root_path = Path()
+
     '''!
     Tracks where in the code base a test metric was declared.
     '''
-    file: Path
-    line: int
+
+    def __init__(self, file: Path, line: int) -> None:
+        self.file = file
+        self.line = line
+
+    def __eq__(self, value: 'CodeLocation') -> bool:
+        return value.file == self.file and value.line == self.line
 
     def __str__(self) -> str:
-        return f'{self.file}:{self.line}'
+        out_path = self.file if not CodeLocation.code_root_path else self.file.relative_to(CodeLocation.code_root_path)
+        return f'{out_path}:{self.line}'
 
 
 @dataclass
@@ -194,6 +202,10 @@ class MetricController:
 
     # Set this to record a commit in the report.
     analysis_commit: ClassVar[str] = 'Unknown'
+
+    @staticmethod
+    def set_root_code_location(code_root_path: Path):
+        CodeLocation.code_root_path = code_root_path
 
     @classmethod
     def enable_logging(cls, log_dir: Path, log_msg_times: bool, log_metric_values: bool):

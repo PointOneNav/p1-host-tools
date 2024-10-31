@@ -87,6 +87,7 @@ def main():
 
     env_file_dump = output_dir / ENV_DUMP_FILE
     HitlEnvArgs.dump_env_to_json_file(env_file_dump)
+    MetricController.set_root_code_location(repo_root)
     MetricController.apply_environment_config_customizations(env_args)
 
     if cli_args.list_metric_only:
