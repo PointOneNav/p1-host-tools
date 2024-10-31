@@ -66,7 +66,7 @@ class TestType(Enum):
 
     def get_test_set(self) -> List['TestType']:
         if self == TestType.QUICK_TESTS:
-            return [self.SANITY, self.CONFIGURATION]
+            return [self.CONFIGURATION, self.SANITY]
         else:
             return [self]
 
