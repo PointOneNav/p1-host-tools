@@ -49,7 +49,7 @@ def main():
     host_tools_commit = 'Unknown'
     try:
         git = GitWrapper(repo_root)
-        host_tools_commit = git.describe()
+        host_tools_commit = git.describe(always=True)
         logger.info(f'p1-host-tools git commit: "{host_tools_commit}"')
         MetricController.analysis_commit = host_tools_commit
     except RuntimeError as e:

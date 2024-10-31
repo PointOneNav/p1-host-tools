@@ -19,10 +19,12 @@ class GitWrapper:
             raise RuntimeError(
                 f'Git fetch failed.\n{result.args}:\n{result.stderr}')
 
-    def describe(self, match=None, commit=None) -> str:
+    def describe(self, match=None, commit=None, always=False) -> str:
         cmd_args = ['git', 'describe', '--tags']
         if match is not None:
             cmd_args.append(f'--match={match}')
+        if always:
+            cmd_args.append('--always')
         if commit is not None:
             cmd_args.append(commit)
         else:
