@@ -203,6 +203,7 @@ def main():
                                     env_args=run_env_args,
                                     log_base_dir=cli_args.logs_base_dir,
                                     log_dir=log_dir)
+                                sys.exit(1)
                             else:
                                 if failure_path.exists():
                                     with open(failure_path) as fd:
@@ -215,6 +216,7 @@ def main():
                                         env_args=run_env_args,
                                         log_base_dir=cli_args.logs_base_dir,
                                         log_dir=log_dir)
+                                    sys.exit(1)
                                 else:
                                     logger.info('All tests passed.')
     # The exit calls trigger this exception.
