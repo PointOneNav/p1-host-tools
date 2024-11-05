@@ -48,11 +48,12 @@ def report_failure(msg: str, env_args: Optional[HitlEnvArgs] = None, log_base_di
         return
 
     if env_args:
+        version_str = f'{env_args.HITL_VERSION_ANNOTATION} ({env_args.HITL_DUT_VERSION})' if env_args.HITL_VERSION_ANNOTATION else env_args.HITL_DUT_VERSION
         slack_mrkdwn = f'''\
 *HITL {env_args.get_selected_test_type().name} Test Failed*
 Node: `{env_args.HITL_NAME}`
 Platform Config: `{env_args.HITL_BUILD_TYPE.name}`
-Software Version: `{env_args.HITL_DUT_VERSION}`
+Software Version: `{version_str}`
 '''
     else:
         slack_mrkdwn = '*HITL TEST FAILED*'
@@ -107,10 +108,11 @@ def main():
     try:
         cmd_args = sys.argv
         test_set = env_args.HITL_TEST_TYPE.get_test_set()
-        is_multi_test_set = len(
-            test_set) > 1 and env_args.HITL_TEST_SET_INDEX is None and cli_args.test_set_index is None
+        is_multi_test_set = len(test_set) > 1 and env_args.HITL_TEST_SET_INDEX is None
         if is_multi_test_set:
             logger.info(f'Starting multi-test set {(t.name for t in test_set)}.')
+        elif len(test_set) == 0:
+            logger.info(f'Starting empty test set {env_args.HITL_TEST_TYPE.name}.')
 
         env_args_dict = dict(env_args._asdict())
         # Iterate over tests that make up the test set. These will be totally independent HITL runner processes.
