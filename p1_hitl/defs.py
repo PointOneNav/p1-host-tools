@@ -106,7 +106,7 @@ class HitlEnvArgs(NamedTuple):
     # 1. The version string of an existing build to provision the device with (e.x. v2.1.0-920-g6090626b66).
     # 2. The commit-ish of the nautilus repo to get a version string from.
     HITL_DUT_VERSION: str
-    # A additional string to display with the @ref HITL_DUT_VERSION.
+    # An additional string to display with the @ref HITL_DUT_VERSION (e.x. the git branch associated with a commit).
     HITL_VERSION_ANNOTATION: str = ''
     # For a multi-test set, which test in the set to perform.
     HITL_TEST_SET_INDEX: Optional[int] = None
