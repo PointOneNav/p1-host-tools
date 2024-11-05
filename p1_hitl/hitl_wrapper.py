@@ -74,7 +74,7 @@ Software Version: `{env_args.HITL_DUT_VERSION}`
         log_directory = log_dir.relative_to(log_base_dir)
         slack_mrkdwn += f'''\
 Console output, configuration, and data uploaded to:
-<https://console.aws.amazon.com/s3/{S3_DEFAULT_INGEST_BUCKET}/{log_directory}>
+<https://console.aws.amazon.com/s3/buckets/{S3_DEFAULT_INGEST_BUCKET}/{log_directory}/>
 
 See attachments in reply for more details.
 '''
