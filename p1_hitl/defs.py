@@ -58,6 +58,7 @@ class TestType(Enum):
     ROOF_NO_CORRECTIONS_15_MIN = auto()
 
     # Multi-test scenarios
+    NO_TESTS = auto()
     QUICK_TESTS = auto()
 
     @classmethod
@@ -65,6 +66,8 @@ class TestType(Enum):
         return cls[val.upper()]
 
     def get_test_set(self) -> List['TestType']:
+        if self == TestType.NO_TESTS:
+            return []
         if self == TestType.QUICK_TESTS:
             return [self.CONFIGURATION, self.SANITY]
         else:
@@ -103,6 +106,8 @@ class HitlEnvArgs(NamedTuple):
     # 1. The version string of an existing build to provision the device with (e.x. v2.1.0-920-g6090626b66).
     # 2. The commit-ish of the nautilus repo to get a version string from.
     HITL_DUT_VERSION: str
+    # An additional string to display with the @ref HITL_DUT_VERSION (e.x. the git branch associated with a commit).
+    HITL_VERSION_ANNOTATION: str = ''
     # For a multi-test set, which test in the set to perform.
     HITL_TEST_SET_INDEX: Optional[int] = None
     # The truth location of the device antenna. It is specified as a the

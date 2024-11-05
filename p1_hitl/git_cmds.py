@@ -1,5 +1,6 @@
 import subprocess
 from pathlib import Path
+from typing import Optional
 
 
 class GitWrapper:
@@ -19,7 +20,7 @@ class GitWrapper:
             raise RuntimeError(
                 f'Git fetch failed.\n{result.args}:\n{result.stderr}')
 
-    def describe(self, match=None, commit=None, always=False) -> str:
+    def describe(self, match: Optional[str] = None, commit: Optional[str] = None, always=False) -> str:
         cmd_args = ['git', 'describe', '--tags']
         if match is not None:
             cmd_args.append(f'--match={match}')
@@ -38,6 +39,11 @@ class GitWrapper:
         # 2. There's no --match matches
         # 3. The commit isn't valid
         if result.returncode != 0:
+            if commit is not None and not commit.startswith('origin/'):
+                try:
+                    return self.describe(match=match, commit='origin/' + commit, always=always)
+                except Exception:
+                    pass
             raise RuntimeError(
                 f'Git describe failed.\n{result.args}:\n{result.stderr}')
         else:
