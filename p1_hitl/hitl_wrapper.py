@@ -18,8 +18,8 @@ sys.path.append(str(repo_root))
 
 from p1_hitl.defs import (BUILD_INFO_FILE, CONSOLE_FILE, DEFAULT_LOG_BASE_DIR,
                           ENV_DUMP_FILE, FAILURE_REPORT, FULL_REPORT,
-                          PLAYBACK_DIR, UPLOADED_LOG_LIST_FILE, HitlEnvArgs,
-                          get_args)
+                          LOG_FILES, PLAYBACK_DIR, UPLOADED_LOG_LIST_FILE,
+                          HitlEnvArgs, get_args)
 from p1_hitl.hitl_slack_interface import FileEntry, send_slack_message
 from p1_runner.log_manager import LogManager
 
@@ -126,7 +126,8 @@ def main():
                     device_id=env_args.HITL_NAME,
                     device_type=env_args.HITL_BUILD_TYPE.name,
                     logs_base_dir=cli_args.logs_base_dir,
-                    directory_to_reuse=cli_args.reuse_log_dir)
+                    directory_to_reuse=cli_args.reuse_log_dir,
+                    files=LOG_FILES)
                 log_manager.create_log_dir()
                 log_dir = Path(log_manager.log_dir)  # type: ignore
                 if cli_args.reuse_log_dir is None:
