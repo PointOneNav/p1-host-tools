@@ -13,9 +13,10 @@ import zlib
 from enum import Enum, auto
 from zipfile import ZipFile
 
-from serial import Serial
-from fusion_engine_client.parsers import FusionEngineEncoder, FusionEngineDecoder
 from fusion_engine_client.messages import *
+from fusion_engine_client.parsers import (FusionEngineDecoder,
+                                          FusionEngineEncoder)
+from serial import Serial
 
 SYNC_WORD1 = 0x514C1309
 SYNC_WORD1_BYTES = struct.pack('<I', SYNC_WORD1)
@@ -557,7 +558,7 @@ Update only the application software (not common):
         if gnss_bin_fd is not None:
             if (version_info is not None and
                 version_info.rx_version_str == info_json.get('gnss_receiver', {}).get('version', "UNKNOWN") and
-                not args.force):
+                    not args.force):
                 print('GNSS firmware already up to date (%s). Skipping.' % version_info.rx_version_str)
                 gnss_bin_fd = None
             else:
@@ -574,7 +575,7 @@ Update only the application software (not common):
 
             if (version_info is not None and
                 version_info.engine_version_str == info_json.get('fusion_engine', {}).get('version', "UNKNOWN") and
-                not args.force):
+                    not args.force):
                 print('Application software already up to date (%s). Skipping.' % version_info.engine_version_str)
             else:
                 print('Upgrading application software...')
