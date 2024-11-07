@@ -89,12 +89,6 @@ class SanityAnalyzer(AnalyzerBase):
         self.last_seq_num = header.sequence_number
 
         if isinstance(payload, MessagePayload):
-            p1_time = payload.get_p1_time()
-            if p1_time:
-                if self.last_p1_time is not None:
-                    metric_monotonic_p1time.check(p1_time.seconds - self.last_p1_time.seconds)
-                self.last_p1_time = p1_time
-
             if isinstance(payload, EventNotificationMessage):
                 # Convert the unsigned event_flags to a signed value.
                 signed_flag = struct.unpack('q', struct.pack('Q', payload.event_flags))[0]
@@ -114,3 +108,11 @@ class SanityAnalyzer(AnalyzerBase):
             if isinstance(payload, ProfileSystemStatusMessage):
                 metric_cpu_usage.check(payload.total_cpu_usage)
                 metric_mem_usage.check(payload.used_memory_bytes)
+            # We want to ignore p1_time from ProfileSystemStatusMessage since it just uses the last measurement it
+            # received which may be in the past.
+            else:
+                p1_time = payload.get_p1_time()
+                if p1_time:
+                    if self.last_p1_time is not None:
+                        metric_monotonic_p1time.check(p1_time.seconds - self.last_p1_time.seconds)
+                    self.last_p1_time = p1_time
