@@ -10,7 +10,8 @@ requirements = [
     "colorama>=0.4.4",
     "construct~=2.10.67",
     "deepdiff>=8.0.1",
-    "fusion-engine-client==1.23.6rc2",
+    # Install fusion-engine-client from the internal Point One GitHub repository.
+    "fusion-engine-client[all] @ git+ssh://git@github.com/PointOneNav/fusion-engine-client-internal@f2315c78ddf51563ca05c69372f059066fac727a#subdirectory=python",
     "psutil>=5.9.4",
     "pynmea2~=1.18.0",
     "pyserial~=3.5",
