@@ -13,7 +13,8 @@ from p1_hitl.defs import HitlEnvArgs
 from p1_hitl.metric_analysis.metrics import (AlwaysTrueMetric,
                                              FatalMetricException,
                                              MaxElapsedTimeMetric,
-                                             MetricController, TimeSource)
+                                             MaxValueMetric, MetricController,
+                                             TimeSource)
 from p1_runner.device_interface import (MAX_FE_MSG_SIZE, DeviceInterface,
                                         FusionEngineDecoder,
                                         MessageWithBytesTuple)
@@ -49,6 +50,13 @@ metric_version_check = AlwaysTrueMetric(
     'Check that the version message matches the expected value.',
     is_fatal=True
 )
+# TODO: This check will need to be disabled for builds like Quectel that mix in non-FE data.
+metric_no_fe_data_gaps = MaxValueMetric(
+    'no_fe_data_gaps',
+    'Check that every byte in the data stream is part of a FE message.',
+    0,
+    is_fatal=True
+)
 
 # TODO: Figure out way to measure message latency
 
@@ -76,6 +84,9 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs,
         logger.info(f'Monitoring device for {params.duration_sec} sec.')
         msg_count = 0
         last_logger_update = time.monotonic()
+        # Used to look for CRC errors or gaps in FE data.
+        interface.fe_decoder._return_offset = True
+        last_message_end_offset = 0
         while time.monotonic() - start_time < params.duration_sec:
             try:
                 msgs = interface.poll_messages(response_timeout=REALTIME_POLL_INTERVAL)
@@ -86,9 +97,17 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs,
 
             for msg in msgs:
                 msg_count += 1
+                # The type hint is wrong since it ignores _return_offset.
+                msg_offset: int = msg[3]  # type: ignore
+                msg = msg[:3]
                 MetricController.update_device_time(msg)
                 metric_message_host_time_elapsed.check()
                 metric_message_host_time_elapsed_test_stop.check()
+
+                # Check for gaps in data
+                metric_no_fe_data_gaps.check(msg_offset - last_message_end_offset)
+                last_message_end_offset = len(msg[2]) + msg_offset
+
                 payload = msg[1]
                 if isinstance(payload, VersionInfoMessage):
                     context = f'Received: {payload.engine_version_str} != Expected: {release_str}'
@@ -176,9 +195,9 @@ def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs) -> bool:
     try:
         analyzers = _setup_analysis(env_args)
 
-        metric_message_host_time_elapsed.is_disabled = True
-        metric_message_host_time_elapsed_test_stop.is_disabled = True
-        metric_version_check.is_disabled = True
+        # Don't check the metrics from this file. These are primarily data integrity checks.
+        for metric in MetricController.get_metrics_in_this_file():
+            metric.is_disabled = True
 
         for msg in _fast_decoder(playback_path):
             MetricController.update_device_time(msg)
