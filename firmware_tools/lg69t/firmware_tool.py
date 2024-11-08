@@ -4,7 +4,9 @@ import argparse
 import json
 import os
 import struct
+import subprocess
 import sys
+import logging
 import time
 import typing
 import urllib.error
@@ -17,6 +19,8 @@ from fusion_engine_client.messages import *
 from fusion_engine_client.parsers import (FusionEngineDecoder,
                                           FusionEngineEncoder)
 from serial import Serial
+
+logger = logging.getLogger('point_one.lg69t.firmware_tool')
 
 SYNC_WORD1 = 0x514C1309
 SYNC_WORD1_BYTES = struct.pack('<I', SYNC_WORD1)
@@ -86,7 +90,7 @@ def send_reboot(ser: Serial, timeout: float = 10.0, reboot_flag: int = ResetRequ
         if response.response == Response.OK:
             return True
         else:
-            print(f'Reboot command rejected: {response.response}')
+            logger.info(f'Reboot command rejected: {response.response}')
             return False
 
 
@@ -115,7 +119,7 @@ def get_response(class_id: bytes, msg_id: bytes, ser: Serial, timeout=60):
     ser.timeout = timeout
     data = ser.read(response_size)
     if len(data) < response_size:
-        print('Timeout waiting for response')
+        logger.info('Timeout waiting for response')
         return False
 
     _, _, _, read_payload_size, read_class_id, read_msg_id, response, crc, _ = struct.unpack(
@@ -124,27 +128,27 @@ def get_response(class_id: bytes, msg_id: bytes, ser: Serial, timeout=60):
     calculated_crc = zlib.crc32(data[1:-5])
 
     if RESPONSE_PAYLOAD_SIZE != read_payload_size:
-        print(
+        logger.info(
             f"Response had unexpected size field. [expected={RESPONSE_PAYLOAD_SIZE}, got={read_payload_size}]")
         return False
 
     if class_id[0] != read_class_id:
-        print(
+        logger.info(
             f"Response had class id field. [expected={class_id[0]}, got={read_class_id}]")
         return False
 
     if msg_id[0] != read_msg_id:
-        print(
+        logger.info(
             f"Response had unexpected message id field. [expected={msg_id[0]}, got={read_msg_id}]")
         return False
 
     if crc != calculated_crc:
-        print(
+        logger.info(
             f"Response had bad CRC. [calculated={calculated_crc}, got={crc}]")
         return False
 
     if response != 0:
-        print(f"Response indicates error occurred. [error={response}]")
+        logger.info(f"Response indicates error occurred. [error={response}]")
         return False
 
     return True
@@ -172,7 +176,7 @@ def encode_gnss_info(firmware_data):
     return encode_message(CLASS_GNSS, MSG_ID_FIRMWARE_INFO, payload_data)
 
 
-def send_firmware(ser: Serial, class_id: bytes, firmware_data):
+def send_firmware(ser: Serial, class_id: bytes, firmware_data, show_progress=True):
     sequence_num = 0
     total_len = len(firmware_data)
     while len(firmware_data) > 0:
@@ -180,13 +184,16 @@ def send_firmware(ser: Serial, class_id: bytes, firmware_data):
             '>I', sequence_num) + firmware_data[:PACKET_SIZE])
         ser.write(data)
         if not get_response(class_id, MSG_ID_SEND_FIRMWARE, ser):
-            print()
+            if show_progress:
+                print()
             return False
         firmware_data = firmware_data[PACKET_SIZE:]
         sequence_num += 1
-        print(
-            f'\r{int((total_len - len(firmware_data))/total_len * 100.):02d}%', end='')
-    print()
+        if show_progress:
+            print(
+                f'\r{int((total_len - len(firmware_data))/total_len * 100.):02d}%', end='')
+    if show_progress:
+        print()
     return True
 
 
@@ -195,15 +202,20 @@ class UpgradeType(Enum):
     GNSS = auto()
 
 
+def run_reboot_command(reboot_cmd: Optional[str]):
+    if reboot_cmd:
+        subprocess.run(reboot_cmd, shell=True)
+
+
 def Upgrade(ser: Serial, bin_file: typing.BinaryIO, upgrade_type: UpgradeType, should_send_reboot: bool,
-            wait_for_reboot: bool = False):
+            wait_for_reboot: bool = False, show_progress: bool = True, reboot_cmd: Optional[str]=None):
     class_id = {
         UpgradeType.APP: CLASS_APP,
         UpgradeType.GNSS: CLASS_GNSS,
     }[upgrade_type]
 
     if should_send_reboot:
-        print('Rebooting the device...')
+        logger.info('Rebooting the device...')
 
         # Send a FusionEngine reboot request with a reasonably short timeout. If the software is running, this
         # should take effect right away. If the device is not running (halted, software corrupted, etc.), this will
@@ -212,20 +224,21 @@ def Upgrade(ser: Serial, bin_file: typing.BinaryIO, upgrade_type: UpgradeType, s
         # 2. If the device is running but the software is stuck, the device should trigger an internal watchdog and
         #    reset on its own before sync times out (typically 3 seconds)
         if not send_reboot(ser, timeout=2.0):
-            print('Timed out waiting for reboot command response. Waiting for automatic or manual reboot.')
+            logger.info('Timed out waiting for reboot command response. Waiting for automatic or manual reboot.')
         else:
-            print('Reboot command accepted. Waiting for reboot.')
+            logger.info('Reboot command accepted. Waiting for reboot.')
     else:
-        print('Please reboot the device...')
+        logger.info('Please reboot the device...')
+        run_reboot_command(reboot_cmd)
 
     # Note that the reboot command can take over 5 seconds to kick in.
     if not synchronize(ser, timeout=10.0):
-        print('Reboot sync timed out. Please reboot the device and try again.')
+        logger.info('Reboot sync timed out. Please reboot the device and try again.')
         return False
     else:
-        print('Sync successful.')
+        logger.info('Sync successful.')
 
-    print('Sending firmware address.')
+    logger.info('Sending firmware address.')
     ser.write(encode_message(
         class_id, MSG_ID_FIRMWARE_ADDRESS, b'\x00' * 4))
     if not get_response(class_id, MSG_ID_FIRMWARE_ADDRESS, ser):
@@ -233,7 +246,7 @@ def Upgrade(ser: Serial, bin_file: typing.BinaryIO, upgrade_type: UpgradeType, s
 
     firmware_data = bin_file.read()
 
-    print('Sending firmware info.')
+    logger.info('Sending firmware info.')
     if upgrade_type == UpgradeType.GNSS:
         ser.write(encode_gnss_info(firmware_data))
     else:
@@ -241,38 +254,40 @@ def Upgrade(ser: Serial, bin_file: typing.BinaryIO, upgrade_type: UpgradeType, s
     if not get_response(class_id, MSG_ID_FIRMWARE_INFO, ser):
         return False
 
-    print('Sending upgrade start and flash erase (takes 30 seconds)...')
+    logger.info('Sending upgrade start and flash erase (takes 30 seconds)...')
     ser.write(encode_message(
         class_id, MSG_ID_START_UPGRADE, b''))
     if not get_response(class_id, MSG_ID_START_UPGRADE, ser):
         return False
 
-    print('Sending data...')
-    if send_firmware(ser, class_id, firmware_data) is True:
-        print('Update successful.')
+    logger.info('Sending data...')
+    if send_firmware(ser, class_id, firmware_data, show_progress) is True:
+        logger.info('Update successful.')
         if should_send_reboot:
             # Send a no-op reset request message and wait for a response. This won't actually restart the device,
             # it just waits for it to start on its own after the update completes.
             #
             # Before we send the request, we first give the software a couple seconds to start up and be ready to
             # handle the request.
-            print('Waiting for software to start...')
+            logger.info('Waiting for software to start...')
             time.sleep(2.0)
             if send_reboot(ser, reboot_flag=0, timeout=3.0):
-                print('Device rebooted.')
+                logger.info('Device rebooted.')
             else:
-                print('Timed out waiting for device. Please reboot the device manually.')
-                if wait_for_reboot:
+                logger.info('Timed out waiting for device. Please reboot the device manually.')
+                run_reboot_command(reboot_cmd)
+                if wait_for_reboot and not reboot_cmd:
                     input('Press any key to continue...')
         else:
-            print('Please reboot the device...')
-            if wait_for_reboot:
+            logger.info('Please reboot the device...')
+            run_reboot_command(reboot_cmd)
+            if wait_for_reboot and not reboot_cmd:
                 input('Press any key to continue...')
         return True
 
 
 def print_bytes(byte_data):
-    print(", ".join(
+    logger.info(", ".join(
         [f'0x{c:02X}' for c in byte_data]
     ))
 
@@ -294,7 +309,7 @@ def extract_fw_files(p1fw):
             if gnss_filename in p1fw.namelist():
                 gnss_bin_fd = p1fw.open(gnss_filename, 'r')
         else:
-            print('No info.json file found. Aborting.')
+            logger.info('No info.json file found. Aborting.')
             sys.exit(1)
     else:
         if os.path.exists(os.path.join(p1fw, 'info.json')):
@@ -313,20 +328,20 @@ def extract_fw_files(p1fw):
             if os.path.exists(gnss_path):
                 gnss_bin_fd = open(os.path.join(p1fw, gnss_filename), 'rb')
         else:
-            print('No info.json file found. Aborting.')
+            logger.info('No info.json file found. Aborting.')
             sys.exit(1)
 
     if app_bin_fd is None and gnss_bin_fd is None:
-        print('GNSS and application firmware files not found in given p1fw path. Aborting.')
+        logger.info('GNSS and application firmware files not found in given p1fw path. Aborting.')
         sys.exit(1)
     elif app_bin_fd is None:
-        print('Application firmware file not found in given p1fw path. Aborting.')
+        logger.info('Application firmware file not found in given p1fw path. Aborting.')
         sys.exit(1)
     elif gnss_bin_fd is None:
-        print('GNSS firmware file not found in given p1fw path. Aborting.')
+        logger.info('GNSS firmware file not found in given p1fw path. Aborting.')
         sys.exit(1)
 
-    print('GNSS and application firmware files found in given p1fw path. Will use these files to upgrade.')
+    logger.info('GNSS and application firmware files found in given p1fw path. Will use these files to upgrade.')
     return app_bin_fd, gnss_bin_fd, info_json
 
 
@@ -339,9 +354,9 @@ def download_release_file(version: str, output_dir: str = None):
         output_path = os.path.join(output_dir, filename)
 
     if os.path.exists(output_path):
-        print(f'Using existing file: {output_path}')
+        logger.info(f'Using existing file: {output_path}')
     else:
-        print(f'Downloading {filename}...')
+        logger.info(f'Downloading {filename}...')
 
         parent_dir = os.path.dirname(output_path)
         if parent_dir != "":
@@ -358,6 +373,162 @@ def download_release_file(version: str, output_dir: str = None):
                 raise e
 
     return output_path
+
+
+def run_update(args: argparse.Namespace, reboot_cmd: Optional[str]=None):
+    port_name = args.port
+    should_send_reboot = not args.manual_reboot
+
+    # Show software versions and exit.
+    if args.show:
+        with Serial(port_name, baudrate=460800) as ser:
+            version_info = query_version_info(ser, timeout=2.0)
+            if version_info is None:
+                logger.info('Version query timed out.')
+                sys.exit(1)
+            else:
+                logger.info(f'FusionEngine: {version_info.engine_version_str}')
+                logger.info(f'OS: {version_info.os_version_str}')
+                logger.info(f'GNSS Receiver: {version_info.rx_version_str}')
+        sys.exit(0)
+
+    # Parse input file options.
+    p1fw_path = None
+    gnss_bin_path = None
+    app_bin_path = None
+    if args.file is None:
+        if args.release:
+            logger.info('You must specify a release version.')
+            sys.exit(1)
+        else:
+            if args.gnss is not None:
+                gnss_bin_path = args.gnss
+
+            if args.app is not None:
+                app_bin_path = args.app
+
+            if gnss_bin_path is None and app_bin_path is None:
+                logger.info('You must specify an input filename.')
+                sys.exit(1)
+    else:
+        if args.gnss is not None or args.app is not None:
+            logger.info('You cannot specify both FILE and --gnss/--app.')
+            sys.exit(1)
+
+        if args.release:
+            if args.output_dir:
+                args.file = download_release_file(args.file, args.output_dir)
+            else:
+                args.file = download_release_file(args.file)
+
+        ext = os.path.splitext(args.file)[1]
+        if ext == '.p1fw':
+            p1fw_path = args.file
+            if args.type is None:
+                args.type = ('gnss', 'app')
+        elif ext == '.bin':
+            if args.type is None:
+                logger.info('You must specify --type when using a .bin file.')
+                sys.exit(1)
+            elif len(args.type) != 1:
+                logger.info('You may only specify a single --type when using a .bin file.')
+                sys.exit(1)
+            else:
+                if args.type[0] == 'gnss':
+                    gnss_bin_path = args.file
+                elif args.type[0] == 'app':
+                    app_bin_path = args.file
+                else:
+                    logger.info('Unrecognized file type.')
+                    sys.exit(1)
+        else:
+            logger.info('Unrecognized file type.')
+            sys.exit(1)
+
+    # Open the input files.
+    p1fw = None
+    app_bin_fd = None
+    gnss_bin_fd = None
+    if p1fw_path is not None:
+        if os.path.exists(p1fw_path):
+            # Check if a directory is what was provided. If not, then it is assumed that a compressed
+            # file is what was provided (this is the expected use case).
+            if os.path.isdir(p1fw_path):
+                p1fw = p1fw_path
+            else:
+                try:
+                    p1fw = ZipFile(p1fw_path, 'r')
+                except:
+                    logger.info('Provided path does not lead to a zip file or a directory.')
+                    sys.exit(1)
+        else:
+            logger.info('Provided path %s not found.' % p1fw_path)
+            sys.exit(1)
+
+    if p1fw is not None:
+        app_bin_fd, gnss_bin_fd, info_json = extract_fw_files(p1fw)
+
+        if 'app' not in args.type:
+            app_bin_fd = None
+        if 'gnss' not in args.type:
+            gnss_bin_fd = None
+    else:
+        info_json = {}
+
+    if gnss_bin_fd is not None:
+        if gnss_bin_path is not None:
+            logger.info('Ignoring provided GNSS bin path, as p1fw path was provided.')
+    elif gnss_bin_path is not None:
+        gnss_bin_fd = open(gnss_bin_path, 'rb')
+
+    if app_bin_fd is not None:
+        if app_bin_path is not None:
+            logger.info('Ignoring provided application bin path, as p1fw path was provided.')
+    elif app_bin_path is not None:
+        app_bin_fd = open(app_bin_path, 'rb')
+
+    if gnss_bin_fd is None and app_bin_fd is None:
+        logger.info('Error: Nothing to do.')
+        sys.exit(1)
+
+    # Perform the software update.
+    logger.info(f"Starting upgrade on device {port_name}.")
+    with Serial(port_name, baudrate=460800) as ser:
+        # If we have version information from a .p1fw file, query the software versions on the device and skip
+        # unnecessary updates. If the device is not running, this query will fail and we'll go ahead and update
+        # everything.
+        version_info = None
+        if info_json is not None:
+            logger.info('Checking current software version.')
+            version_info = query_version_info(ser, timeout=2.0)
+            if version_info is not None:
+                logger.info(f'FusionEngine: {version_info.engine_version_str}')
+                logger.info(f'OS: {version_info.os_version_str}')
+                logger.info(f'GNSS Receiver: {version_info.rx_version_str}')
+
+        # Update the GNSS receiver.
+        if gnss_bin_fd is not None:
+            if (version_info is not None and
+                version_info.rx_version_str == info_json.get('gnss_receiver', {}).get('version', "UNKNOWN") and
+                    not args.force):
+                logger.info('GNSS firmware already up to date (%s). Skipping.' % version_info.rx_version_str)
+                gnss_bin_fd = None
+            else:
+                logger.info('Upgrading GNSS firmware...')
+                if not Upgrade(ser, gnss_bin_fd, UpgradeType.GNSS, should_send_reboot,
+                               wait_for_reboot=app_bin_fd is not None, show_progress=not args.suppress_progress, reboot_cmd=args.reboot_cmd):
+                    sys.exit(2)
+
+        # Update the application software.
+        if app_bin_fd is not None:
+            if (version_info is not None and
+                version_info.engine_version_str == info_json.get('fusion_engine', {}).get('version', "UNKNOWN") and
+                    not args.force):
+                logger.info('Application software already up to date (%s). Skipping.' % version_info.engine_version_str)
+            else:
+                logger.info('Upgrading application software...')
+                if not Upgrade(ser, app_bin_fd, UpgradeType.APP, should_send_reboot, show_progress=not args.suppress_progress, reboot_cmd=args.reboot_cmd):
+                    sys.exit(2)
 
 
 def main():
@@ -406,12 +577,15 @@ Update only the application software (not common):
                              "be ignored.")
     parser.add_argument('-s', '--show', action='store_true',
                         help="Display the current software versions on the device and exit.")
+    parser.add_argument('-p', '--suppress_progress', action='store_true',
+                        help="Don't show upload progress.")
     parser.add_argument('-t', '--type', type=str, metavar="TYPE", action='append', choices=('gnss', 'app'),
                         help="The type of update to perform: gnss, app. When using a .p1fw file, this option may be "
                              "specified multiple times to perform multiple updates at once. For example: "
                              "--mode=gnss --mode=app. By default, all updates will be performed.\n"
                              "\n"
                              "When using a .bin file, this argument is required to specify the type of FILE.")
+    parser.add_argument('--reboot-cmd', type=str, help="Command to run to trigger device reboot.")
 
     device = parser.add_argument_group('Device Options')
     device.add_argument('--port', type=str, default='/dev/ttyUSB1', help="The serial port of the device.")
@@ -424,164 +598,11 @@ Update only the application software (not common):
 
     args = parser.parse_args()
 
-    port_name = args.port
-    should_send_reboot = not args.manual_reboot
+    logging.basicConfig(
+        level=logging.INFO, format='%(asctime)s - %(message)s', stream=sys.stdout
+    )
 
-    # Show software versions and exit.
-    if args.show:
-        with Serial(port_name, baudrate=460800) as ser:
-            version_info = query_version_info(ser, timeout=2.0)
-            if version_info is None:
-                print('Version query timed out.')
-                sys.exit(1)
-            else:
-                print(f'FusionEngine: {version_info.engine_version_str}')
-                print(f'OS: {version_info.os_version_str}')
-                print(f'GNSS Receiver: {version_info.rx_version_str}')
-        sys.exit(0)
-
-    # Parse input file options.
-    p1fw_path = None
-    gnss_bin_path = None
-    app_bin_path = None
-    if args.file is None:
-        if args.release:
-            print('You must specify a release version.')
-            sys.exit(1)
-        else:
-            if args.gnss is not None:
-                gnss_bin_path = args.gnss
-
-            if args.app is not None:
-                app_bin_path = args.app
-
-            if gnss_bin_path is None and app_bin_path is None:
-                print('You must specify an input filename.')
-                sys.exit(1)
-    else:
-        if args.gnss is not None or args.app is not None:
-            print('You cannot specify both FILE and --gnss/--app.')
-            sys.exit(1)
-
-        if args.release:
-            if args.output_dir:
-                args.file = download_release_file(args.file, args.output_dir)
-            else:
-                args.file = download_release_file(args.file)
-
-        ext = os.path.splitext(args.file)[1]
-        if ext == '.p1fw':
-            p1fw_path = args.file
-            if args.type is None:
-                args.type = ('gnss', 'app')
-        elif ext == '.bin':
-            if args.type is None:
-                print('You must specify --type when using a .bin file.')
-                sys.exit(1)
-            elif len(args.type) != 1:
-                print('You may only specify a single --type when using a .bin file.')
-                sys.exit(1)
-            else:
-                if args.type[0] == 'gnss':
-                    gnss_bin_path = args.file
-                elif args.type[0] == 'app':
-                    app_bin_path = args.file
-                else:
-                    print('Unrecognized file type.')
-                    sys.exit(1)
-        else:
-            print('Unrecognized file type.')
-            sys.exit(1)
-
-    # Open the input files.
-    p1fw = None
-    app_bin_fd = None
-    gnss_bin_fd = None
-    if p1fw_path is not None:
-        if os.path.exists(p1fw_path):
-            # Check if a directory is what was provided. If not, then it is assumed that a compressed
-            # file is what was provided (this is the expected use case).
-            if os.path.isdir(p1fw_path):
-                p1fw = p1fw_path
-            else:
-                try:
-                    p1fw = ZipFile(p1fw_path, 'r')
-                except:
-                    print('Provided path does not lead to a zip file or a directory.')
-                    sys.exit(1)
-        else:
-            print('Provided path %s not found.' % p1fw_path)
-            sys.exit(1)
-
-    if p1fw is not None:
-        app_bin_fd, gnss_bin_fd, info_json = extract_fw_files(p1fw)
-
-        if 'app' not in args.type:
-            app_bin_fd = None
-        if 'gnss' not in args.type:
-            gnss_bin_fd = None
-    else:
-        info_json = {}
-
-    if gnss_bin_fd is not None:
-        if gnss_bin_path is not None:
-            print('Ignoring provided GNSS bin path, as p1fw path was provided.')
-    elif gnss_bin_path is not None:
-        gnss_bin_fd = open(gnss_bin_path, 'rb')
-
-    if app_bin_fd is not None:
-        if app_bin_path is not None:
-            print('Ignoring provided application bin path, as p1fw path was provided.')
-    elif app_bin_path is not None:
-        app_bin_fd = open(app_bin_path, 'rb')
-
-    if gnss_bin_fd is None and app_bin_fd is None:
-        print('Error: Nothing to do.')
-        sys.exit(1)
-
-    # Perform the software update.
-    print(f"Starting upgrade on device {port_name}.")
-    with Serial(port_name, baudrate=460800) as ser:
-        # If we have version information from a .p1fw file, query the software versions on the device and skip
-        # unnecessary updates. If the device is not running, this query will fail and we'll go ahead and update
-        # everything.
-        version_info = None
-        if info_json is not None:
-            print('Checking current software version.')
-            version_info = query_version_info(ser, timeout=2.0)
-            if version_info is not None:
-                print(f'FusionEngine: {version_info.engine_version_str}')
-                print(f'OS: {version_info.os_version_str}')
-                print(f'GNSS Receiver: {version_info.rx_version_str}')
-
-        # Update the GNSS receiver.
-        if gnss_bin_fd is not None:
-            if (version_info is not None and
-                version_info.rx_version_str == info_json.get('gnss_receiver', {}).get('version', "UNKNOWN") and
-                    not args.force):
-                print('GNSS firmware already up to date (%s). Skipping.' % version_info.rx_version_str)
-                gnss_bin_fd = None
-            else:
-                print('Upgrading GNSS firmware...')
-                if not Upgrade(ser, gnss_bin_fd, UpgradeType.GNSS, should_send_reboot,
-                               wait_for_reboot=app_bin_fd is not None):
-                    sys.exit(2)
-
-        # Update the application software.
-        if app_bin_fd is not None:
-            # If we did a GNSS update above, print a line break to separate the print statements for this update.
-            if gnss_bin_fd is not None:
-                print('')
-
-            if (version_info is not None and
-                version_info.engine_version_str == info_json.get('fusion_engine', {}).get('version', "UNKNOWN") and
-                    not args.force):
-                print('Application software already up to date (%s). Skipping.' % version_info.engine_version_str)
-            else:
-                print('Upgrading application software...')
-                if not Upgrade(ser, app_bin_fd, UpgradeType.APP, should_send_reboot):
-                    sys.exit(2)
-
+    run_update(args)
 
 if __name__ == '__main__':
     main()

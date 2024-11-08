@@ -8,6 +8,7 @@ from p1_hitl.git_cmds import GitWrapper
 DEVICE_TAG_GLOB = {
     DeviceType.ATLAS: 'v?.*',
     DeviceType.LG69T_AM: 'lg69t-am-v?.*',
+    DeviceType.LG69T_AP: 'lg69t-ap-v?.*',
 }
 
 logger = logging.getLogger('point_one.hitl.runner')

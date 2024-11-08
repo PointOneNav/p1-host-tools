@@ -114,9 +114,12 @@ class HitlEnvArgs(NamedTuple):
     # geodetic latitude, longitude, and altitude (in degrees/degrees/meters),
     # expressed using the WGS-84 reference ellipsoid.
     JENKINS_ANTENNA_LOCATION: Optional[tuple[float, float, float]] = None
-    # Only for Atlas Tests
+    # Only for test on devices with TCP interfaces.
     JENKINS_ATLAS_LAN_IP: Optional[str] = None
     JENKINS_ATLAS_BALENA_UUID: Optional[str] = None
+    # Only for test on devices with UART interfaces.
+    JENKINS_UART1: Optional[str] = None
+    JENKINS_UART2: Optional[str] = None
 
     def get_selected_test_type(self) -> TestType:
         if self.HITL_TEST_SET_INDEX is None:
