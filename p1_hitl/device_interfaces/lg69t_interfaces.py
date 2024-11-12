@@ -1,19 +1,23 @@
 import logging
+import sys
 import time
 from argparse import Namespace
 from pathlib import Path
-from typing import Any, Dict, Optional
 from tempfile import NamedTemporaryFile
+from typing import Any, Dict, Optional
 
-import boto3
+# Add the host tool root directory and device_interfaces to the python path.
+repo_root = Path(__file__).parents[1].resolve()
+sys.path.append(str(repo_root))
 
+from bin.config_tool import apply_config, request_reset, save_config
 from firmware_tools.lg69t.firmware_tool import run_update
-from bin.config_tool import apply_config, request_shutdown, save_config, query_version
-from p1_hitl.defs import UPLOADED_LOG_LIST_FILE, HitlEnvArgs
-from p1_runner.device_interface import DeviceInterface
-from p1_test_automation.devices_config import (BalenaConfig, DeviceConfig,
-                                               open_data_source)
+from p1_hitl.defs import HitlEnvArgs
 from p1_hitl.get_build_artifacts import download_file
+from p1_runner.device_interface import DeviceInterface
+from p1_test_automation.devices_config import (DeviceConfig, RelayConfig,
+                                               open_data_source)
+from p1_test_automation.relay_controller import RelayController
 
 from .base_interfaces import HitlDeviceInterfaceBase
 
@@ -25,12 +29,16 @@ logger = logging.getLogger('point_one.hitl.lg69t_interface')
 class HitlLG69TInterface(HitlDeviceInterfaceBase):
     @staticmethod
     def get_device_config(args: HitlEnvArgs) -> Optional[DeviceConfig]:
-        if not args.check_fields(['JENKINS_UART1', 'JENKINS_UART2']):
+        if not args.check_fields(['JENKINS_UART1', 'JENKINS_UART2', 'JENKINS_RESET_RELAY']):
             return None
         else:
+            assert args.JENKINS_RESET_RELAY is not None  # For type check.
             return DeviceConfig(name=args.HITL_NAME,
-                                serial_port=args.JENKINS_UART1,
-                                )
+                                serial_port=args.JENKINS_UART2,
+                                reset_relay=RelayConfig(
+                                    id=args.JENKINS_RESET_RELAY[0],
+                                    relay_number=args.JENKINS_RESET_RELAY[1]
+                                ))
 
     def __init__(self, config: DeviceConfig):
         self.config = config
@@ -42,7 +50,7 @@ class HitlLG69TInterface(HitlDeviceInterfaceBase):
         #     "timestamp": 1725918926,
         #     "version": "v2.1.0-917-g7e74d1b235",
         #     "git_hash": "7e74d1b2356165d0e4408aa665ebf214e8a6dcb3",
-        #     "aws_path": "s3://pointone-build-artifacts/nautilus/atlas/v2.1.0-917-g7e74d1b235/"
+        #     "aws_path": "s3://pointone-build-artifacts/nautilus/quectel/v2.1.0-917-g7e74d1b235/"
         # }
 
         # TODO: Power cycle at some point?.
@@ -50,62 +58,60 @@ class HitlLG69TInterface(HitlDeviceInterfaceBase):
         # TODO: Add factory reset logic.
         logger.info(f'Initializing LG69T.')
 
-
         with NamedTemporaryFile(suffix='.p1fw') as tmp_file:
             if not download_file(tmp_file, build_info['aws_path'], r'.*\.p1fw'):
                 return None
-            args = Namespace(file=tmp_file.name,force=False,manual_reboot=False,release=False,suppress_progress=True,type=None,show=False,gnss=None, app=None, port=self.config.serial_port)
+
+            def _reboot_cmd(relay_config: RelayConfig):
+                ctrl = RelayController(relay_config.relay_number, relay_id=relay_config.id)
+                ctrl.send_cmd(True)
+                ctrl.send_cmd(False)
+
+            args = Namespace(
+                file=tmp_file.name,
+                force=False,
+                manual_reboot=False,
+                release=False,
+                suppress_progress=True,
+                type=None,
+                show=False,
+                gnss=None,
+                app=None,
+                port=self.config.serial_port,
+                reboot_cmd=lambda: _reboot_cmd(self.config.reset_relay),  # type: ignore
+            )
             # Sysexits on failure
             run_update(args)
 
+        data_source = open_data_source(self.config)
+        if data_source is None:
+            logger.error(f"Can't open Quectel serial interface.")
+            return None
 
+        device_interface = DeviceInterface(data_source)
+        logger.info('Clearing FE settings.')
+        args = Namespace(revert_to_saved=False, revert_to_defaults=True)
+        if not save_config(device_interface, args):
+            logger.error('Clearing FE settings failed.')
+            return None
 
-        raise NotImplementedError()
+        logger.info('Enabling diagnostics')
+        args = Namespace(interface_config_type='diagnostics_enabled', param='current', enabled=True, save=True)
+        if not apply_config(device_interface, args):
+            logger.error('Enabling diagnostics failed.')
+            return None
 
-        # TODO: Decide how to detect Teseo updates are needed, and perform them.
+        if not skip_reset:
+            logger.info('Restarting Quectel with diagnostic reset')
+            args = Namespace(type=['diag'])
+            if not request_reset(device_interface, args):
+                logger.error('Reset failed.')
+                return None
+            # Sleep to give restarted software a chance to get up and running.
+            time.sleep(RESTART_WAIT_TIME_SEC)
 
-        # data_source = open_data_source(self.config)
-        # if data_source is None:
-        #     logger.error(f"Can't open Atlas TCP interface: {self.config.tcp_address}.")
-        #     return None
-
-        # set_crash_log_action(self.config.tcp_address, CrashLogAction.FULL_LOG)  # type: ignore
-
-        # device_interface = DeviceInterface(data_source)
-        # logger.info('Clearing FE settings.')
-        # args = Namespace(revert_to_saved=False, revert_to_defaults=True)
-        # if not save_config(device_interface, args):
-        #     logger.error('Clearing FE settings failed.')
-        #     return None
-
-        # logger.info('Enabling diagnostics')
-        # args = Namespace(interface_config_type='diagnostics_enabled', param='current', enabled=True, save=True)
-        # if not apply_config(device_interface, args):
-        #     logger.error('Enabling diagnostics failed.')
-        #     return None
-        # data_source.stop()
-
-        # log_status = get_log_status(self.config.tcp_address)  # type: ignore
-        # if log_status is None:
-        #     logger.error('Error querying logs.')
-        #     return None
-        # self.old_log_guids = {l['guid'] for l in log_status['logs']}
-
-        # if not skip_reset:
-        #     logger.info('Restarting Atlas with diagnostic logging')
-        #     # Restart nautilus container with logging enabled at startup.
-        #     if not restart_application(self.config.tcp_address, log_on_startup=True):
-        #         logger.error('Atlas restart failed.')
-        #         return None
-        #     # Sleep to give restarted software a chance to get up and running.
-        #     time.sleep(RESTART_WAIT_TIME_SEC)
-
-        # data_source = open_data_source(self.config)
-        # if data_source is None:
-        #     logger.error(f"Can't reopen Atlas TCP interface: {self.config.tcp_address}.")
-        #     return None
-        # self.device_interface = DeviceInterface(data_source)
-        # return self.device_interface
+        self.device_interface = device_interface
+        return device_interface
 
     def shutdown_device(self, tests_passed: bool, output_dir: Path):
         # Nothing logged on device to dump.

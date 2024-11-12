@@ -2,11 +2,11 @@
 
 import argparse
 import json
+import logging
 import os
 import struct
 import subprocess
 import sys
-import logging
 import time
 import typing
 import urllib.error
@@ -47,6 +47,8 @@ PACKET_SIZE = 1024 * 5
 RESPONSE_PAYLOAD_SIZE = 4
 HEADER = b'\xAA'
 TAIL = b'\x55'
+
+ResetFunction = Callable[[], None]
 
 
 def _send_fe_and_wait(ser: Serial, request: MessagePayload, expected_response_type: MessageType,
@@ -202,13 +204,15 @@ class UpgradeType(Enum):
     GNSS = auto()
 
 
-def run_reboot_command(reboot_cmd: Optional[str]):
-    if reboot_cmd:
+def run_reboot_command(reboot_cmd: Optional[str | ResetFunction]):
+    if isinstance(reboot_cmd, str):
         subprocess.run(reboot_cmd, shell=True)
+    elif reboot_cmd is not None:
+        reboot_cmd()
 
 
 def Upgrade(ser: Serial, bin_file: typing.BinaryIO, upgrade_type: UpgradeType, should_send_reboot: bool,
-            wait_for_reboot: bool = False, show_progress: bool = True, reboot_cmd: Optional[str]=None):
+            wait_for_reboot: bool = False, show_progress: bool = True, reboot_cmd: Optional[str | ResetFunction] = None):
     class_id = {
         UpgradeType.APP: CLASS_APP,
         UpgradeType.GNSS: CLASS_GNSS,
@@ -225,11 +229,11 @@ def Upgrade(ser: Serial, bin_file: typing.BinaryIO, upgrade_type: UpgradeType, s
         #    reset on its own before sync times out (typically 3 seconds)
         if not send_reboot(ser, timeout=2.0):
             logger.info('Timed out waiting for reboot command response. Waiting for automatic or manual reboot.')
+            run_reboot_command(reboot_cmd)
         else:
             logger.info('Reboot command accepted. Waiting for reboot.')
     else:
         logger.info('Please reboot the device...')
-        run_reboot_command(reboot_cmd)
 
     # Note that the reboot command can take over 5 seconds to kick in.
     if not synchronize(ser, timeout=10.0):
@@ -375,7 +379,7 @@ def download_release_file(version: str, output_dir: str = None):
     return output_path
 
 
-def run_update(args: argparse.Namespace, reboot_cmd: Optional[str]=None):
+def run_update(args: argparse.Namespace):
     port_name = args.port
     should_send_reboot = not args.manual_reboot
 
@@ -527,7 +531,8 @@ def run_update(args: argparse.Namespace, reboot_cmd: Optional[str]=None):
                 logger.info('Application software already up to date (%s). Skipping.' % version_info.engine_version_str)
             else:
                 logger.info('Upgrading application software...')
-                if not Upgrade(ser, app_bin_fd, UpgradeType.APP, should_send_reboot, show_progress=not args.suppress_progress, reboot_cmd=args.reboot_cmd):
+                if not Upgrade(ser, app_bin_fd, UpgradeType.APP, should_send_reboot,
+                               show_progress=not args.suppress_progress, reboot_cmd=args.reboot_cmd):
                     sys.exit(2)
 
 
@@ -603,6 +608,7 @@ Update only the application software (not common):
     )
 
     run_update(args)
+
 
 if __name__ == '__main__':
     main()

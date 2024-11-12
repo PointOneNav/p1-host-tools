@@ -1,7 +1,7 @@
 import json
 import logging
 import re
-from typing import IO, Any, Dict, Optional, BinaryIO
+from typing import IO, Any, BinaryIO, Dict, Optional
 
 import boto3
 
@@ -43,7 +43,7 @@ def get_build_info(version_str: str, build_type: DeviceType) -> Optional[Dict[st
     return json.loads(file_content)
 
 
-def download_file(fd: IO[bytes], aws_path: str, file_re:str) -> bool:
+def download_file(fd: IO[bytes], aws_path: str, file_re: str) -> bool:
     if not aws_path.endswith('/'):
         aws_path += '/'
 
@@ -72,10 +72,15 @@ def download_file(fd: IO[bytes], aws_path: str, file_re:str) -> bool:
     print(f"No objects found in s3://{bucket}/{aws_path} with the specified regex: '{file_re}'.")
     return False
 
+
 def _test_main():
     import io
     fd = io.BytesIO()
-    download_file(fd, 's3://pointone-build-artifacts/nautilus/quectel/lg69t-am-v0.19.0-rc1-1006-g842ecae958-dirty', r'.*\.p1fw')
+    download_file(
+        fd,
+        's3://pointone-build-artifacts/nautilus/quectel/lg69t-am-v0.19.0-rc1-1006-g842ecae958-dirty',
+        r'.*\.p1fw')
+
 
 if __name__ == '__main__':
     _test_main()
