@@ -4,16 +4,18 @@ import struct
 from typing import Optional
 
 from fusion_engine_client.messages import (DataType, EventNotificationMessage,
-                                           MessagePayload,
+                                           MessagePayload,SystemStatusMessage,
                                            PlatformStorageDataMessage,
                                            ProfileSystemStatusMessage,
                                            Timestamp)
 from fusion_engine_client.parsers.decoder import MessageWithBytesTuple
 
+from p1_hitl.defs import DeviceType, HitlEnvArgs
 from p1_hitl.metric_analysis.metrics import (CdfThreshold, EqualValueMetric,
                                              MaxElapsedTimeMetric,
-                                             MaxValueMetric, MinValueMetric,
-                                             StatsMetric, TimeSource)
+                                             MaxValueMetric, MetricController,
+                                             MinValueMetric, StatsMetric,
+                                             TimeSource)
 
 from .base_analysis import AnalyzerBase
 
@@ -21,21 +23,18 @@ metric_seq_num_gap = EqualValueMetric(
     'seq_num_check',
     'Each FE sequence number should go up by one.',
     1,
-
 )
 
 metric_error_msg_count = EqualValueMetric(
     'error_msg_count',
     'Number of error notification messages received.',
     0,
-
 )
 
 metric_monotonic_p1time = MinValueMetric(
     'monotonic_p1time',
     'Check P1Time goes forward monotonically.',
     0,
-
 )
 
 metric_user_config_received = MaxElapsedTimeMetric(
@@ -64,15 +63,27 @@ metric_cpu_usage = StatsMetric(
     'Checks that total CPU usage is acceptable.',
     max_threshold=75,
     # Check median total CPU usage is below 50%.
-    max_cdf_thresholds=[CdfThreshold(50, 50)]
+    max_cdf_thresholds=[CdfThreshold(50, 50)],
+    is_required=True
 )
 
 metric_mem_usage = MaxValueMetric(
     'mem_usage',
     'Checks that total memory usage is acceptable.',
     # Makes sure memory usage is below 15MB.
-    15 * 1024 * 1024
+    15 * 1024 * 1024,
+    is_required=True
 )
+
+
+def configure_metrics(env_args: HitlEnvArgs):
+    # LG69T_AM does not output FilterState or Calibration.
+    if env_args.HITL_BUILD_TYPE == DeviceType.LG69T_AM:
+        metric_filter_state_received.is_disabled = True
+        metric_calibration_received.is_disabled = True
+
+
+MetricController.register_environment_config_customizations(configure_metrics)
 
 
 class SanityAnalyzer(AnalyzerBase):

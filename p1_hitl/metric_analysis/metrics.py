@@ -113,7 +113,7 @@ class CodeLocation:
         return f'{out_path}:{self.line}'
 
 
-@dataclass
+@dataclass(frozen=True)
 class Timestamp:
     '''!
     Captures when during the HITL test something occurred.
@@ -122,6 +122,16 @@ class Timestamp:
     host_time: Optional[float]
     p1_time: Optional[float]
     system_time: Optional[float]
+
+    def NewTimestampFromOld(self, updated_time_source: TimeSource, updated_value: Optional[float]) -> 'Timestamp':
+        new_vals = asdict(self)
+        key = {
+            TimeSource.P1: 'p1_time',
+            TimeSource.HOST: 'host_time',
+            TimeSource.SYSTEM: 'system_time'
+        }[updated_time_source]
+        new_vals[key] = updated_value
+        return Timestamp(**new_vals)
 
     def get_elapsed(self, previous_time: 'Timestamp', time_source: TimeSource) -> Optional[float]:
         '''!
@@ -208,6 +218,14 @@ class MetricController:
         CodeLocation.code_root_path = code_root_path
 
     @classmethod
+    def _update_current_time(cls, source: TimeSource, value: Optional[float]):
+        cls._current_time = cls._current_time.NewTimestampFromOld(source, value)
+
+    @classmethod
+    def _update_start_time(cls, source: TimeSource, value: Optional[float]):
+        cls._start_time = cls._start_time.NewTimestampFromOld(source, value)
+
+    @classmethod
     def enable_logging(cls, log_dir: Path, log_msg_times: bool, log_metric_values: bool):
         '''!
         @param log_dir - Directory to write log files to.
@@ -237,9 +255,9 @@ class MetricController:
 
         See the comment at the top of the file on how time keeping is performed.
         '''
-        cls._current_time.host_time = time.monotonic()
+        cls._update_current_time(TimeSource.HOST, time.monotonic())
         if cls._start_time.host_time is None:
-            cls._start_time.host_time = cls._current_time.host_time
+            cls._update_start_time(TimeSource.HOST, cls._current_time.host_time)
 
         # Check metrics triggered by elapsed host time.
         for metric in cls._metrics.values():
@@ -272,9 +290,9 @@ class MetricController:
                     # TODO: Try to resync
                     cls._time_log_fd = None
                 else:
-                    cls._current_time.host_time = test_time_millis / 1000.0
+                    cls._update_current_time(TimeSource.HOST, test_time_millis / 1000.0)
                     if cls._start_time.host_time is None:
-                        cls._start_time.host_time = cls._current_time.host_time
+                        cls._update_start_time(TimeSource.HOST, cls._current_time.host_time)
                     updated = True
             else:
                 cls._time_log_fd = None
@@ -285,15 +303,15 @@ class MetricController:
             # Note p1_time bool check validates if p1_time not None and not NaN.
             if p1_time:
                 updated = True
-                cls._current_time.p1_time = p1_time.seconds
+                cls._update_current_time(TimeSource.P1, p1_time.seconds)
                 if cls._start_time.p1_time is None:
-                    cls._start_time.p1_time = p1_time.seconds
+                    cls._update_start_time(TimeSource.P1, p1_time.seconds)
             system_time = payload.get_system_time_sec()
             if system_time is not None and not math.isnan(system_time):
                 updated = True
-                cls._current_time.system_time = system_time
+                cls._update_current_time(TimeSource.SYSTEM, system_time)
                 if cls._start_time.system_time is None:
-                    cls._start_time.system_time = system_time
+                    cls._update_start_time(TimeSource.SYSTEM, system_time)
 
         # Only log host times when update_host_time() is being called.
         elapsed = cls._current_time.get_elapsed(cls._start_time, TimeSource.HOST)
