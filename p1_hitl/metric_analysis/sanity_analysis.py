@@ -1,11 +1,14 @@
 
 
+import logging
 import struct
 from typing import Optional
 
 from fusion_engine_client.messages import (DataType, EventNotificationMessage,
-                                           MessagePayload,SystemStatusMessage,
+                                           InternalMessageType, MessagePayload,
                                            PlatformStorageDataMessage,
+                                           ProfileDefinitionMessage,
+                                           ProfileFreeRtosSystemStatusMessage,
                                            ProfileSystemStatusMessage,
                                            Timestamp)
 from fusion_engine_client.parsers.decoder import MessageWithBytesTuple
@@ -18,6 +21,8 @@ from p1_hitl.metric_analysis.metrics import (CdfThreshold, EqualValueMetric,
                                              TimeSource)
 
 from .base_analysis import AnalyzerBase
+
+logger = logging.getLogger('point_one.hitl.analysis.sanity')
 
 metric_seq_num_gap = EqualValueMetric(
     'seq_num_check',
@@ -85,12 +90,15 @@ def configure_metrics(env_args: HitlEnvArgs):
 
 MetricController.register_environment_config_customizations(configure_metrics)
 
+_RTOS_IDLE_TASK_NAME = 'IDLE'
+
 
 class SanityAnalyzer(AnalyzerBase):
     def __init__(self) -> None:
         self.last_seq_num: Optional[int] = None
         self.last_p1_time: Optional[Timestamp] = None
         self.error_count = 0
+        self.rtos_task_name_map: dict[str, int] = {}
 
     def update(self, msg: MessageWithBytesTuple):
         header, payload, _ = msg
@@ -100,30 +108,44 @@ class SanityAnalyzer(AnalyzerBase):
         self.last_seq_num = header.sequence_number
 
         if isinstance(payload, MessagePayload):
+            # We want to ignore p1_time from ProfileSystemStatusMessage since it just uses the last measurement it
+            # received which may be in the past.
+            if not isinstance(payload, ProfileSystemStatusMessage):
+                p1_time = payload.get_p1_time()
+                if p1_time:
+                    if self.last_p1_time is not None:
+                        metric_monotonic_p1time.check(p1_time.seconds - self.last_p1_time.seconds)
+                    self.last_p1_time = p1_time
+
             if isinstance(payload, EventNotificationMessage):
                 # Convert the unsigned event_flags to a signed value.
                 signed_flag = struct.unpack('q', struct.pack('Q', payload.event_flags))[0]
                 if signed_flag < 0:
                     self.error_count += 1
-
-            metric_error_msg_count.check(self.error_count)
-
-            if isinstance(payload, PlatformStorageDataMessage):
+                    logger.info(f'Error EventNotification: {payload}')
+            elif isinstance(payload, PlatformStorageDataMessage):
                 if payload.data_type == DataType.CALIBRATION_STATE:
                     metric_calibration_received.check()
                 elif payload.data_type == DataType.FILTER_STATE:
                     metric_filter_state_received.check()
                 elif payload.data_type == DataType.USER_CONFIG:
                     metric_user_config_received.check()
-
-            if isinstance(payload, ProfileSystemStatusMessage):
+            elif header.message_type == InternalMessageType.PROFILE_FREERTOS_TASK_DEFINITION and \
+                    isinstance(payload, ProfileDefinitionMessage):
+                self.rtos_task_name_map = {v: k for k, v in payload.to_dict().items()}
+            elif isinstance(payload, ProfileFreeRtosSystemStatusMessage):
+                # Skip updates with no usage that follow a reset.
+                if any(entry.cpu_usage != 0 for entry in payload.task_entries):
+                    # Can only check CPU usage after getting task definitions.
+                    if len(self.rtos_task_name_map) > 0:
+                        idle_task_idx = self.rtos_task_name_map[_RTOS_IDLE_TASK_NAME]
+                        metric_cpu_usage.check(100.0 - payload.task_entries[idle_task_idx].cpu_usage)
+                    # Type check thinks these are constants.
+                    metric_mem_usage.check(payload.sbrk_free_bytes)  # type: ignore
+                    metric_mem_usage.check(payload.heap_free_bytes)  # type: ignore
+            elif isinstance(payload, ProfileSystemStatusMessage):
                 metric_cpu_usage.check(payload.total_cpu_usage)
                 metric_mem_usage.check(payload.used_memory_bytes)
-            # We want to ignore p1_time from ProfileSystemStatusMessage since it just uses the last measurement it
-            # received which may be in the past.
-            else:
-                p1_time = payload.get_p1_time()
-                if p1_time:
-                    if self.last_p1_time is not None:
-                        metric_monotonic_p1time.check(p1_time.seconds - self.last_p1_time.seconds)
-                    self.last_p1_time = p1_time
+
+        # Check the error count here so it doesn't report this metric as skipped if no notifications occur.
+        metric_error_msg_count.check(self.error_count)

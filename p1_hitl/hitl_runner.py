@@ -168,7 +168,7 @@ def main():
     ################# Run tests #################
     tests_completed = False
     tests_passed = False
-    MetricController.enable_logging(output_dir, cli_args.playback_log, cli_args.log_metric_values)
+    MetricController.enable_logging(output_dir, not cli_args.playback_log, cli_args.log_metric_values)
     if cli_args.playback_log:
         MetricController.playback_host_time(output_dir.parent)
 
