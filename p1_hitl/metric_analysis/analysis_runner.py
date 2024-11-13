@@ -34,7 +34,6 @@ metric_message_host_time_elapsed = MaxElapsedTimeMetric(
     TimeSource.HOST,
     max_time_to_first_check_sec=10,
     max_time_between_checks_sec=0.2,
-
 )
 metric_message_host_time_elapsed_test_stop = MaxElapsedTimeMetric(
     'message_host_time_elapsed_test_stop',
@@ -43,7 +42,6 @@ metric_message_host_time_elapsed_test_stop = MaxElapsedTimeMetric(
     max_time_to_first_check_sec=60,
     max_time_between_checks_sec=60,
     is_fatal=True,
-
 )
 metric_version_check = AlwaysTrueMetric(
     'version_check',
