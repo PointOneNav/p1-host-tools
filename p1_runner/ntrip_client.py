@@ -7,6 +7,7 @@ import time
 import traceback
 from datetime import datetime, timezone
 from functools import reduce
+from typing import Iterable
 
 import ntripstreams
 from serial import SerialException
@@ -54,7 +55,7 @@ class NTRIPClient(threading.Thread):
     def is_connected(self):
         return self.connected
 
-    def send_position(self, lla_deg: list, time: datetime = None):
+    def send_position(self, lla_deg: Iterable[float], time: datetime = None):
         if not self.connected:
             self.logger.trace('Not connected. Ignoring position update. [%.8f, %.8f, %.2f]' % tuple(lla_deg))
             return False

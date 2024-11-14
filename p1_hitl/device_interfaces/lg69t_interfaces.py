@@ -1,5 +1,7 @@
 import logging
+import os
 import sys
+import threading
 import time
 from argparse import Namespace
 from pathlib import Path
@@ -15,6 +17,7 @@ from firmware_tools.lg69t.firmware_tool import run_update
 from p1_hitl.defs import HitlEnvArgs
 from p1_hitl.get_build_artifacts import download_file
 from p1_runner.device_interface import DeviceInterface
+from p1_runner.ntrip_client import NTRIPClient
 from p1_test_automation.devices_config import (DeviceConfig, RelayConfig,
                                                open_data_source)
 from p1_test_automation.relay_controller import RelayController
@@ -22,8 +25,47 @@ from p1_test_automation.relay_controller import RelayController
 from .base_interfaces import HitlDeviceInterfaceBase
 
 RESTART_WAIT_TIME_SEC = 15
+NTRIP_POSITION_UPDATE_INTERVAL = 60
+NTRIP_CONNECTION_TIMEOUT = 2
 
 logger = logging.getLogger('point_one.hitl.lg69t_interface')
+
+CORRECTIONS_URL = 'https://polaris.pointonenav.com:2102'
+MOUNT_POINT = 'POLARIS'
+NRIP_VERSION = 2
+
+
+class NTRIPPositionUpdater:
+    def __init__(self) -> None:
+        self.thread: Optional[threading.Thread] = None
+        self.stop_event = threading.Event()
+
+    def stop_and_join(self):
+        self.stop_event.set()
+        if self.thread is not None:
+            self.thread.join()
+            self.thread = None
+
+    def start(self, client: NTRIPClient, position: tuple[float, float, float]):
+        def _run_loop(stop_event: threading.Event, client: NTRIPClient, position: tuple[float, float, float]):
+            # If the system has been running for longer than NTRIP_CONNECTION_TIMEOUT and the NTRIP is disconnected
+            # print a single warning. This resets if the client connects.
+            start_time = time.monotonic()
+            sent_warning = False
+            while not stop_event.is_set():
+                if client.connected:
+                    client.send_position(position)
+                    stop_event.wait(NTRIP_POSITION_UPDATE_INTERVAL)
+                    sent_warning = False
+                else:
+                    if not sent_warning and time.monotonic() - start_time > NTRIP_CONNECTION_TIMEOUT:
+                        logger.warning(f'NTRIP Client not connected.')
+                        sent_warning = True
+                    time.sleep(0.1)
+
+        self.is_running = True
+        self.thread = threading.Thread(target=_run_loop, args=(self.stop_event, client, position))
+        self.thread.start()
 
 
 class HitlLG69TInterface(HitlDeviceInterfaceBase):
@@ -40,11 +82,15 @@ class HitlLG69TInterface(HitlDeviceInterfaceBase):
                                     relay_number=args.JENKINS_RESET_RELAY[1]
                                 ))
 
-    def __init__(self, config: DeviceConfig):
+    def __init__(self, config: DeviceConfig, env_args: HitlEnvArgs):
         self.config = config
         self.device_interface: Optional[DeviceInterface] = None
+        self.corrections_client = None
+        self.reference_position_lla = env_args.JENKINS_ANTENNA_LOCATION
+        self.position_updater = NTRIPPositionUpdater()
 
-    def init_device(self, build_info: Dict[str, Any], skip_reset=False) -> Optional[DeviceInterface]:
+    def init_device(self, build_info: Dict[str, Any], skip_reset=False,
+                    skip_corrections=False) -> Optional[DeviceInterface]:
         # build_info example:
         # {
         #     "timestamp": 1725918926,
@@ -57,6 +103,16 @@ class HitlLG69TInterface(HitlDeviceInterfaceBase):
 
         # TODO: Add factory reset logic.
         logger.info(f'Initializing LG69T.')
+
+        if not skip_corrections:
+            username = self.config.name
+            password = os.getenv('HITL_POLARIS_API_KEY')
+            if password is None:
+                logger.error('No HITL_POLARIS_API_KEY key specified in environment.')
+                return None
+            if self.reference_position_lla is None:
+                logger.error('No JENKINS_ANTENNA_LOCATION key specified in environment.')
+                return None
 
         with NamedTemporaryFile(suffix='.p1fw') as tmp_file:
             if not download_file(tmp_file, build_info['aws_path'], r'.*\.p1fw'):
@@ -113,8 +169,25 @@ class HitlLG69TInterface(HitlDeviceInterfaceBase):
             time.sleep(RESTART_WAIT_TIME_SEC)
 
         self.device_interface = device_interface
+
+        if not skip_corrections:
+            def _on_corrections(self: HitlLG69TInterface, data: bytes):
+                if self.device_interface is not None:
+                    self.device_interface.data_source.write(data)
+
+            self.corrections_client = NTRIPClient(url=CORRECTIONS_URL, mountpoint=MOUNT_POINT, username=username, password=password,
+                                                  data_callback=lambda data: _on_corrections(self, data), version=NRIP_VERSION)
+            self.corrections_client.start()
+            assert self.reference_position_lla is not None
+            self.position_updater.start(self.corrections_client, self.reference_position_lla)
+
         return device_interface
 
     def shutdown_device(self, tests_passed: bool, output_dir: Path):
-        # Nothing logged on device to dump.
-        return
+        self.position_updater.stop_and_join()
+        if self.corrections_client is not None:
+            self.corrections_client.stop()
+            self.corrections_client.join()
+
+        if self.device_interface:
+            self.device_interface.data_source.stop()

@@ -89,7 +89,8 @@ def configure_metrics(env_args: HitlEnvArgs):
 
     # Set processor resource usage for LG69T.
     if env_args.HITL_BUILD_TYPE.is_lg69t():
-        metric_cpu_usage.max_cdf_thresholds=[CdfThreshold(50, 70)]
+        metric_cpu_usage.max_threshold = 80
+        metric_cpu_usage.max_cdf_thresholds = [CdfThreshold(50, 70)]
         metric_mem_usage.threshold = 55 * 1024
 
 

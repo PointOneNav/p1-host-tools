@@ -4,7 +4,7 @@ set -e
 
 export HITL_NAUTILUS_PATH=$REPO_ROOT
 # CONFIGURATION, SANITY, ROOF_15_MIN, QUICK_TESTS
-export HITL_TEST_TYPE="QUICK_TESTS"
+export HITL_TEST_TYPE="SANITY"
 export HITL_NAME="run_local"
 # export HITL_BUILD_TYPE="ATLAS"
 # export HITL_DUT_VERSION=v2.2.0-rc1-236-g36fb08f2fe
@@ -17,7 +17,8 @@ export JENKINS_UART1='/dev/ttyUSB0'
 export JENKINS_UART2='/dev/ttyUSB1'
 export JENKINS_RESET_RELAY='6QMBS:1'
 export HITL_BUILD_TYPE="LG69T_AM"
-export HITL_DUT_VERSION=lg69t-am-v0.19.0-rc1-1006-g842ecae958-dirty
+export HITL_DUT_VERSION=lg69t-am-v0.19.0-rc1-1025-g2630269945
+source /home/jdiamond/polaris_creds.sh
 
 export PATH="/home/jdiamond/src/usb-relay-hid/commandline/makemake:$PATH"
 

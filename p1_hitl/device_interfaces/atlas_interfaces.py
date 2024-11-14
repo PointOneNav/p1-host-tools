@@ -38,12 +38,13 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
                                 balena=BalenaConfig(uuid=balena_uuid),
                                 )
 
-    def __init__(self, config: DeviceConfig):
+    def __init__(self, config: DeviceConfig, env_args: HitlEnvArgs):
         self.old_log_guids = set()
         self.config = config
         self.device_interface: Optional[DeviceInterface] = None
 
-    def init_device(self, build_info: Dict[str, Any], skip_reset=False) -> Optional[DeviceInterface]:
+    def init_device(self, build_info: Dict[str, Any], skip_reset=False,
+                    skip_corrections=False) -> Optional[DeviceInterface]:
         # build_info example:
         # {
         #     "timestamp": 1725918926,
