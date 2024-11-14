@@ -21,7 +21,7 @@ from p1_test_automation.relay_controller import RelayController
 
 from .base_interfaces import HitlDeviceInterfaceBase
 
-RESTART_WAIT_TIME_SEC = 10
+RESTART_WAIT_TIME_SEC = 15
 
 logger = logging.getLogger('point_one.hitl.lg69t_interface')
 

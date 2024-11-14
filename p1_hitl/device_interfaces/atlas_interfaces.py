@@ -55,6 +55,8 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
 
         # TODO: Power cycle at some point?.
 
+        # TODO: Disable corrections if needed.
+
         # TODO: Add factory reset logic.
         logger.info(f'Initializing Atlas.')
 
