@@ -21,7 +21,7 @@ BUILD_JOB_MAP = {
 
 QUECTEL_BUILD_TYPE_MAP = {
     DeviceType.LG69T_AM: "gnss",
-    DeviceType.LG69T_AP: "INS",
+    DeviceType.LG69T_AP: "ins",
 }
 
 NUM_OLD_BUILDS_TO_CHECK = 10

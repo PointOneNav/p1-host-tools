@@ -38,7 +38,7 @@ metric_error_msg_count = EqualValueMetric(
 
 metric_monotonic_p1time = MinValueMetric(
     'monotonic_p1time',
-    'Check P1Time goes forward monotonically.',
+    'Check P1Time goes forward (mostly) monotonically.',
     0,
 )
 
@@ -87,6 +87,11 @@ def configure_metrics(env_args: HitlEnvArgs):
         metric_filter_state_received.is_disabled = True
         metric_calibration_received.is_disabled = True
 
+    # Set processor resource usage for LG69T.
+    if env_args.HITL_BUILD_TYPE.is_lg69t():
+        metric_cpu_usage.max_cdf_thresholds=[CdfThreshold(50, 70)]
+        metric_mem_usage.threshold = 55 * 1024
+
 
 MetricController.register_environment_config_customizations(configure_metrics)
 
@@ -99,8 +104,13 @@ class SanityAnalyzer(AnalyzerBase):
         self.last_p1_time: Optional[Timestamp] = None
         self.error_count = 0
         self.rtos_task_name_map: dict[str, int] = {}
+        self.env_args = None
+
+    def configure(self, env_args: HitlEnvArgs):
+        self.env_args = env_args
 
     def update(self, msg: MessageWithBytesTuple):
+        assert isinstance(self.env_args, HitlEnvArgs)
         header, payload, _ = msg
 
         if self.last_seq_num is not None:
@@ -140,9 +150,13 @@ class SanityAnalyzer(AnalyzerBase):
                     if len(self.rtos_task_name_map) > 0:
                         idle_task_idx = self.rtos_task_name_map[_RTOS_IDLE_TASK_NAME]
                         metric_cpu_usage.check(100.0 - payload.task_entries[idle_task_idx].cpu_usage)
+                    if self.env_args.HITL_BUILD_TYPE.is_lg69t:
+                        total_memory = 64 * 1024
+                    else:
+                        raise NotImplementedError(f'Total memory not known for {self.env_args.HITL_BUILD_TYPE}.')
                     # Type check thinks these are constants.
-                    metric_mem_usage.check(payload.sbrk_free_bytes)  # type: ignore
-                    metric_mem_usage.check(payload.heap_free_bytes)  # type: ignore
+                    metric_mem_usage.check(total_memory - payload.sbrk_free_bytes)  # type: ignore
+                    metric_mem_usage.check(total_memory - payload.heap_free_bytes)  # type: ignore
             elif isinstance(payload, ProfileSystemStatusMessage):
                 metric_cpu_usage.check(payload.total_cpu_usage)
                 metric_mem_usage.check(payload.used_memory_bytes)
