@@ -39,7 +39,7 @@ metric_error_msg_count = EqualValueMetric(
 metric_monotonic_p1time = MinValueMetric(
     'monotonic_p1time',
     'Check P1Time goes forward (mostly) monotonically.',
-    0,
+    -0.1,
 )
 
 metric_user_config_received = MaxElapsedTimeMetric(

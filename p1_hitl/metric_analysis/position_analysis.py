@@ -21,6 +21,13 @@ metric_fix_rate = PercentTrueMetric(
     is_required=True,
 )
 
+metric_time_to_first_solution = MaxElapsedTimeMetric(
+    'time_to_first_solution',
+    'Time to get any valid solution.',
+    time_source=TimeSource.P1,
+    max_time_to_first_check_sec=1
+)
+
 metric_position_valid = AlwaysTrueMetric(
     'position_valid',
     'All positions should be valid.',
@@ -165,26 +172,34 @@ def configure_metrics(env_args: HitlEnvArgs):
     if not params.check_position:
         for metric in position_metrics:
             metric.is_disabled = True
-    elif not params.has_corrections:
-        metric_fix_rate.is_disabled = True
-        metric_2d_fixed_pos_error.is_disabled = True
-        metric_3d_fixed_pos_error.is_disabled = True
+    else:
+        if not params.has_corrections:
+            metric_fix_rate.is_disabled = True
+            metric_fixed_max_velocity.is_disabled = True
+            metric_2d_fixed_pos_error.is_disabled = True
+            metric_3d_fixed_pos_error.is_disabled = True
 
-    # YPR will be nan before the filter initializes orientation. For HITL where the receiver is not moving, I would
-    # expect that to be 100% of the time. If TightEsrif manages to initialize orientation without moving, that should
-    # actually be considered a bug.
-    #
-    # Position and velocity should initialize when the filter does (however we need to be careful about fallback
-    # positions before filter initialization for devices where we are doing that)
-    #
-    # The one counter for (1) would be a test where we're injecting a hot start state to begin with. In that case,
-    # assuming it has orientation initialized (which is not required for all hot starts), it should continue outputting
-    # basically the same angles forever since it's not moving. That's a test we might want to check
-    if params.is_stationary:
-        metric_delta_ypr_deg.is_disabled = True
-        metric_ypr_std_deg.is_disabled = True
-        metric_non_nan_ypr_std_deg.is_disabled = True
-        metric_non_nan_vel_std_mps.is_disabled = True
+        # YPR will be nan before the filter initializes orientation. For HITL where the receiver is not moving, I would
+        # expect that to be 100% of the time. If TightEsrif manages to initialize orientation without moving, that should
+        # actually be considered a bug.
+        #
+        # Position and velocity should initialize when the filter does (however we need to be careful about fallback
+        # positions before filter initialization for devices where we are doing that)
+        #
+        # The one counter for (1) would be a test where we're injecting a hot start state to begin with. In that case,
+        # assuming it has orientation initialized (which is not required for all hot starts), it should continue outputting
+        # basically the same angles forever since it's not moving. That's a test we might want to check
+        if params.is_stationary:
+            metric_delta_ypr_deg.is_disabled = True
+            metric_ypr_std_deg.is_disabled = True
+            metric_non_nan_ypr_std_deg.is_disabled = True
+            metric_non_nan_vel_std_mps.is_disabled = True
+
+        if env_args.HITL_BUILD_TYPE.is_lg69t():
+            # To speed up TTFF initially allow positions without GPSTime.
+            metric_gps_time_valid.is_disabled = True
+            metric_max_velocity.threshold = 0.2
+            metric_fixed_max_velocity.threshold = 0.02
 
 
 MetricController.register_environment_config_customizations(configure_metrics)
@@ -205,6 +220,9 @@ def calculate_position_error(device_lla_deg, reference_lla_deg) -> tuple[float, 
 
 
 class PositionAnalyzer(AnalyzerBase):
+    def __init__(self) -> None:
+        self.got_first_valid = False
+
     def configure(self, env_args: HitlEnvArgs):
         self.env_args = env_args
         self.params = env_args.get_selected_test_type().get_test_params()
@@ -226,6 +244,13 @@ class PositionAnalyzer(AnalyzerBase):
             metric_pose_host_time_elapsed.check()
             is_fixed = payload.solution_type == SolutionType.RTKFixed
             is_valid = payload.solution_type != SolutionType.Invalid
+
+            # Don't factor invalid solutions at startup into other checks.
+            if not self.got_first_valid and not is_valid:
+                return
+            self.got_first_valid = True
+
+            metric_time_to_first_solution.check()
             metric_fix_rate.check(is_fixed)
             metric_position_valid.check(is_valid)
 
