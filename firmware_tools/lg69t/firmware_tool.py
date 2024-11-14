@@ -379,9 +379,10 @@ def download_release_file(version: str, output_dir: str = None):
     return output_path
 
 
-def run_update(args: argparse.Namespace):
+def run_update(args: argparse.Namespace) -> bool:
     port_name = args.port
     should_send_reboot = not args.manual_reboot
+    applied_update = False
 
     # Show software versions and exit.
     if args.show:
@@ -522,6 +523,7 @@ def run_update(args: argparse.Namespace):
                 if not Upgrade(ser, gnss_bin_fd, UpgradeType.GNSS, should_send_reboot,
                                wait_for_reboot=app_bin_fd is not None, show_progress=not args.suppress_progress, reboot_cmd=args.reboot_cmd):
                     sys.exit(2)
+                applied_update = True
 
         # Update the application software.
         if app_bin_fd is not None:
@@ -534,6 +536,9 @@ def run_update(args: argparse.Namespace):
                 if not Upgrade(ser, app_bin_fd, UpgradeType.APP, should_send_reboot,
                                show_progress=not args.suppress_progress, reboot_cmd=args.reboot_cmd):
                     sys.exit(2)
+                applied_update = True
+
+        return applied_update
 
 
 def main():

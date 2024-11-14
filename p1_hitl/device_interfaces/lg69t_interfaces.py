@@ -81,7 +81,9 @@ class HitlLG69TInterface(HitlDeviceInterfaceBase):
                 reboot_cmd=lambda: _reboot_cmd(self.config.reset_relay),  # type: ignore
             )
             # Sysexits on failure
-            run_update(args)
+            applied_update = run_update(args)
+            if applied_update:
+                time.sleep(RESTART_WAIT_TIME_SEC)
 
         data_source = open_data_source(self.config)
         if data_source is None:
