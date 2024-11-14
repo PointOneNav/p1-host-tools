@@ -16,10 +16,12 @@ JENKINS_BASE_URL = 'https://build.pointonenav.com'
 BUILD_JOB_MAP = {
     DeviceType.ATLAS: "atlas-build-st-develop",
     DeviceType.LG69T_AM: "quectel-build",
+    DeviceType.LG69T_AP: "quectel-build",
 }
 
 QUECTEL_BUILD_TYPE_MAP = {
     DeviceType.LG69T_AM: "gnss",
+    DeviceType.LG69T_AP: "ins",
 }
 
 NUM_OLD_BUILDS_TO_CHECK = 10

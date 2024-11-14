@@ -45,6 +45,20 @@ class Settings(BaseModel):
     rolling_logs_enabled: Optional[bool] = None
 
 
+class RelayConfig(BaseModel):
+    '''
+    Configuration for a USB HID relay.
+    https://github.com/pavel-a/usb-relay-hid
+    '''
+    # Throw error if unknown fields are specified.
+    model_config = ConfigDict(extra="forbid")
+
+    # The HID USB ID (as reported by `hidusb-relay-cmd ENUM`).
+    id: str
+    # The relay port the device is connected to. For an 8 port relay the values are 1-8.
+    relay_number: int
+
+
 class BalenaConfig(BaseModel):
     # Throw error if unknown fields are specified.
     model_config = ConfigDict(extra="forbid")
@@ -71,6 +85,9 @@ class DeviceConfig(BaseModel):
 
     # Balena configuration.
     balena: Optional[BalenaConfig] = None
+
+    # Relay to trigger to reset the device.
+    reset_relay: Optional[RelayConfig] = None
 
     settings: Settings = Settings()
 

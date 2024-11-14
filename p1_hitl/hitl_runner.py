@@ -16,7 +16,7 @@ sys.path.append(str(repo_root))
 from p1_hitl.defs import (BUILD_INFO_FILE, CONSOLE_FILE, ENV_DUMP_FILE,
                           FULL_REPORT, LOG_FILES, PLAYBACK_DIR, DeviceType,
                           HitlEnvArgs, TestType, get_args)
-from p1_hitl.device_interfaces import HitlAtlasInterface
+from p1_hitl.device_interfaces import HitlAtlasInterface, HitlLG69TInterface
 from p1_hitl.get_build_artifacts import get_build_info
 from p1_hitl.git_cmds import GitWrapper
 from p1_hitl.jenkins_ctrl import run_build
@@ -150,6 +150,8 @@ def main():
     ################# Setup device under test #################
         if env_args.HITL_BUILD_TYPE == DeviceType.ATLAS:
             hitl_device_interface_cls = HitlAtlasInterface
+        elif env_args.HITL_BUILD_TYPE.is_lg69t():
+            hitl_device_interface_cls = HitlLG69TInterface
         else:
             raise NotImplementedError('Need to handle other build types.')
 
@@ -157,8 +159,9 @@ def main():
         if device_config is None:
             logger.error('Failure configuring device for HITL testing.')
             sys.exit(1)
-        hitl_device_interface = hitl_device_interface_cls(device_config)
-        device_interface = hitl_device_interface.init_device(build_info, cli_args.skip_reset)
+        hitl_device_interface = hitl_device_interface_cls(device_config, env_args)
+        skip_corrections = env_args.get_selected_test_type() == TestType.CONFIGURATION
+        device_interface = hitl_device_interface.init_device(build_info, cli_args.skip_reset, skip_corrections)
         if device_interface is None:
             logger.error('Failure initializing device for HITL testing.')
             sys.exit(1)
@@ -166,7 +169,7 @@ def main():
     ################# Run tests #################
     tests_completed = False
     tests_passed = False
-    MetricController.enable_logging(output_dir, cli_args.playback_log, cli_args.log_metric_values)
+    MetricController.enable_logging(output_dir, not cli_args.playback_log, cli_args.log_metric_values)
     if cli_args.playback_log:
         MetricController.playback_host_time(output_dir.parent)
 

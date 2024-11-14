@@ -34,7 +34,6 @@ metric_message_host_time_elapsed = MaxElapsedTimeMetric(
     TimeSource.HOST,
     max_time_to_first_check_sec=10,
     max_time_between_checks_sec=0.2,
-
 )
 metric_message_host_time_elapsed_test_stop = MaxElapsedTimeMetric(
     'message_host_time_elapsed_test_stop',
@@ -43,20 +42,28 @@ metric_message_host_time_elapsed_test_stop = MaxElapsedTimeMetric(
     max_time_to_first_check_sec=60,
     max_time_between_checks_sec=60,
     is_fatal=True,
-
 )
 metric_version_check = AlwaysTrueMetric(
     'version_check',
     'Check that the version message matches the expected value.',
     is_fatal=True
 )
-# TODO: This check will need to be disabled for builds like Quectel that mix in non-FE data.
+# This check is disabled for builds like Quectel that mix in non-FE data.
 metric_no_fe_data_gaps = MaxValueMetric(
     'no_fe_data_gaps',
     'Check that every byte in the data stream is part of a FE message.',
     0,
     is_fatal=True
 )
+
+
+def configure_metrics(env_args: HitlEnvArgs):
+    # Expect gaps in FE data from LG69T
+    if env_args.HITL_BUILD_TYPE.is_lg69t():
+        metric_no_fe_data_gaps.is_disabled = True
+
+
+MetricController.register_environment_config_customizations(configure_metrics)
 
 # TODO: Figure out way to measure message latency
 
