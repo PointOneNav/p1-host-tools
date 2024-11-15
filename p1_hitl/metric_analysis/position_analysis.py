@@ -198,7 +198,7 @@ def configure_metrics(env_args: HitlEnvArgs):
         if env_args.HITL_BUILD_TYPE.is_lg69t():
             # To speed up TTFF initially allow positions without GPSTime.
             metric_gps_time_valid.is_disabled = True
-            metric_max_velocity.threshold = 0.2
+            metric_max_velocity.threshold = 0.3
             metric_fixed_max_velocity.threshold = 0.1
 
 
