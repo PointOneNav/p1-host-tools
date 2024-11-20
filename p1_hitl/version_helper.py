@@ -9,6 +9,7 @@ DEVICE_TAG_GLOB = {
     DeviceType.ATLAS: 'v?.*',
     DeviceType.LG69T_AM: 'lg69t-am-v?.*',
     DeviceType.LG69T_AP: 'lg69t-ap-v?.*',
+    DeviceType.ZIPLINE: 'zipline-v?.*',
 }
 
 logger = logging.getLogger('point_one.hitl.runner')
