@@ -19,6 +19,9 @@ export JENKINS_RESET_RELAY='6QMBS:1'
 export HITL_BUILD_TYPE="LG69T_AM"
 export HITL_DUT_VERSION=lg69t-am-v0.19.0-rc1-1025-g2630269945
 source /home/jdiamond/polaris_creds.sh
+source /home/jdiamond/regression_creds.sh
+# source /home/jdiamond/slack_creds.sh
+
 
 export PATH="/home/jdiamond/src/usb-relay-hid/commandline/makemake:$PATH"
 

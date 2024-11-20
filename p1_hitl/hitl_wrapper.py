@@ -22,6 +22,7 @@ from p1_hitl.defs import (BUILD_INFO_FILE, CONSOLE_FILE, DEFAULT_LOG_BASE_DIR,
                           HitlEnvArgs, get_args)
 from p1_hitl.hitl_slack_interface import FileEntry, send_slack_message
 from p1_runner.log_manager import LogManager
+from p1_test_automation.regression_interface import report_hitl_result
 
 # TODO: Slack integration.
 
@@ -35,9 +36,38 @@ S3_DEFAULT_INGEST_BUCKET = 'pointone-ingest-landingpad'
 logger = logging.getLogger('point_one.hitl.wrapper')
 
 
+def get_artifact_url(log_base_dir, log_dir: Path) -> str:
+    log_directory = log_dir.relative_to(log_base_dir)
+    return f'https://console.aws.amazon.com/s3/buckets/{S3_DEFAULT_INGEST_BUCKET}/{log_directory}/'
+
+
+def report_success(env_args: HitlEnvArgs, log_base_dir, log_dir: Path) -> bool:
+    # Try to post to regression DB
+    build_info_file = log_dir / BUILD_INFO_FILE
+    if build_info_file.exists():
+        build_info = json.load(open(build_info_file, 'r'))
+        return report_hitl_result(env_args, build_info, artifact=get_artifact_url(log_base_dir, log_dir), success=True)
+    else:
+        logger.error(f'Missing expected "{build_info_file}". Can\'t report results to regression DB.')
+        return False
+
+
 def report_failure(msg: str, env_args: Optional[HitlEnvArgs] = None, log_base_dir=DEFAULT_LOG_BASE_DIR,
                    log_dir: Path = Path()):
     logger.warning(msg)
+
+    # Try to post to regression DB
+    build_info_file = log_dir / BUILD_INFO_FILE
+    if env_args is None:
+        logger.warning(f'Can\'t load HITL arguments. Can\'t report results to regression DB.')
+    elif not build_info_file.exists():
+        logger.warning(f'Missing "{build_info_file}". Can\'t report results to regression DB.')
+    else:
+        try:
+            build_info = json.load(open(build_info_file, 'r'))
+            report_hitl_result(env_args, build_info, artifact=get_artifact_url(log_base_dir, log_dir), success=False)
+        except Exception as e:
+            logger.warning(f'Invalid "{build_info_file}". Can\'t report results to regression DB.')
 
     # Try to post to slack
     channel = os.getenv('HITL_SLACK_CHANNEL')
@@ -72,10 +102,9 @@ Software Version: `{version_str}`
 '''
     files_to_attach = []
     if log_dir:
-        log_directory = log_dir.relative_to(log_base_dir)
         slack_mrkdwn += f'''\
 Console output, configuration, and data uploaded to:
-<https://console.aws.amazon.com/s3/buckets/{S3_DEFAULT_INGEST_BUCKET}/{log_directory}/>
+<{get_artifact_url(log_base_dir, log_dir)}>
 
 See attachments in reply for more details.
 '''
@@ -222,6 +251,9 @@ def main():
                                     sys.exit(1)
                                 else:
                                     logger.info('All tests passed.')
+                                    if not report_success(
+                                            run_env_args, log_base_dir=cli_args.logs_base_dir, log_dir=log_dir):
+                                        sys.exit(1)
     # The exit calls trigger this exception.
     except SystemExit:
         raise
