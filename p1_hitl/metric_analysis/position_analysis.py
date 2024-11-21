@@ -121,8 +121,8 @@ metric_delta_ypr_deg = MaxArrayValueMetric(
 )
 
 metric_fixed_pos_std_enu = MaxArrayValueMetric(
-    'pos_std_enu',
-    'ENU position standard deviations should be less than [2.0, 2.0, 2.0]',
+    'fixed_pos_std_enu',
+    'ENU position standard deviations when fixed should be less than [2.0, 2.0, 2.0]',
     [2.0, 2.0, 2.0],
     is_required=True,
 )
