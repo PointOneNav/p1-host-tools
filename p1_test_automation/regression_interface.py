@@ -1,5 +1,7 @@
+import json
 import logging
 import os
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 import requests
@@ -37,7 +39,7 @@ def report_to_regression_db(data, url: str) -> bool:
 
 
 def get_common_data(env_args: HitlEnvArgs, build_info: Dict[str, str],
-                    artifact: str, success: bool) -> Optional[Dict[str, str | bool]]:
+                    success: bool, artifact: str) -> Optional[Dict[str, str | bool]]:
     git_hash = build_info.get('git_hash')
     if git_hash is None:
         logger.error('No git_hash in build_info.')
@@ -53,16 +55,20 @@ def get_common_data(env_args: HitlEnvArgs, build_info: Dict[str, str],
     }
 
 
-def report_hitl_result(env_args: HitlEnvArgs, build_info: Dict[str, Any], artifact: str, success: bool) -> bool:
-    data = get_common_data(env_args, build_info, artifact, success)
+def report_hitl_result(env_args: HitlEnvArgs,
+                       build_info: Dict[str, Any], success: bool, artifact: str, report: Optional[Path] = None) -> bool:
+    data = get_common_data(env_args, build_info, success, artifact)
     if data is None:
         return False
+
+    if report is not None and report.exists():
+        data['report'] = open(report, 'r').read()
     return report_to_regression_db(data, _HITL_API_URL)
 
 
 def report_drive_result(env_args: HitlEnvArgs,
                         build_info: Dict[str, Any], artifact: str, description: str, success: bool) -> bool:
-    data = get_common_data(env_args, build_info, artifact, success)
+    data = get_common_data(env_args, build_info, success, artifact)
     if data is None:
         return False
     data['description'] = description
@@ -82,7 +88,7 @@ def _main():
         "version": "atlas_v2.2",
         "git_hash": "e406dc4d0396c91805c3d6e8619aa7c969bf3029"
     }
-    report_hitl_result(env_args, build_info, artifact='http://dummy-bucket.com/dummy-log', success=True)
+    report_hitl_result(env_args, build_info, success=True, artifact='http://dummy-bucket.com/dummy-log')
     report_drive_result(
         env_args,
         build_info,
