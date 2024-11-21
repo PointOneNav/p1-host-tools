@@ -20,12 +20,16 @@ class DeviceType(Enum):
     LC29H = auto()
     SEPTENTRIO = auto()
     UBLOX = auto()
+    ZIPLINE = auto()
 
     def is_lg69t(self) -> bool:
         return self in (DeviceType.LG69T_AH, DeviceType.LG69T_AM, DeviceType.LG69T_AP)
 
     def device_uses_unframed_logs(self) -> bool:
         return self.is_lg69t() or self is DeviceType.LC29H
+
+    def is_gnss_only(self) -> bool:
+        return self in (DeviceType.LG69T_AM, DeviceType.ZIPLINE)
 
     @classmethod
     def from_string(cls, name: Optional[str]) -> 'DeviceType':
