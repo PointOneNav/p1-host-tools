@@ -53,5 +53,7 @@ class DeviceType(Enum):
             return DeviceType.LG69T_AM
         elif re.match(r'v\d+\.\d+\.\d+', version_str):
             return DeviceType.ATLAS
+        elif re.match(r'zipline-', version_str):
+            return DeviceType.ZIPLINE
         else:
             return None
