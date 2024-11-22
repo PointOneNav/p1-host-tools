@@ -24,8 +24,6 @@ from p1_hitl.hitl_slack_interface import FileEntry, send_slack_message
 from p1_runner.log_manager import LogManager
 from p1_test_automation.regression_interface import report_hitl_result
 
-# TODO: Slack integration.
-
 # Give the process 40 minutes above the test duration for build and setup.
 BUILD_AND_SETUP_TIMEOUT_SEC = 40 * 60
 KILL_TIMEOUT_SEC = 10
@@ -44,9 +42,11 @@ def get_artifact_url(log_base_dir, log_dir: Path) -> str:
 def report_success(env_args: HitlEnvArgs, log_base_dir, log_dir: Path) -> bool:
     # Try to post to regression DB
     build_info_file = log_dir / BUILD_INFO_FILE
+    report_info_file = log_dir / FULL_REPORT
     if build_info_file.exists():
         build_info = json.load(open(build_info_file, 'r'))
-        return report_hitl_result(env_args, build_info, artifact=get_artifact_url(log_base_dir, log_dir), success=True)
+        return report_hitl_result(env_args, build_info, artifact=get_artifact_url(
+            log_base_dir, log_dir), success=True, report=report_info_file)
     else:
         logger.error(f'Missing expected "{build_info_file}". Can\'t report results to regression DB.')
         return False
@@ -58,6 +58,7 @@ def report_failure(msg: str, env_args: Optional[HitlEnvArgs] = None, log_base_di
 
     # Try to post to regression DB
     build_info_file = log_dir / BUILD_INFO_FILE
+    report_info_file = log_dir / FULL_REPORT
     if env_args is None:
         logger.warning(f'Can\'t load HITL arguments. Can\'t report results to regression DB.')
     elif not build_info_file.exists():
@@ -65,7 +66,8 @@ def report_failure(msg: str, env_args: Optional[HitlEnvArgs] = None, log_base_di
     else:
         try:
             build_info = json.load(open(build_info_file, 'r'))
-            report_hitl_result(env_args, build_info, artifact=get_artifact_url(log_base_dir, log_dir), success=False)
+            report_hitl_result(env_args, build_info, artifact=get_artifact_url(
+                log_base_dir, log_dir), success=False, report=report_info_file)
         except Exception as e:
             logger.warning(f'Invalid "{build_info_file}". Can\'t report results to regression DB.')
 
