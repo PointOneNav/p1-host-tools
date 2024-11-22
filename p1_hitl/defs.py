@@ -119,6 +119,7 @@ class HitlEnvArgs(NamedTuple):
     # Only for test on devices with TCP interfaces.
     JENKINS_ATLAS_LAN_IP: Optional[str] = None
     JENKINS_ATLAS_BALENA_UUID: Optional[str] = None
+    JENKINS_LAN_IP: Optional[str] = None
     # Only for test on devices with UART interfaces.
     JENKINS_UART1: Optional[str] = None
     JENKINS_UART2: Optional[str] = None
