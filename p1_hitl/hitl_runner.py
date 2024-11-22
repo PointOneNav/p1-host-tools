@@ -124,11 +124,7 @@ def main():
                 release_str = env_args.HITL_DUT_VERSION
 
         build_info = get_build_info(release_str, env_args.HITL_BUILD_TYPE)
-        if build_info:
-            logger.info(f'Build found: {build_info}')
-            with open(output_dir / BUILD_INFO_FILE, 'w') as fd:
-                json.dump(build_info, fd)
-        else:
+        if build_info is None:
             if git_commitish is not None:
                 # NOTE: Return error code 10 to indicate that the test was aborted. This will indicate that this run
                 # shouldn't trigger an error report. This is done since Jenkins will sometimes either not trigger the
@@ -146,6 +142,9 @@ def main():
                     f'HITL_DUT_VERSION {release_str} not found in build artifacts. Generate build artifacts, or rerun'
                     ' HITL with corresponding git commit to kick off build.')
                 sys.exit(1)
+        logger.info(f'Build found: {build_info}')
+        with open(output_dir / BUILD_INFO_FILE, 'w') as fd:
+            json.dump(build_info, fd)
 
     ################# Setup device under test #################
         if env_args.HITL_BUILD_TYPE == DeviceType.ATLAS:
