@@ -201,6 +201,10 @@ def configure_metrics(env_args: HitlEnvArgs):
             metric_max_velocity.threshold = 0.3
             metric_fixed_max_velocity.threshold = 0.1
 
+        if not env_args.HITL_BUILD_TYPE.is_gnss_only():
+            # Can't resolve ENU position before yaw is initialized which increases position uncertainty.
+            metric_fixed_pos_std_enu.is_disabled = True
+
 
 MetricController.register_environment_config_customizations(configure_metrics)
 
