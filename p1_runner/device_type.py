@@ -22,8 +22,6 @@ class DeviceType(Enum):
     UBLOX = auto()
     ZIPLINE = auto()
 
-    ZIPLINE = auto()
-
     def is_lg69t(self) -> bool:
         return self in (DeviceType.LG69T_AH, DeviceType.LG69T_AM, DeviceType.LG69T_AP)
 
