@@ -21,6 +21,7 @@ UPLOADED_LOG_LIST_FILE = 'uploaded_device_logs.txt'
 MSG_TIME_LOG_FILENAME = 'msg_times.bin'
 ENV_DUMP_FILE = 'env.json'
 BUILD_INFO_FILE = 'build-info.json'
+EVENT_NOTIFICATION_FILE = 'event_notifications.txt'
 LOG_FILES = [
     FAILURE_REPORT,
     FULL_REPORT,
@@ -28,7 +29,8 @@ LOG_FILES = [
     UPLOADED_LOG_LIST_FILE,
     MSG_TIME_LOG_FILENAME,
     ENV_DUMP_FILE,
-    BUILD_INFO_FILE]
+    BUILD_INFO_FILE,
+    EVENT_NOTIFICATION_FILE]
 
 
 class TestParams(NamedTuple):

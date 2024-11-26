@@ -17,9 +17,9 @@ repo_root = Path(__file__).parents[1].resolve()
 sys.path.append(str(repo_root))
 
 from p1_hitl.defs import (BUILD_INFO_FILE, CONSOLE_FILE, DEFAULT_LOG_BASE_DIR,
-                          ENV_DUMP_FILE, FAILURE_REPORT, FULL_REPORT,
-                          LOG_FILES, PLAYBACK_DIR, UPLOADED_LOG_LIST_FILE,
-                          HitlEnvArgs, get_args)
+                          ENV_DUMP_FILE, EVENT_NOTIFICATION_FILE,
+                          FAILURE_REPORT, FULL_REPORT, LOG_FILES, PLAYBACK_DIR,
+                          UPLOADED_LOG_LIST_FILE, HitlEnvArgs, get_args)
 from p1_hitl.hitl_slack_interface import FileEntry, send_slack_message
 from p1_runner.log_manager import LogManager
 from p1_test_automation.regression_interface import report_hitl_result
@@ -113,6 +113,7 @@ See attachments in reply for more details.
         files_to_check = [
             FileEntry(log_dir / FAILURE_REPORT, "Description of failed metrics"),
             FileEntry(log_dir / CONSOLE_FILE, "HITL Runner Console"),
+            FileEntry(log_dir / EVENT_NOTIFICATION_FILE, "Log of event notifications received."),
             FileEntry(log_dir / FULL_REPORT, "Full report with metric configurations and results"),
             FileEntry(
                 log_dir / UPLOADED_LOG_LIST_FILE,

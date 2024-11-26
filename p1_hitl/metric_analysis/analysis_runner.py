@@ -30,14 +30,18 @@ MAX_SEC_TO_VERSION_MESSAGE = 60
 
 metric_message_host_time_elapsed = MaxElapsedTimeMetric(
     'message_host_time_elapsed',
-    'Max time to first message, and between subsequent messages.',
+    '''Max time to first message, and between subsequent messages.
+A failure indicates FE messages aren't getting from the device under test to the tester at the rate expected.
+This may be because the DUT stopped outputting messages, or had a large delay in its output.
+It is also possible that the test setup had an issue (disconnected cable, bad network, etc.) or that the testing host was trying to service too many devices and fell behind.''',
     TimeSource.HOST,
     max_time_to_first_check_sec=10,
     max_time_between_checks_sec=0.2,
 )
 metric_message_host_time_elapsed_test_stop = MaxElapsedTimeMetric(
     'message_host_time_elapsed_test_stop',
-    'If no messages are received for this duration (before or after first message), stop the test.',
+    '''If no messages are received for this duration (before or after first message), stop the test.
+See message_host_time_elapsed for more details.''',
     TimeSource.HOST,
     max_time_to_first_check_sec=60,
     max_time_between_checks_sec=60,
@@ -45,13 +49,14 @@ metric_message_host_time_elapsed_test_stop = MaxElapsedTimeMetric(
 )
 metric_version_check = AlwaysTrueMetric(
     'version_check',
-    'Check that the version message matches the expected value.',
+    'Check that the version message sent from the device matches the expected value.',
     is_fatal=True
 )
 # This check is disabled for builds like Quectel that mix in non-FE data.
 metric_no_fe_data_gaps = MaxValueMetric(
     'no_fe_data_gaps',
-    'Check that every byte in the data stream is part of a FE message.',
+    '''Checks the number of bytes not wrapped in a valid FE message.
+This will trigger on messages of different protocols, malformed messages, or dropped data.''',
     0,
     is_fatal=True
 )
