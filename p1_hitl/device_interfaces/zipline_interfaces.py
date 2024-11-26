@@ -65,6 +65,7 @@ class HitlZiplineInterface(HitlDeviceInterfaceBase):
         if self.config.tcp_address is None:
             raise KeyError('Config missing TCP address.')
 
+        polaris_api_key = os.getenv('HITL_POLARIS_API_KEY')
 
         pkey = paramiko.Ed25519Key.from_private_key_file(SSH_KEY_PATH)
 
@@ -104,7 +105,7 @@ class HitlZiplineInterface(HitlDeviceInterfaceBase):
         transport = self.ssh_client.get_transport()
         channel = transport.open_session()
         logger.info('Starting engine.')
-        channel.exec_command("./p1_fusion_engine/run_fusion_engine.sh --lg69t-device /dev/zipline-lg69t-diagnostic --device-id hitl --cache ./p1_fusion_engine/cache --tcp-output-port 30200 --tcp-diagnostics-port 30201")
+        channel.exec_command("./p1_fusion_engine/run_fusion_engine.sh --lg69t-device /dev/zipline-lg69t --device-id hitl --cache ./p1_fusion_engine/cache --tcp-output-port 30200 --tcp-diagnostics-port 30201 --corrections-source polaris --polaris {polaris_api_key}")
         # Hack: use sleep command to ensure that bootstrap script kicks off in the background.
         time.sleep(1)
 
