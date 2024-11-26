@@ -864,6 +864,11 @@ def run_tests(env_args: HitlEnvArgs, device_config: DeviceConfig, logger_manager
         interface_name = {DeviceType.ATLAS: 'tcp1'}.get(env_args.HITL_BUILD_TYPE)
         test_set = ["fe_version", "interface_ids", "expected_storage", "msg_rates", "set_config",
                     "set_config_exhaustive", "import_config", "save_config"]
+
+        if interface_name is None:
+            logger.error('Unable to extract interface name.')
+            return False
+
         # TODO: Add Atlas reboot and watchdog support.
         test_config = TestConfig(
             config=ConfigSet(
