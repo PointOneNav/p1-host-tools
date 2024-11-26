@@ -860,31 +860,8 @@ def run_tests(env_args: HitlEnvArgs, device_config: DeviceConfig, logger_manager
                            "set_config_exhaustive", "import_config", "reboot", "watchdog_fault", "save_config"]
                 ),
             ])
-    elif env_args.HITL_BUILD_TYPE.is_zipline():
-        device_config1 = device_config.model_copy()
-        device_config1.name += '_uart1'
-
-        # For Zipline, we are only interested in testing the diagnostic port, which corresponds to UART 2.
-        device_config2 = device_config.model_copy()
-        device_config2.name += '_uart2'
-
-        logger.info('Using port: ')
-        logger.info(device_config2.port)
-
-        test_config = TestConfig(
-            config=ConfigSet(
-                devices=[device_config2]
-            ),
-            tests=[
-                InterfaceTests(
-                    name=device_config2.name,
-                    interface_name='uart2',
-                    tests=["fe_version", "interface_ids", "expected_storage", "msg_rates", "set_config",
-                           "set_config_exhaustive", "import_config", "reboot", "watchdog_fault", "save_config"]
-                ),
-            ])
     else:
-        interface_name = {DeviceType.ATLAS: 'tcp1'}.get(env_args.HITL_BUILD_TYPE)
+        interface_name = {DeviceType.ATLAS: 'tcp1', DeviceType.ZIPLINE: 'tcp3'}.get(env_args.HITL_BUILD_TYPE)
         test_set = ["fe_version", "interface_ids", "expected_storage", "msg_rates", "set_config",
                     "set_config_exhaustive", "import_config", "save_config"]
 
