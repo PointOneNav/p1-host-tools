@@ -424,6 +424,7 @@ class MetricController:
                                 {
                                     'name': name,
                                     'type': type(metric).__name__,
+                                    'description': metric.description,
                                     'context': metric.failure_context
                                 }
                             )
@@ -632,14 +633,14 @@ class MaxElapsedTimeMetric(MetricBase):
                 if elapsed is None:
                     return
                 self._update_failure(elapsed > self.max_time_between_checks_sec,
-                                     f'time between checks: {elapsed} > {self.max_time_between_checks_sec}')
+                                     f'{self.max_time_between_checks_sec}s elapsed between metric check calls.')
         else:
             if self.max_time_to_first_check_sec is not None:
                 elapsed = MetricController._current_time.get_elapsed(MetricController._start_time, self.time_source)
                 if elapsed is None:
                     return
                 self._update_failure(elapsed > self.max_time_to_first_check_sec,
-                                     f'time to first check: {elapsed} > {self.max_time_to_first_check_sec}')
+                                     f'{self.max_time_to_first_check_sec}s elapsed from test start without metric being checked.')
 
 
 class CdfThreshold(NamedTuple):
@@ -680,7 +681,7 @@ class StatsMetric(MetricBase):
     min_values_for_cdf_check: int = 100
 
     # For each threshold count to number of times the value was below the threshold.
-    __below_threshold_counts = {}
+    __below_threshold_counts = {}  # Can't have annotation due to dataclass limitation on private members.
     # Count of total number of times this metric was checked.
     __total_times_checked = 0
 
@@ -725,13 +726,18 @@ class StatsMetric(MetricBase):
             for percentile, threshold in self.max_cdf_thresholds:
                 if threshold in empirical_percentiles:
                     if empirical_percentiles[threshold] < percentile:
-                        failures.append(f'{percentile}th percentile ({empirical_percentiles[threshold]}) > {threshold}')
+                        failures.append(
+                            f'The threshold value {threshold} was measured empirically as the '
+                            f'{empirical_percentiles[threshold]}th percentile. This is less than the target '
+                            f'{percentile}th percentile.')
 
             for percentile, threshold in self.min_cdf_thresholds:
                 if threshold in empirical_percentiles:
                     if empirical_percentiles[threshold] > percentile:
                         failures.append(
-                            f'{percentile}th percentile ({empirical_percentiles[threshold] }) < {threshold}')
+                            f'The threshold value {threshold} was measured empirically as the '
+                            f'{empirical_percentiles[threshold]}th percentile. This is greater than the target '
+                            f'{percentile}th percentile.')
 
             if len(failures) > 0:
                 self._update_failure(True, ','.join(failures))

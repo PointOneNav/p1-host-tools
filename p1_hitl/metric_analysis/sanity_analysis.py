@@ -138,7 +138,8 @@ class SanityAnalyzer(AnalyzerBase):
                     self.last_p1_time = p1_time
 
             if isinstance(payload, EventNotificationMessage):
-                metric_no_error_msgs.check(not is_error_log_event(payload), payload.event_description.decode())
+                metric_no_error_msgs.check(not is_error_log_event(payload),
+                                           f'Error log notification: {payload.event_description.decode()}')
                 if self.event_logger:
                     self.event_logger.log_event(payload)
             elif isinstance(payload, PlatformStorageDataMessage):
