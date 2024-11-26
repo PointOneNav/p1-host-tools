@@ -41,6 +41,7 @@ class HitlZiplineInterface(HitlDeviceInterfaceBase):
         else:
             return DeviceConfig(name=args.HITL_NAME,
                                 tcp_address=args.JENKINS_LAN_IP,
+                                port=30201
                                 )
 
     def __init__(self, config: DeviceConfig, env_args: HitlEnvArgs):

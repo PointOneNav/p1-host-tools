@@ -863,12 +863,10 @@ def run_tests(env_args: HitlEnvArgs, device_config: DeviceConfig, logger_manager
     elif env_args.HITL_BUILD_TYPE.is_zipline():
         device_config1 = device_config.model_copy()
         device_config1.name += '_uart1'
-        device_config1.serial_port = env_args.JENKINS_UART1
 
         # For Zipline, we are only interested in testing the diagnostic port, which corresponds to UART 2.
         device_config2 = device_config.model_copy()
         device_config2.name += '_uart2'
-        device_config2.serial_port = env_args.JENKINS_UART2
 
         test_config = TestConfig(
             config=ConfigSet(
