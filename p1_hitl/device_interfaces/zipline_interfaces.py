@@ -65,31 +65,35 @@ class HitlZiplineInterface(HitlDeviceInterfaceBase):
         if self.config.tcp_address is None:
             raise KeyError('Config missing TCP address.')
 
-        polaris_api_key = os.getenv('HITL_POLARIS_API_KEY')
+        if skip_corrections:
+            polaris_api_key = None
+        else:
+            polaris_api_key = os.getenv('HITL_POLARIS_API_KEY')
 
         pkey = paramiko.Ed25519Key.from_private_key_file(SSH_KEY_PATH)
 
         # Set up SSH automation tool.
         self.ssh_client = paramiko.SSHClient()
         self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        logger.info(self.config.tcp_address)
+        logger.info(f'Attempting to connect to TCP address {self.config.tcp_address}')
         self.ssh_client.connect(self.config.tcp_address, username=SSH_USERNAME, pkey=pkey)
 
-        # TODO: Add check to make sure the connection is successful.
+        # Check for successfull connection.
+        transport = self.ssh_client.get_transport()
+        if transport is None or not transport.is_active():
+            logger.error('Failed to connect to TCP address.')
 
         # Download release from S3.
-        # TODO verify what the AWS path should look like. I'm expecting it to look exactly like: s3://pointone-build-artifacts/nautilus/zipline/v0.2.3/p1_fusion_engine-v0.2.3-zipline.tar.gz
         aws_path = build_info["aws_path"]
         version_str = build_info["version"]
         tar_filename = "p1_fusion_engine-%s-zipline.tar.gz" % (version_str[8:])
-        logger.info(tar_filename)
 
         fd = io.BytesIO()
 
         if not download_file(fd, aws_path, tar_filename):
             logger.error("Failed to download file %s from %s" % (tar_filename, aws_path))
 
-        # For now, save the tar ball locally
+        # Save tar file locally to run engine.
         with open(tar_filename, 'wb') as f:
             f.write(fd.getbuffer())
 
@@ -102,17 +106,16 @@ class HitlZiplineInterface(HitlDeviceInterfaceBase):
         exit_status = _stdout.channel.recv_exit_status()
 
         # Run bootstrap script.
-        transport = self.ssh_client.get_transport()
         channel = transport.open_session()
         logger.info('Starting engine.')
-        channel.exec_command("./p1_fusion_engine/run_fusion_engine.sh --lg69t-device /dev/zipline-lg69t --device-id hitl --cache ./p1_fusion_engine/cache --tcp-output-port 30200 --tcp-diagnostics-port 30201 --corrections-source polaris --polaris {polaris_api_key}")
-        # Hack: use sleep command to ensure that bootstrap script kicks off in the background.
+        channel.exec_command("./p1_fusion_engine/run_fusion_engine.sh --lg69t-device /dev/zipline-lg69t --device-id hitl "
+                             "--cache ./p1_fusion_engine/cache --tcp-output-port 30200 --tcp-diagnostics-port 30201 "
+                             "--corrections-source polaris --polaris {polaris_api_key}")
+        # TODO: This is a hack to ensure that the bootstrap script kicks off in the background before continuing.
         time.sleep(1)
 
         # Need to set up a DeviceInterface object that can be used to connect to the Pi.
         data_source = open_data_source(self.config)
-        logger.info("DATA SOURCE: ")
-        logger.info(data_source)
         self.device_interface = DeviceInterface(data_source)
         return self.device_interface
 
