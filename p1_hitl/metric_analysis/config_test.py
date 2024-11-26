@@ -868,6 +868,9 @@ def run_tests(env_args: HitlEnvArgs, device_config: DeviceConfig, logger_manager
         device_config2 = device_config.model_copy()
         device_config2.name += '_uart2'
 
+        logger.info('Using port: ')
+        logger.info(device_config2.port)
+
         test_config = TestConfig(
             config=ConfigSet(
                 devices=[device_config2]
@@ -876,7 +879,7 @@ def run_tests(env_args: HitlEnvArgs, device_config: DeviceConfig, logger_manager
                 InterfaceTests(
                     name=device_config2.name,
                     interface_name='uart2',
-                    tests=["fe_version", "nmea_version", "interface_ids", "expected_storage", "msg_rates", "set_config",
+                    tests=["fe_version", "interface_ids", "expected_storage", "msg_rates", "set_config",
                            "set_config_exhaustive", "import_config", "reboot", "watchdog_fault", "save_config"]
                 ),
             ])

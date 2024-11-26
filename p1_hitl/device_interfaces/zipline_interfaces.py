@@ -103,7 +103,8 @@ class HitlZiplineInterface(HitlDeviceInterfaceBase):
         # Run bootstrap script.
         transport = self.ssh_client.get_transport()
         channel = transport.open_session()
-        channel.exec_command("./p1_fusion_engine/run_fusion_engine.sh --lg69t-device /dev/zipline-lg69t --device-id hitl --cache ./p1_fusion_engine/cache --tcp-output-port 30200 --tcp-diagnostics-port 30201")
+        logger.info('Starting engine.')
+        channel.exec_command("./p1_fusion_engine/run_fusion_engine.sh --lg69t-device /dev/zipline-lg69t-diagnostic --device-id hitl --cache ./p1_fusion_engine/cache --tcp-output-port 30200 --tcp-diagnostics-port 30201")
         # Hack: use sleep command to ensure that bootstrap script kicks off in the background.
         time.sleep(1)
 
