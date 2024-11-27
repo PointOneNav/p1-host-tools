@@ -117,7 +117,7 @@ def get_calibration_stage(data: bytes) -> CalibrationStage:
 
 
 def ConfigCheck(interface_name: str, metric_name: str, description: str, passed: bool, context: Optional[str] = None):
-    name = metric_name + '-' + interface_name
+    name = metric_name + '_' + interface_name
     # If this is the first reference to this metric, create it.
     if name not in MetricController._metrics:
         metric = AlwaysTrueMetric(name, description, is_fatal=True)
@@ -142,7 +142,7 @@ def test_fe_version(state: TestState) -> None:
     logger.debug("Requesting FE version.")
     args = Namespace()
     resp = query_fe_version(state.device_interface, args)
-    metric_name = 'fe_version_check_' + state.interface_name
+    metric_name = 'fe_version_check'
     metric_description = 'Send a version FE command and check the response.'
     ConfigCheck(state.interface_name, metric_name, metric_description, True)
     if not isinstance(resp, VersionInfoMessage):
@@ -165,7 +165,7 @@ def test_nmea_version(state: TestState) -> None:
     @brief Tests that the NMEA version request message is working.
     """
     logger.debug("Requesting NMEA version.")
-    metric_name = 'nmea_version_check_' + state.interface_name
+    metric_name = 'nmea_version_check'
     metric_description = 'Send a version FE command and check for a response.'
     args = Namespace()
     nmea_resp: Optional[List[str]] = query_nmea_versions(state.device_interface, args)
@@ -201,7 +201,7 @@ def test_expected_storage(state: TestState) -> None:
     """
     active_config_path = state.test_logger.get_abs_file_path('active_config.p1nvm')
 
-    metric_name = 'expected_storage_' + state.interface_name
+    metric_name = 'expected_storage'
     metric_description = 'Read and validate device storage.'
     ConfigCheck(state.interface_name, metric_name, metric_description, True)
 
@@ -274,7 +274,7 @@ def test_msg_rates(state: TestState) -> None:
              be left with these modifications until it is power cycled or reset with
              `./bin/config_tool.py save -r`.
     """
-    metric_name = 'msg_rates_config_' + state.interface_name
+    metric_name = 'msg_rates_config'
     metric_description = 'Checks if getting/setting message rates works as expected.'
     ConfigCheck(state.interface_name, metric_name, metric_description, True)
     try:
@@ -417,12 +417,11 @@ def test_set_config(state: TestState, test_save=False, use_import=False) -> None
     """
     export_path = state.test_logger.get_abs_file_path('config_test.p1nvm')
 
-    metric_name = 'set_config_'
+    metric_name = 'set_config'
     if test_save:
-        metric_name += 'saved_'
+        metric_name += '_saved'
     if use_import:
-        metric_name += 'imports_'
-    metric_name += state.interface_name
+        metric_name += '_imports'
     metric_description = 'Checks if changing config works as expected.'
     ConfigCheck(state.interface_name, metric_name, metric_description, True)
 
@@ -563,7 +562,7 @@ def test_set_config(state: TestState, test_save=False, use_import=False) -> None
 
 
 def test_set_config_exhaustive(state: TestState) -> None:
-    metric_name = 'set_config_exhaustive_' + state.interface_name
+    metric_name = 'set_config_exhaustive'
     metric_description = 'Checks changing several different config settings.'
     ConfigCheck(state.interface_name, metric_name, metric_description, True)
 
@@ -651,7 +650,7 @@ def test_reboot(state: TestState) -> None:
     """!
     @brief Tests whether rebooting the processor works as expected.
     """
-    metric_name = 'reboot_' + state.interface_name
+    metric_name = 'reboot'
     metric_description = 'Tests whether rebooting the processor works as expected.'
     if not request_reset(state.device_interface, Namespace(type=["reboot"])):
         ConfigCheck(state.interface_name, metric_name, metric_description, False, f"Reboot request failed.")
@@ -669,7 +668,7 @@ def test_factory_reset(state: TestState) -> None:
     """!
     @brief Tests whether factory resetting the device works as expected.
     """
-    metric_name = 'factory_reset_' + state.interface_name
+    metric_name = 'factory_reset'
     metric_description = 'Tests whether factory resetting the device works as expected.'
 
     # Export storage
@@ -744,7 +743,7 @@ def test_watchdog_fault(state: TestState) -> None:
     """!
     @brief Tests that the device performs a watchdog reset after a fatal fault.
     """
-    metric_name = 'watchdog_fault_' + state.interface_name
+    metric_name = 'watchdog_fault'
     metric_description = 'Tests that the device performs a watchdog reset after a fatal fault.'
     # Enable the watchdog incase it's disabled.
     args = Namespace(param=f'watchdog_enabled', enabled=True, save=False, include_disabled=True)
