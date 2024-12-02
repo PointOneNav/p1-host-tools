@@ -35,6 +35,8 @@ internal_only_requirements = [
     "pydantic>=2.9.1",
     "jenkinsapi>=0.3.13",
     "slack_sdk>=3.33.1",
+    "paramiko>=3.5.0",
+    "scp>=0.15.0",
 ]
 
 all_requirements = requirements + dev_requirements + internal_only_requirements
