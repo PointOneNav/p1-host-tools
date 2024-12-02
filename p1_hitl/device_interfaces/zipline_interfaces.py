@@ -13,12 +13,8 @@ from bin.config_tool import apply_config, request_shutdown, save_config
 from p1_hitl.defs import UPLOADED_LOG_LIST_FILE, HitlEnvArgs
 from p1_hitl.get_build_artifacts import download_file
 from p1_runner.device_interface import DeviceInterface
-from p1_test_automation.atlas_device_ctrl import (CrashLogAction,
-                                                  get_log_status,
-                                                  restart_application,
-                                                  set_crash_log_action,
-                                                  upload_log)
-from p1_test_automation.devices_config import (BalenaConfig, DeviceConfig,
+
+from p1_test_automation.devices_config import (DeviceConfig,
                                                open_data_source)
 
 from .base_interfaces import HitlDeviceInterfaceBase
@@ -128,18 +124,5 @@ class HitlZiplineInterface(HitlDeviceInterfaceBase):
         namespace_args.type = 'log'
         request_shutdown(self.device_interface, namespace_args)
         self.device_interface.data_source.stop()
-
-        # Upload new device logs after failures.
-        if not tests_passed:
-            log_status = get_log_status(self.config.tcp_address)
-            if log_status is None:
-                logger.error('Error querying logs.')
-                return
-            with open(output_dir / UPLOADED_LOG_LIST_FILE, 'w') as fd:
-                for log in log_status['logs']:
-                    if log['guid'] not in self.old_log_guids:
-                        upload_log(self.config.tcp_address, log['guid'])
-                        logger.warning(f'Uploading device log: {log["guid"]}')
-                        fd.write(f'{log["guid"]}\n')
 
         self.ssh_client.close()
