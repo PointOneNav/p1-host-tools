@@ -42,7 +42,7 @@ metric_p1_time_valid = AlwaysTrueMetric(
 
 metric_pose_host_time_elapsed = MaxElapsedTimeMetric(
     'pose_host_time_elapsed',
-    'Max host time to first message, and between subsequent messages.',
+    'Max host time to first pose message, and between subsequent messages.',
     TimeSource.HOST,
     max_time_to_first_check_sec=10,
     # Ideally, this should be specified for each device. I'm going to set this
@@ -69,7 +69,7 @@ metric_gps_time_valid = AlwaysTrueMetric(
 
 metric_fixed_max_velocity = MaxValueMetric(
     'fixed_max_velocity',
-    'Velocity when fixed (mps) should be near 0.',
+    'Velocity (mps) when fixed should be near 0.',
     0.01,
     is_required=True,
     is_logged=True,

@@ -1,7 +1,6 @@
 
 
 import logging
-import struct
 from typing import Optional
 
 from fusion_engine_client.messages import (DataType, EventNotificationMessage,
@@ -13,12 +12,15 @@ from fusion_engine_client.messages import (DataType, EventNotificationMessage,
                                            Timestamp)
 from fusion_engine_client.parsers.decoder import MessageWithBytesTuple
 
-from p1_hitl.defs import DeviceType, HitlEnvArgs
-from p1_hitl.metric_analysis.metrics import (CdfThreshold, EqualValueMetric,
+from p1_hitl.defs import EVENT_NOTIFICATION_FILE, DeviceType, HitlEnvArgs
+from p1_hitl.metric_analysis.metrics import (AlwaysTrueMetric, CdfThreshold,
+                                             EqualValueMetric,
                                              MaxElapsedTimeMetric,
                                              MaxValueMetric, MetricController,
                                              MinValueMetric, StatsMetric,
                                              TimeSource)
+from p1_runner.event_notification_logger import (EventNotificationLogger,
+                                                 is_error_log_event)
 
 from .base_analysis import AnalyzerBase
 
@@ -26,19 +28,20 @@ logger = logging.getLogger('point_one.hitl.analysis.sanity')
 
 metric_seq_num_gap = EqualValueMetric(
     'seq_num_check',
-    'Each FE sequence number should go up by one.',
+    '''Each FE sequence number should go up by one.
+A different value may indicate a gap in the data or a problem generating messages on the device under test.''',
     1,
 )
 
-metric_error_msg_count = EqualValueMetric(
-    'error_msg_count',
-    'Number of error notification messages received.',
-    0,
+metric_no_error_msgs = AlwaysTrueMetric(
+    'no_error_msgs',
+    '''No error event notifications should be received.
+See event_notifications.txt for all notifications from run.''',
 )
 
 metric_monotonic_p1time = MinValueMetric(
     'monotonic_p1time',
-    'Check P1Time goes forward (mostly) monotonically.',
+    'Check P1Time goes forward (mostly) monotonically. A large backwards jump can indicate that the device reset.',
     -0.1,
 )
 
@@ -104,9 +107,9 @@ class SanityAnalyzer(AnalyzerBase):
     def __init__(self) -> None:
         self.last_seq_num: Optional[int] = None
         self.last_p1_time: Optional[Timestamp] = None
-        self.error_count = 0
         self.rtos_task_name_map: dict[str, int] = {}
-        self.env_args = None
+        self.env_args: Optional[HitlEnvArgs] = None
+        self.event_logger: Optional[EventNotificationLogger] = None
 
     def configure(self, env_args: HitlEnvArgs):
         self.env_args = env_args
@@ -120,6 +123,11 @@ class SanityAnalyzer(AnalyzerBase):
         self.last_seq_num = header.sequence_number
 
         if isinstance(payload, MessagePayload):
+            # Mark as checked since we may not get any event notifications.
+            metric_no_error_msgs.was_checked = True
+            if self.event_logger is None and MetricController._log_dir is not None:
+                self.event_logger = EventNotificationLogger(MetricController._log_dir / EVENT_NOTIFICATION_FILE)
+
             # We want to ignore p1_time from ProfileSystemStatusMessage since it just uses the last measurement it
             # received which may be in the past.
             if not isinstance(payload, ProfileSystemStatusMessage):
@@ -130,11 +138,10 @@ class SanityAnalyzer(AnalyzerBase):
                     self.last_p1_time = p1_time
 
             if isinstance(payload, EventNotificationMessage):
-                # Convert the unsigned event_flags to a signed value.
-                signed_flag = struct.unpack('q', struct.pack('Q', payload.event_flags))[0]
-                if signed_flag < 0:
-                    self.error_count += 1
-                    logger.info(f'Error EventNotification: {payload}')
+                metric_no_error_msgs.check(not is_error_log_event(payload),
+                                           f'Error log notification: {payload.event_description.decode()}')
+                if self.event_logger:
+                    self.event_logger.log_event(payload)
             elif isinstance(payload, PlatformStorageDataMessage):
                 if payload.data_type == DataType.CALIBRATION_STATE:
                     metric_calibration_received.check()
@@ -152,7 +159,7 @@ class SanityAnalyzer(AnalyzerBase):
                     if len(self.rtos_task_name_map) > 0:
                         idle_task_idx = self.rtos_task_name_map[_RTOS_IDLE_TASK_NAME]
                         metric_cpu_usage.check(100.0 - payload.task_entries[idle_task_idx].cpu_usage)
-                    if self.env_args.HITL_BUILD_TYPE.is_lg69t:
+                    if self.env_args.HITL_BUILD_TYPE.is_lg69t():
                         total_memory = 64 * 1024
                     else:
                         raise NotImplementedError(f'Total memory not known for {self.env_args.HITL_BUILD_TYPE}.')
@@ -162,6 +169,3 @@ class SanityAnalyzer(AnalyzerBase):
             elif isinstance(payload, ProfileSystemStatusMessage):
                 metric_cpu_usage.check(payload.total_cpu_usage)
                 metric_mem_usage.check(payload.used_memory_bytes)
-
-        # Check the error count here so it doesn't report this metric as skipped if no notifications occur.
-        metric_error_msg_count.check(self.error_count)
