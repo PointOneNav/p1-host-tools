@@ -41,7 +41,6 @@ class HitlZiplineInterface(HitlDeviceInterfaceBase):
                                 )
 
     def __init__(self, config: DeviceConfig, env_args: HitlEnvArgs):
-        self.old_log_guids = set()
         self.config = config
         self.device_interface: Optional[DeviceInterface] = None
         self.ssh_client = None
@@ -78,6 +77,7 @@ class HitlZiplineInterface(HitlDeviceInterfaceBase):
         transport = self.ssh_client.get_transport()
         if transport is None or not transport.is_active():
             logger.error('Failed to connect to TCP address.')
+            return None
 
         # Download release from S3.
         aws_path = build_info["aws_path"]
@@ -88,6 +88,7 @@ class HitlZiplineInterface(HitlDeviceInterfaceBase):
 
         if not download_file(fd, aws_path, tar_filename):
             logger.error("Failed to download file %s from %s" % (tar_filename, aws_path))
+            return None
 
         # Save tar file locally to run engine.
         with open(tar_filename, 'wb') as f:
@@ -113,6 +114,10 @@ class HitlZiplineInterface(HitlDeviceInterfaceBase):
 
         # Need to set up a DeviceInterface object that can be used to connect to the Pi.
         data_source = open_data_source(self.config)
+        if data_source is None:
+            logger.error('Failed to open data source.')
+            return None
+
         self.device_interface = DeviceInterface(data_source)
         return self.device_interface
 
@@ -123,7 +128,10 @@ class HitlZiplineInterface(HitlDeviceInterfaceBase):
 
         namespace_args = Namespace()
         namespace_args.type = 'log'
-        request_shutdown(self.device_interface, namespace_args)
-        self.device_interface.data_source.stop()
 
-        self.ssh_client.close()
+        if self.device_interface is not None:
+            request_shutdown(self.device_interface, namespace_args)
+            self.device_interface.data_source.stop()
+
+        if self.ssh_client is not None:
+            self.ssh_client.close()
