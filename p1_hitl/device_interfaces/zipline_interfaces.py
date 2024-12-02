@@ -19,10 +19,9 @@ from p1_test_automation.devices_config import (DeviceConfig,
 
 from .base_interfaces import HitlDeviceInterfaceBase
 
-UPDATE_TIMEOUT_SEC = 60 * 20
-UPDATE_POLL_INTERVAL_SEC = 10
-UPDATE_WAIT_TIME_SEC = 60
-RESTART_WAIT_TIME_SEC = 30
+RESTART_WAIT_TIME_SEC = 1
+OUTPUT_PORT =  30200
+DIAGNOSTIC_PORT = 30201
 
 SSH_USERNAME = "pointone"
 SSH_KEY_PATH = "/home/pointone/.ssh/id_ed25519"
@@ -35,9 +34,10 @@ class HitlZiplineInterface(HitlDeviceInterfaceBase):
         if not args.check_fields(['JENKINS_LAN_IP']):
             return None
         else:
+            # Interface is TCP3, which is configured as the diagnostic port.
             return DeviceConfig(name=args.HITL_NAME,
                                 tcp_address=args.JENKINS_LAN_IP,
-                                port=30201
+                                port=DIAGNOSTIC_PORT
                                 )
 
     def __init__(self, config: DeviceConfig, env_args: HitlEnvArgs):
@@ -104,11 +104,12 @@ class HitlZiplineInterface(HitlDeviceInterfaceBase):
         # Run bootstrap script.
         channel = transport.open_session()
         logger.info('Starting engine.')
-        channel.exec_command("./p1_fusion_engine/run_fusion_engine.sh --lg69t-device /dev/zipline-lg69t --device-id hitl "
-                             "--cache ./p1_fusion_engine/cache --tcp-output-port 30200 --tcp-diagnostics-port 30201 "
-                             "--corrections-source polaris --polaris {polaris_api_key}")
-        # TODO: This is a hack to ensure that the bootstrap script kicks off in the background before continuing.
-        time.sleep(1)
+        channel.exec_command(f"""
+./p1_fusion_engine/run_fusion_engine.sh --lg69t-device /dev/zipline-lg69t \
+--device-id hitl --cache ./p1_fusion_engine/cache --tcp-output-port {OUTPUT_PORT} \
+--tcp-diagnostics-port {DIAGNOSTIC_PORT} --corrections-source polaris --polaris {polaris_api_key}""")
+        # Manually wait to ensure that the bootstrap script kicks off in the background before continuing.
+        time.sleep(RESTART_WAIT_TIME_SEC)
 
         # Need to set up a DeviceInterface object that can be used to connect to the Pi.
         data_source = open_data_source(self.config)
