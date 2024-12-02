@@ -151,7 +151,7 @@ def main():
             hitl_device_interface_cls = HitlAtlasInterface
         elif env_args.HITL_BUILD_TYPE.is_lg69t():
             hitl_device_interface_cls = HitlLG69TInterface
-        elif env_args.HITL_BUILD_TYPE.is_zipline():
+        elif env_args.HITL_BUILD_TYPE == DeviceType.ZIPLINE:
             hitl_device_interface_cls = HitlZiplineInterface
         else:
             raise NotImplementedError('Need to handle other build types.')
