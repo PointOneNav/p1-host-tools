@@ -28,8 +28,8 @@ boto3>=1.34
 pydantic>=2.9.1
 jenkinsapi>=0.3.13
 slack_sdk>=3.33.1
-paramiko
-scp
+paramiko>=3.5.0
+scp>=0.15.0
 
 # For linting
 autopep8~=2.3.1
