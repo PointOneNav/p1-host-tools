@@ -19,9 +19,10 @@ BUILD_JOB_MAP = {
     DeviceType.LG69T_AP: "quectel-build",
 }
 
+# NOTE: Specifying "ins", or "gnss" doesn't appear to work correctly for the LG69T release job.
 QUECTEL_BUILD_TYPE_MAP = {
-    DeviceType.LG69T_AM: "gnss",
-    DeviceType.LG69T_AP: "ins",
+    DeviceType.LG69T_AM: "all",
+    DeviceType.LG69T_AP: "all",
 }
 
 NUM_OLD_BUILDS_TO_CHECK = 10
