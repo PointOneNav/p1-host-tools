@@ -90,12 +90,9 @@ class HitlZiplineInterface(HitlDeviceInterfaceBase):
             logger.error("Failed to download file %s from %s" % (tar_filename, aws_path))
             return None
 
-        # Save tar file locally to run engine.
-        with open(tar_filename, 'wb') as f:
-            f.write(fd.getbuffer())
-
+        fd.seek(0)
         scp = SCPClient(self.ssh_client.get_transport())
-        scp.put(tar_filename, f'/home/pointone/{tar_filename}')
+        scp.putfo(fd, f'/home/pointone/{tar_filename}')
 
         # Unzip the tar file.
         _stdin, _stdout, _stderr = self.ssh_client.exec_command(f"tar -xzf {tar_filename}")
