@@ -8,7 +8,7 @@ import time
 import traceback
 from pathlib import Path
 from tempfile import gettempdir
-from typing import Optional
+from typing import Any, Optional
 
 # isort: split
 
@@ -16,6 +16,7 @@ from typing import Optional
 repo_root = Path(__file__).parents[1].resolve()
 sys.path.append(str(repo_root))
 
+from p1_hitl import hitl_failure_slack_whitelist
 from p1_hitl.defs import (BUILD_INFO_FILE, CONSOLE_FILE, DEFAULT_LOG_BASE_DIR,
                           ENV_DUMP_FILE, EVENT_NOTIFICATION_FILE,
                           FAILURE_REPORT, FULL_REPORT, LOG_FILES, PLAYBACK_DIR,
@@ -53,7 +54,7 @@ def report_success(env_args: HitlEnvArgs, log_base_dir, log_dir: Path) -> bool:
 
 
 def report_failure(msg: str, env_args: Optional[HitlEnvArgs] = None, log_base_dir=DEFAULT_LOG_BASE_DIR,
-                   log_dir: Path = Path()):
+                   log_dir: Path = Path(), skip_slack_upload=False):
     logger.warning(msg)
 
     # Try to post to regression DB
@@ -70,6 +71,14 @@ def report_failure(msg: str, env_args: Optional[HitlEnvArgs] = None, log_base_di
                 log_base_dir, log_dir), success=False, report=report_info_file)
         except Exception as e:
             logger.warning(f'Invalid "{build_info_file}". Can\'t report results to regression DB.')
+
+    # Check if this argument set is whitelisted and should skip reporting failures to slack.
+    if env_args:
+        skip_slack_upload = skip_slack_upload or hitl_failure_slack_whitelist.should_configuration_be_ignored(env_args)
+
+    if skip_slack_upload:
+        logger.warning('Failures whitelisted, skipping slack message.')
+        return
 
     # Try to post to slack
     channel = os.getenv('HITL_SLACK_CHANNEL')
@@ -243,14 +252,22 @@ def main():
                                 if failure_path.exists():
                                     with open(failure_path) as fd:
                                         failures = json.load(fd)
-                                    failed_tests = ['* ' + f['name'] for f in failures]
+                                    failed_tests = []
+                                    skip_slack_upload = True
+                                    for failure in failures:
+                                        if hitl_failure_slack_whitelist.should_failure_be_ignored(env_args, failure):
+                                            failed_tests.append(f'* [WHITE LISTED] {failure["name"]}')
+                                        else:
+                                            skip_slack_upload = False
+                                            failed_tests.append(f'* {failure["name"]}')
                                     failed_tests_str = '\n'.join(failed_tests)
                                     report_failure(
                                         f'Test metric failures detected:\n{failed_tests_str}\n'
                                         f'See attached `{FAILURE_REPORT}` in reply for details.',
                                         env_args=run_env_args,
                                         log_base_dir=cli_args.logs_base_dir,
-                                        log_dir=log_dir)
+                                        log_dir=log_dir,
+                                        skip_slack_upload=skip_slack_upload)
                                     sys.exit(1)
                                 else:
                                     logger.info('All tests passed.')
