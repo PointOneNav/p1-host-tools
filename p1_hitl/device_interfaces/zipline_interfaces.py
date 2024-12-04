@@ -79,6 +79,9 @@ class HitlZiplineInterface(HitlDeviceInterfaceBase):
             logger.error('Failed to connect to TCP address.')
             return None
 
+        # Clear all files from previous runs.
+        self.ssh_client.exec_command("rm -rf p1_fusion_engine*")
+
         # Download release from S3.
         aws_path = build_info["aws_path"]
         version_str = build_info["version"]
