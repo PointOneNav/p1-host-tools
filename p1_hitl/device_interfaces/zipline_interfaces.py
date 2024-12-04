@@ -71,7 +71,11 @@ class HitlZiplineInterface(HitlDeviceInterfaceBase):
         self.ssh_client = paramiko.SSHClient()
         self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         logger.info(f'Attempting to connect to TCP address {self.config.tcp_address}')
-        self.ssh_client.connect(self.config.tcp_address, username=SSH_USERNAME, pkey=pkey)
+        try:
+            self.ssh_client.connect(self.config.tcp_address, username=SSH_USERNAME, pkey=pkey)
+        except Exception as e:
+            logger.error("Failed to connect to TCP address %s: %s" % (self.config.tcp_address, str(e)))
+            return None
 
         # Check for successfull connection.
         transport = self.ssh_client.get_transport()
