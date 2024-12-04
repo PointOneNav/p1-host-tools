@@ -4,6 +4,7 @@ import os
 import time
 from argparse import Namespace
 from pathlib import Path
+import psutil
 from scp import SCPClient
 from typing import Any, Dict, Optional
 
@@ -115,6 +116,17 @@ class HitlZiplineInterface(HitlDeviceInterfaceBase):
 --tcp-diagnostics-port {DIAGNOSTIC_PORT} --corrections-source polaris --polaris {polaris_api_key}""")
         # Manually wait to ensure that the bootstrap script kicks off in the background before continuing.
         time.sleep(RESTART_WAIT_TIME_SEC)
+
+        # Verify that process is running.
+        try:
+            _, stdout, _ = self.ssh_client.exec_command(f"netstat -anp | grep LISTEN | grep :{DIAGNOSTIC_PORT}")
+            output = stdout.read().decode()
+            if output == "":
+                logger.error('Failed to start Fusion Engine process')
+                return None
+        except Exception as e:
+            logger.error('Failed to verify whether Fusion Engine process is running.')
+            return None
 
         # Need to set up a DeviceInterface object that can be used to connect to the Pi.
         data_source = open_data_source(self.config)
