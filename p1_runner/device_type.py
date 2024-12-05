@@ -31,6 +31,14 @@ class DeviceType(Enum):
     def is_gnss_only(self) -> bool:
         return self in (DeviceType.LG69T_AM, DeviceType.ZIPLINE)
 
+    def mapping_device_to_regex(self) -> dict['DeviceType', str]:
+        return {
+            DeviceType.ATLAS: 'v\d+\.\d+\.\d+',
+            DeviceType.LG69T_AM: 'lg69t-am-v?.*',
+            DeviceType.LG69T_AP: 'lg69t-ap-?.*',
+            DeviceType.ZIPLINE: 'zipline-v?.*',
+        }
+
     @classmethod
     def from_string(cls, name: Optional[str]) -> 'DeviceType':
         if name is not None:
@@ -43,12 +51,10 @@ class DeviceType(Enum):
 
     @classmethod
     def get_build_type_from_version(cls, version_str) -> Optional['DeviceType']:
-        # Determine path to the auto-generated config loading code on S3.
-        if re.match(r'lg69t-am-', version_str):
-            return DeviceType.LG69T_AM
-        elif re.match(r'v\d+\.\d+\.\d+', version_str):
-            return DeviceType.ATLAS
-        elif re.match(r'zipline-', version_str):
-            return DeviceType.ZIPLINE
-        else:
-            return None
+        mapping = DeviceType.mapping_device_to_regex(cls)
+        for key, val in mapping.items():
+            r = fr'{val}'
+            if re.match(r, version_str):
+                return key
+
+        return None
