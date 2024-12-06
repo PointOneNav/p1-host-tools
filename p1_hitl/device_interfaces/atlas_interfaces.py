@@ -29,12 +29,12 @@ logger = logging.getLogger('point_one.hitl.atlas_interface')
 class HitlAtlasInterface(HitlDeviceInterfaceBase):
     @staticmethod
     def get_device_config(args: HitlEnvArgs) -> Optional[DeviceConfig]:
-        if not args.check_fields(['JENKINS_ATLAS_LAN_IP', 'JENKINS_ATLAS_BALENA_UUID']):
+        if not args.check_fields(['JENKINS_LAN_IP', 'JENKINS_ATLAS_BALENA_UUID']):
             return None
         else:
             balena_uuid: str = args.JENKINS_ATLAS_BALENA_UUID  # type: ignore # Already did None check.
             return DeviceConfig(name=args.HITL_NAME,
-                                tcp_address=args.JENKINS_ATLAS_LAN_IP,
+                                tcp_address=args.JENKINS_LAN_IP,
                                 balena=BalenaConfig(uuid=balena_uuid),
                                 )
 

@@ -861,9 +861,14 @@ def run_tests(env_args: HitlEnvArgs, device_config: DeviceConfig, logger_manager
                 ),
             ])
     else:
-        interface_name = {DeviceType.ATLAS: 'tcp1'}.get(env_args.HITL_BUILD_TYPE)
+        interface_name = {DeviceType.ATLAS: 'tcp1', DeviceType.ZIPLINE: 'tcp3'}.get(env_args.HITL_BUILD_TYPE)
         test_set = ["fe_version", "interface_ids", "expected_storage", "msg_rates", "set_config",
                     "set_config_exhaustive", "import_config", "save_config"]
+
+        if interface_name is None:
+            logger.error(f'No config test interface defined for {env_args.HITL_BUILD_TYPE}.')
+            return False
+
         # TODO: Add Atlas reboot and watchdog support.
         test_config = TestConfig(
             config=ConfigSet(

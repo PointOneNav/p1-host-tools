@@ -32,6 +32,15 @@ class DeviceType(Enum):
         return self in (DeviceType.LG69T_AM, DeviceType.ZIPLINE)
 
     @classmethod
+    def mapping_device_to_regex(cls) -> dict['DeviceType', str]:
+        return {
+            DeviceType.ATLAS: 'v[0-9]*.*',
+            DeviceType.LG69T_AM: 'lg69t-am-v[0-9]*.*',
+            DeviceType.LG69T_AP: 'lg69t-ap-v[0-9]*.*',
+            DeviceType.ZIPLINE: 'zipline-v[0-9]*.*',
+        }
+
+    @classmethod
     def from_string(cls, name: Optional[str]) -> 'DeviceType':
         if name is not None:
             try:
@@ -43,10 +52,10 @@ class DeviceType(Enum):
 
     @classmethod
     def get_build_type_from_version(cls, version_str) -> Optional['DeviceType']:
-        # Determine path to the auto-generated config loading code on S3.
-        if re.match(r'lg69t-am-', version_str):
-            return DeviceType.LG69T_AM
-        elif re.match(r'v\d+\.\d+\.\d+', version_str):
-            return DeviceType.ATLAS
-        else:
-            return None
+        mapping = cls.mapping_device_to_regex()
+        for key, val in mapping.items():
+            r = fr'{val}'
+            if re.match(r, version_str):
+                return key
+
+        return None

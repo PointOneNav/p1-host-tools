@@ -16,7 +16,7 @@ sys.path.append(str(repo_root))
 from p1_hitl.defs import (BUILD_INFO_FILE, CONSOLE_FILE, ENV_DUMP_FILE,
                           FULL_REPORT, LOG_FILES, PLAYBACK_DIR, DeviceType,
                           HitlEnvArgs, TestType, get_args)
-from p1_hitl.device_interfaces import HitlAtlasInterface, HitlLG69TInterface
+from p1_hitl.device_interfaces import HitlAtlasInterface, HitlLG69TInterface, HitlZiplineInterface
 from p1_hitl.get_build_artifacts import get_build_info
 from p1_hitl.git_cmds import GitWrapper
 from p1_hitl.jenkins_ctrl import run_build
@@ -151,6 +151,8 @@ def main():
             hitl_device_interface_cls = HitlAtlasInterface
         elif env_args.HITL_BUILD_TYPE.is_lg69t():
             hitl_device_interface_cls = HitlLG69TInterface
+        elif env_args.HITL_BUILD_TYPE == DeviceType.ZIPLINE:
+            hitl_device_interface_cls = HitlZiplineInterface
         else:
             raise NotImplementedError('Need to handle other build types.')
 
