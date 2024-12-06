@@ -15,10 +15,7 @@ logger = logging.getLogger('point_one.hitl.failure_whitelist')
 
 
 def should_configuration_be_ignored(env_args: HitlEnvArgs) -> bool:
-    if env_args.HITL_BUILD_TYPE is DeviceType.AMAZON:
-        logger.warning('Slack ignores Amazon failures during HITL development.')
-        return True
-
+    # As of now, no device failures are whitelisted.
     return False
 
 
