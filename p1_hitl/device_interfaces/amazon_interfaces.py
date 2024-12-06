@@ -4,19 +4,17 @@ import os
 import time
 from argparse import Namespace
 from pathlib import Path
-import psutil
-from scp import SCPClient
 from typing import Any, Dict, Optional
 
 import paramiko
+import psutil
+from scp import SCPClient
 
 from bin.config_tool import apply_config, request_shutdown, save_config
 from p1_hitl.defs import UPLOADED_LOG_LIST_FILE, HitlEnvArgs
 from p1_hitl.get_build_artifacts import download_file
 from p1_runner.device_interface import DeviceInterface
-
-from p1_test_automation.devices_config import (DeviceConfig,
-                                               open_data_source)
+from p1_test_automation.devices_config import DeviceConfig, open_data_source
 
 from .base_interfaces import HitlDeviceInterfaceBase
 
@@ -27,6 +25,7 @@ SSH_USERNAME = "pointone"
 SSH_KEY_PATH = "/home/pointone/.ssh/id_ed25519"
 
 logger = logging.getLogger('point_one.hitl.amazon_interface')
+
 
 class HitlAmazonInterface(HitlDeviceInterfaceBase):
     @staticmethod
@@ -128,7 +127,6 @@ class HitlAmazonInterface(HitlDeviceInterfaceBase):
 
         self.device_interface = DeviceInterface(data_source)
         return self.device_interface
-
 
     def shutdown_device(self, tests_passed: bool, output_dir: Path) -> Optional[DeviceInterface]:
         if self.config.tcp_address is None or self.device_interface is None:
