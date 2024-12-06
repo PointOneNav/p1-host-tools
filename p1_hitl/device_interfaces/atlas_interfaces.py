@@ -102,7 +102,6 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
                     time.sleep(UPDATE_POLL_INTERVAL_SEC)
 
         if not skip_reset:
-            # NOTE: This triggers a reboot which marks the start of the run.
             logger.info('Sending factory reset.')
             if not factory_reset(self.config.tcp_address, reset_networking=True):
                 logger.error('Factory reset failed.')
