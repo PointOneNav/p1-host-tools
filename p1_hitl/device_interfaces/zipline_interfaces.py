@@ -117,15 +117,9 @@ class HitlZiplineInterface(HitlDeviceInterfaceBase):
         # Manually wait to ensure that the bootstrap script kicks off in the background before continuing.
         time.sleep(RESTART_WAIT_TIME_SEC)
 
-        # Verify that process is running.
-        try:
-            _, stdout, _ = self.ssh_client.exec_command(f"netstat -anp | grep LISTEN | grep :{DIAGNOSTIC_PORT}")
-            output = stdout.read().decode()
-            if output == "":
-                logger.error('Failed to start Fusion Engine process')
-                return None
-        except Exception as e:
-            logger.error('Failed to verify whether Fusion Engine process is running.')
+        # See if bootstrap script exited early.
+        if channel.exit_status_ready():
+            logger.error('Fusion engine process exited prematurely.')
             return None
 
         # Need to set up a DeviceInterface object that can be used to connect to the Pi.
