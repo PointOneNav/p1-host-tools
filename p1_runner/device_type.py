@@ -31,12 +31,13 @@ class DeviceType(Enum):
     def is_gnss_only(self) -> bool:
         return self in (DeviceType.LG69T_AM, DeviceType.ZIPLINE)
 
-    def mapping_device_to_regex(self) -> dict['DeviceType', str]:
+    @classmethod
+    def mapping_device_to_regex(cls) -> dict['DeviceType', str]:
         return {
-            DeviceType.ATLAS: 'v\d+\.\d+\.\d+',
-            DeviceType.LG69T_AM: 'lg69t-am-v?.*',
-            DeviceType.LG69T_AP: 'lg69t-ap-?.*',
-            DeviceType.ZIPLINE: 'zipline-v?.*',
+            DeviceType.ATLAS: 'v[0-9]*.*',
+            DeviceType.LG69T_AM: 'lg69t-am-v[0-9]*.*',
+            DeviceType.LG69T_AP: 'lg69t-ap-v[0-9]*.*',
+            DeviceType.ZIPLINE: 'zipline-v[0-9]*.*',
         }
 
     @classmethod
@@ -51,7 +52,7 @@ class DeviceType(Enum):
 
     @classmethod
     def get_build_type_from_version(cls, version_str) -> Optional['DeviceType']:
-        mapping = DeviceType.mapping_device_to_regex(cls)
+        mapping = cls.mapping_device_to_regex()
         for key, val in mapping.items():
             r = fr'{val}'
             if re.match(r, version_str):
