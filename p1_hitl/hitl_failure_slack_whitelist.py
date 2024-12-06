@@ -15,8 +15,8 @@ logger = logging.getLogger('point_one.hitl.failure_whitelist')
 
 
 def should_configuration_be_ignored(env_args: HitlEnvArgs) -> bool:
-    if env_args.HITL_BUILD_TYPE is DeviceType.ZIPLINE:
-        logger.warning('Slack ignores Zipline failures during HITL development.')
+    if env_args.HITL_BUILD_TYPE is DeviceType.AMAZON:
+        logger.warning('Slack ignores Amazon failures during HITL development.')
         return True
 
     return False
