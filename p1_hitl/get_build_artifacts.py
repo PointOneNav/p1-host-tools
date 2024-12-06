@@ -23,7 +23,7 @@ def get_s3_path(version_str: str, build_type: DeviceType) -> str:
     elif build_type is DeviceType.ZIPLINE:
         return f'nautilus/zipline/{version_str[8:]}'
     elif build_type is DeviceType.AMAZON:
-        return f'nautilus/amazon/{version_str[19:]}'
+        return f'nautilus/amazon-fleetedge-1/{version_str[19:]}'
     else:
         raise RuntimeError(f'Remote path not known for specified device type ({build_type.name}).')
 
