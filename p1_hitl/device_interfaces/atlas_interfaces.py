@@ -4,11 +4,12 @@ from argparse import Namespace
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from bin.config_tool import apply_config, request_shutdown, save_config
+from bin.config_tool import request_shutdown
 from p1_hitl.defs import UPLOADED_LOG_LIST_FILE, HitlEnvArgs
 from p1_runner.device_interface import DeviceInterface
 from p1_test_automation.atlas_device_ctrl import (AtlasBalenaController,
                                                   CrashLogAction,
+                                                  factory_reset,
                                                   get_log_status,
                                                   restart_application,
                                                   set_crash_log_action,
@@ -23,6 +24,8 @@ UPDATE_POLL_INTERVAL_SEC = 10
 UPDATE_WAIT_TIME_SEC = 60
 RESTART_WAIT_TIME_SEC = 30
 
+DIAGNOSTIC_PORT = 30202
+
 logger = logging.getLogger('point_one.hitl.atlas_interface')
 
 
@@ -35,11 +38,12 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
             balena_uuid: str = args.JENKINS_ATLAS_BALENA_UUID  # type: ignore # Already did None check.
             return DeviceConfig(name=args.HITL_NAME,
                                 tcp_address=args.JENKINS_LAN_IP,
+                                port=DIAGNOSTIC_PORT,
                                 balena=BalenaConfig(uuid=balena_uuid),
                                 )
 
     def __init__(self, config: DeviceConfig, env_args: HitlEnvArgs):
-        self.old_log_guids = set()
+        self.old_log_guids: set[str] = set()
         self.config = config
         self.device_interface: Optional[DeviceInterface] = None
 
@@ -58,7 +62,6 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
 
         # TODO: Disable corrections if needed.
 
-        # TODO: Add factory reset logic.
         logger.info(f'Initializing Atlas.')
 
         if self.config.balena is None:
@@ -86,38 +89,28 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
             start_time = time.monotonic()
             while True:
                 if time.monotonic() > start_time + UPDATE_TIMEOUT_SEC:
-                    logger.error(f'Atlas {balena_status.name} update timed out after {UPDATE_TIMEOUT_SEC} seconds.')
+                    logger.error(f'Atlas {status.name} update timed out after {UPDATE_TIMEOUT_SEC} seconds.')
                     return None
-                balena_status = balena_ctrl.get_status(self.config.balena.uuid)
+                status = balena_ctrl.get_status(self.config.balena.uuid)
 
-                if target_release == balena_status.current_release:
-                    logger.info(f'{balena_status.name} finished updating.')
+                if target_release == status.current_release:
+                    logger.info(f'{status.name} finished updating.')
                     # Sleep to give updated software a chance to get up and running.
                     time.sleep(UPDATE_WAIT_TIME_SEC)
                     break
                 else:
                     time.sleep(UPDATE_POLL_INTERVAL_SEC)
 
-        data_source = open_data_source(self.config)
-        if data_source is None:
-            logger.error(f"Can't open Atlas TCP interface: {self.config.tcp_address}.")
-            return None
+        if not skip_reset:
+            # NOTE: This triggers a reboot which marks the start of the run.
+            logger.info('Sending factory reset.')
+            if not factory_reset(self.config.tcp_address, reset_networking=True):
+                logger.error('Factory reset failed.')
+                return None
+
+            time.sleep(RESTART_WAIT_TIME_SEC)
 
         set_crash_log_action(self.config.tcp_address, CrashLogAction.FULL_LOG)  # type: ignore
-
-        device_interface = DeviceInterface(data_source)
-        logger.info('Clearing FE settings.')
-        args = Namespace(revert_to_saved=False, revert_to_defaults=True)
-        if not save_config(device_interface, args):
-            logger.error('Clearing FE settings failed.')
-            return None
-
-        logger.info('Enabling diagnostics')
-        args = Namespace(interface_config_type='diagnostics_enabled', param='current', enabled=True, save=True)
-        if not apply_config(device_interface, args):
-            logger.error('Enabling diagnostics failed.')
-            return None
-        data_source.stop()
 
         log_status = get_log_status(self.config.tcp_address)  # type: ignore
         if log_status is None:

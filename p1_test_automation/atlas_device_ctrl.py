@@ -260,6 +260,30 @@ def restart_application(tcp_address, log_on_startup=False) -> bool:
     return True
 
 
+def factory_reset(tcp_address, reset_networking=True) -> bool:
+    """!
+    @brief Clear all state back to initial defaults over the Nemo REST API.
+
+    @param tcp_address host address of device to set.
+    @param reset_networking whether to clear networking settings along with other state.
+
+    @return `true` on success and `false` on failure.
+    """
+    logger.info(f"Factory reset. Include networking: {reset_networking}.")
+    url = f"http://{tcp_address}/api/v1/device/factory_reset"
+    data = {'reset_networking': reset_networking}
+
+    try:
+        # This command can take awhile.
+        r = requests.post(url, json=data, timeout=TIMEOUT_SEC * 2)
+        r.raise_for_status()
+    except Exception as e:
+        logger.error(f"factory_reset exception {e}.")
+        return False
+
+    return True
+
+
 class BalenaRelease(NamedTuple):
     id: int
     commit: str
