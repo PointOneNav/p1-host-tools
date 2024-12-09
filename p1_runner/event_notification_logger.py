@@ -1,6 +1,7 @@
 import struct
 
-from fusion_engine_client.messages import EventNotificationMessage, EventType
+from fusion_engine_client.messages import (EventNotificationMessage, EventType,
+                                           MessageHeader)
 
 LOG_LEVEL_FLAGS = {
     -3: 'FATAL',
@@ -26,13 +27,26 @@ def get_log_level_str(event: EventNotificationMessage) -> str:
     return f'{LOG_LEVEL_FLAGS[flag_idx]}({signed_flag})'
 
 
+def get_event_str(event: EventNotificationMessage) -> str:
+    event_str = f'{event.get_system_time_sec():.1f}: {event.event_type.name}'
+    if event.event_type == EventType.LOG:
+        event_str += f'_{get_log_level_str(event)} - {event.event_description.decode(errors="backslashreplace")}'
+    elif event.event_type == EventType.COMMAND:
+        try:
+            header = MessageHeader()
+            header.unpack(event.event_description)
+            event_str += f' - {header.get_type_string()}'
+        except Exception:
+            event_str += f' - Invalid cmd "{event.event_description.decode(errors="backslashreplace")}"'
+    else:
+        event_str += f' - {event.event_description.decode(errors="backslashreplace")}'
+
+    return event_str
+
+
 class EventNotificationLogger:
     def __init__(self, out_path) -> None:
         self.out_fd = open(out_path, 'w')
 
     def log_event(self, event: EventNotificationMessage):
-        LOG_LEVEL = ''
-        if event.event_type == EventType.LOG:
-            LOG_LEVEL = '_' + get_log_level_str(event)
-        self.out_fd.write(
-            f'{event.get_system_time_sec():.1f}: {event.event_type.name}{LOG_LEVEL} - {event.event_description.decode()}\n')
+        self.out_fd.write(get_event_str(event) + '\n')
