@@ -38,7 +38,7 @@ def should_failure_be_ignored(env_args: HitlEnvArgs, failure: dict[str, Any]) ->
         if failure['name'] == 'no_error_msgs' and 'Unable to allocate ImuMeasurement' in failure['context']:
             logger.warning(msg_start + '"Unable to allocate ImuMeasurement" event.')
             return True
-        elif failure['name'] == 'monotonic_p1time' and float(failure['context'] < 0.5):
+        elif failure['name'] == 'monotonic_p1time' and float(failure['context']) < 0.5:
             logger.warning(msg_start + 'monotonic_p1time')
             return True
         elif failure['name'] in ignored_metrics:
