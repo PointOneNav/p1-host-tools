@@ -128,5 +128,11 @@ venv.bak/
 .dmypy.json
 dmypy.json
 
+# PyCharm settings
+.idea/
+
 # Pyre type checker
 .pyre/
+
+# Point One firmware files
+*.p1fw
