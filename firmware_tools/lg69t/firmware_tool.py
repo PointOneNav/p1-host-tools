@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-from typing import Optional, Union
-
 import argparse
 import json
 import logging
@@ -15,6 +13,7 @@ import urllib.error
 import urllib.request
 import zlib
 from enum import Enum, auto
+from typing import Optional, Union
 from zipfile import ZipFile
 
 from fusion_engine_client.messages import *

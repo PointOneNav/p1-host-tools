@@ -20,6 +20,7 @@ from p1_hitl.metric_analysis.metrics import (AlwaysTrueMetric, CdfThreshold,
                                              MinValueMetric, StatsMetric,
                                              TimeSource)
 from p1_runner.event_notification_logger import (EventNotificationLogger,
+                                                 get_event_str,
                                                  is_error_log_event)
 
 from .base_analysis import AnalyzerBase
@@ -139,7 +140,7 @@ class SanityAnalyzer(AnalyzerBase):
 
             if isinstance(payload, EventNotificationMessage):
                 metric_no_error_msgs.check(not is_error_log_event(payload),
-                                           f'Error log notification: {payload.event_description.decode()}')
+                                           f'Error log notification: ' + get_event_str(payload))
                 if self.event_logger:
                     self.event_logger.log_event(payload)
             elif isinstance(payload, PlatformStorageDataMessage):
