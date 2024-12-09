@@ -21,6 +21,7 @@ class DeviceType(Enum):
     SEPTENTRIO = auto()
     UBLOX = auto()
     ZIPLINE = auto()
+    AMAZON = auto()
 
     def is_lg69t(self) -> bool:
         return self in (DeviceType.LG69T_AH, DeviceType.LG69T_AM, DeviceType.LG69T_AP)
@@ -38,6 +39,7 @@ class DeviceType(Enum):
             DeviceType.LG69T_AM: 'lg69t-am-v[0-9]*.*',
             DeviceType.LG69T_AP: 'lg69t-ap-v[0-9]*.*',
             DeviceType.ZIPLINE: 'zipline-v[0-9]*.*',
+            DeviceType.AMAZON: 'amazon-fleetedge-1-v[0-9]*.*',
         }
 
     @classmethod

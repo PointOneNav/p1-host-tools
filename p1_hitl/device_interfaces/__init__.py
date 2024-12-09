@@ -3,3 +3,4 @@ from p1_hitl.device_interfaces.atlas_interfaces import HitlAtlasInterface
 from p1_hitl.device_interfaces.base_interfaces import HitlDeviceInterfaceBase
 from p1_hitl.device_interfaces.lg69t_interfaces import HitlLG69TInterface
 from p1_hitl.device_interfaces.zipline_interfaces import HitlZiplineInterface
+from p1_hitl.device_interfaces.amazon_interfaces import HitlAmazonInterface

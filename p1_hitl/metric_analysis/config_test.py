@@ -861,7 +861,7 @@ def run_tests(env_args: HitlEnvArgs, device_config: DeviceConfig, logger_manager
                 ),
             ])
     else:
-        interface_name = {DeviceType.ATLAS: 'tcp1', DeviceType.ZIPLINE: 'tcp3'}.get(env_args.HITL_BUILD_TYPE)
+        interface_name = {DeviceType.ATLAS: 'tcp1', DeviceType.ZIPLINE: 'tcp3', DeviceType.AMAZON: 'tcp3'}.get(env_args.HITL_BUILD_TYPE)
         test_set = ["fe_version", "interface_ids", "expected_storage", "msg_rates", "set_config",
                     "set_config_exhaustive", "import_config", "save_config"]
 

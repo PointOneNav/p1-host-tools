@@ -18,6 +18,7 @@ BUILD_JOB_MAP = {
     DeviceType.LG69T_AM: "quectel-build",
     DeviceType.LG69T_AP: "quectel-build",
     DeviceType.ZIPLINE: "zipline-build",
+    DeviceType.AMAZON: "amazon-fe1-build",
 }
 
 # NOTE: Specifying "ins", or "gnss" doesn't appear to work correctly for the LG69T release job.
