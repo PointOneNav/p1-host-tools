@@ -24,7 +24,8 @@ from p1_test_automation.relay_controller import RelayController
 
 from .base_interfaces import HitlDeviceInterfaceBase
 
-RESTART_WAIT_TIME_SEC = 15
+UPDATE_WAIT_TIME_SEC = 15
+RESTART_TIMEOUT_SEC = 10
 NTRIP_POSITION_UPDATE_INTERVAL = 60
 NTRIP_CONNECTION_TIMEOUT = 2
 
@@ -85,7 +86,7 @@ class HitlLG69TInterface(HitlDeviceInterfaceBase):
     def __init__(self, config: DeviceConfig, env_args: HitlEnvArgs):
         self.config = config
         self.device_interface: Optional[DeviceInterface] = None
-        self.corrections_client = None
+        self.corrections_client: Optional[NTRIPClient] = None
         self.reference_position_lla = env_args.JENKINS_ANTENNA_LOCATION
         self.position_updater = NTRIPPositionUpdater()
 
@@ -136,52 +137,42 @@ class HitlLG69TInterface(HitlDeviceInterfaceBase):
                 port=self.config.serial_port,
                 reboot_cmd=lambda: _reboot_cmd(self.config.reset_relay),  # type: ignore
             )
-            # Sysexits on failure
+            # SysExits on failure
             applied_update = run_update(args)
             if applied_update:
-                time.sleep(RESTART_WAIT_TIME_SEC)
+                time.sleep(UPDATE_WAIT_TIME_SEC)
 
         data_source = open_data_source(self.config)
         if data_source is None:
             logger.error(f"Can't open Quectel serial interface.")
             return None
-
-        device_interface = DeviceInterface(data_source)
-        logger.info('Clearing FE settings.')
-        args = Namespace(revert_to_saved=False, revert_to_defaults=True)
-        if not save_config(device_interface, args):
-            logger.error('Clearing FE settings failed.')
-            return None
-
-        logger.info('Enabling diagnostics')
-        args = Namespace(interface_config_type='diagnostics_enabled', param='current', enabled=True, save=True)
-        if not apply_config(device_interface, args):
-            logger.error('Enabling diagnostics failed.')
-            return None
+        self.device_interface = DeviceInterface(data_source)
 
         if not skip_reset:
-            logger.info('Restarting Quectel with diagnostic reset')
-            args = Namespace(type=['diag'])
-            if not request_reset(device_interface, args):
-                logger.error('Reset failed.')
+            # NOTE: This triggers a reboot which marks the start of the run.
+            logger.info('Sending factory reset.')
+            args = Namespace(type=['factory'])
+            if not request_reset(self.device_interface, args):
+                logger.error('Factory reset failed.')
                 return None
-            # Sleep to give restarted software a chance to get up and running.
-            time.sleep(RESTART_WAIT_TIME_SEC)
-
-        self.device_interface = device_interface
+            # Wait for reboot to finish. Prints error on failure.
+            if not self.device_interface.wait_for_reboot(RESTART_TIMEOUT_SEC):
+                return None
 
         if not skip_corrections:
             def _on_corrections(self: HitlLG69TInterface, data: bytes):
                 if self.device_interface is not None:
                     self.device_interface.data_source.write(data)
 
-            self.corrections_client = NTRIPClient(url=CORRECTIONS_URL, mountpoint=MOUNT_POINT, username=username, password=password,
-                                                  data_callback=lambda data: _on_corrections(self, data), version=NRIP_VERSION)
+            self.corrections_client = NTRIPClient(url=CORRECTIONS_URL, mountpoint=MOUNT_POINT, username=username,
+                                                  password=password,
+                                                  data_callback=lambda data: _on_corrections(self, data),
+                                                  version=NRIP_VERSION)
             self.corrections_client.start()
             assert self.reference_position_lla is not None
             self.position_updater.start(self.corrections_client, self.reference_position_lla)
 
-        return device_interface
+        return self.device_interface
 
     def shutdown_device(self, tests_passed: bool, output_dir: Path):
         self.position_updater.stop_and_join()

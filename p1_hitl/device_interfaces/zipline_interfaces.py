@@ -4,30 +4,29 @@ import os
 import time
 from argparse import Namespace
 from pathlib import Path
-import psutil
-from scp import SCPClient
 from typing import Any, Dict, Optional
 
 import paramiko
+import psutil
+from scp import SCPClient
 
 from bin.config_tool import apply_config, request_shutdown, save_config
 from p1_hitl.defs import UPLOADED_LOG_LIST_FILE, HitlEnvArgs
 from p1_hitl.get_build_artifacts import download_file
 from p1_runner.device_interface import DeviceInterface
-
-from p1_test_automation.devices_config import (DeviceConfig,
-                                               open_data_source)
+from p1_test_automation.devices_config import DeviceConfig, open_data_source
 
 from .base_interfaces import HitlDeviceInterfaceBase
 
 RESTART_WAIT_TIME_SEC = 1
-OUTPUT_PORT =  30200
+OUTPUT_PORT = 30200
 DIAGNOSTIC_PORT = 30201
 
 SSH_USERNAME = "pointone"
 SSH_KEY_PATH = "/home/pointone/.ssh/id_ed25519"
 
 logger = logging.getLogger('point_one.hitl.zipline_interface')
+
 
 class HitlZiplineInterface(HitlDeviceInterfaceBase):
     @staticmethod
@@ -85,6 +84,7 @@ class HitlZiplineInterface(HitlDeviceInterfaceBase):
             return None
 
         # Clear all files from previous runs.
+        # This should affectively "cold start" the runner.
         self.ssh_client.exec_command("rm -rf p1_fusion_engine*")
 
         # Download release from S3.
@@ -130,7 +130,6 @@ class HitlZiplineInterface(HitlDeviceInterfaceBase):
 
         self.device_interface = DeviceInterface(data_source)
         return self.device_interface
-
 
     def shutdown_device(self, tests_passed: bool, output_dir: Path) -> Optional[DeviceInterface]:
         if self.config.tcp_address is None or self.device_interface is None:

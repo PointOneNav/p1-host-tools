@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from p1_hitl.defs import HitlEnvArgs
@@ -22,5 +23,5 @@ class HitlDeviceInterfaceBase(ABC):
         ...
 
     @abstractmethod
-    def shutdown_device(self, tests_passed: bool) -> Optional[DeviceInterface]:
+    def shutdown_device(self, tests_passed: bool, output_dir: Path) -> Optional[DeviceInterface]:
         ...
