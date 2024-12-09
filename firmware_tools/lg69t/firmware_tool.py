@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+from typing import Optional, Union
+
 import argparse
 import json
 import logging
@@ -204,7 +206,7 @@ class UpgradeType(Enum):
     GNSS = auto()
 
 
-def run_reboot_command(reboot_cmd: Optional[str | ResetFunction]):
+def run_reboot_command(reboot_cmd: Optional[Union[str, ResetFunction]]):
     if isinstance(reboot_cmd, str):
         subprocess.run(reboot_cmd, shell=True)
     elif reboot_cmd is not None:
@@ -212,7 +214,8 @@ def run_reboot_command(reboot_cmd: Optional[str | ResetFunction]):
 
 
 def Upgrade(ser: Serial, bin_file: typing.BinaryIO, upgrade_type: UpgradeType, should_send_reboot: bool,
-            wait_for_reboot: bool = False, show_progress: bool = True, reboot_cmd: Optional[str | ResetFunction] = None):
+            wait_for_reboot: bool = False, show_progress: bool = True,
+            reboot_cmd: Optional[Union[str, ResetFunction]] = None):
     class_id = {
         UpgradeType.APP: CLASS_APP,
         UpgradeType.GNSS: CLASS_GNSS,
