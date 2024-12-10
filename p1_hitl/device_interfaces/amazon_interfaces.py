@@ -110,7 +110,7 @@ class HitlAmazonInterface(HitlDeviceInterfaceBase):
         logger.info('Starting engine.')
         channel.exec_command(f"""
 ./p1_fusion_engine/run_fusion_engine.sh --device /dev/amazon-pgm:460800 \
---cache-dir ./p1_fusion_engine/cache --params-path ./fusion_engine_parameters.sh""")
+--params-path ./fusion_engine_parameters.sh""")
         # Manually wait to ensure that the bootstrap script kicks off in the background before continuing.
         time.sleep(RESTART_WAIT_TIME_SEC)
 
