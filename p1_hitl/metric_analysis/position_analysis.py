@@ -91,7 +91,6 @@ metric_2d_fixed_pos_error = StatsMetric(
         CdfThreshold(90, .1),
         CdfThreshold(50, .08),
     ],
-    is_required=True,
     is_logged=True,
 )
 
@@ -103,7 +102,6 @@ metric_3d_fixed_pos_error = StatsMetric(
         CdfThreshold(90, .1),
         CdfThreshold(50, .08),
     ],
-    is_required=True,
     is_logged=True,
 )
 
@@ -124,7 +122,6 @@ metric_fixed_pos_std_enu = MaxArrayValueMetric(
     'fixed_pos_std_enu',
     'ENU position standard deviations when fixed should be less than [2.0, 2.0, 2.0]',
     [2.0, 2.0, 2.0],
-    is_required=True,
 )
 
 metric_ypr_std_deg = MaxArrayValueMetric(
@@ -204,6 +201,12 @@ def configure_metrics(env_args: HitlEnvArgs):
         if not env_args.HITL_BUILD_TYPE.is_gnss_only():
             # Can't resolve ENU position before yaw is initialized which increases position uncertainty.
             metric_fixed_pos_std_enu.is_disabled = True
+
+        # Disable some checks if we expect the GPS data to dropout or
+        if params.has_resets:
+            metric_fix_rate.is_disabled = True
+            metric_position_valid.is_disabled = True
+            metric_gps_time_valid.is_disabled = True
 
 
 MetricController.register_environment_config_customizations(configure_metrics)

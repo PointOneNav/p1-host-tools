@@ -199,6 +199,7 @@ def main():
                 tests_completed = run_analysis(
                     device_interface,
                     env_args,
+                    output_dir,
                     release_str)
         if tests_completed:
             MetricController.finalize()

@@ -10,6 +10,7 @@ from fusion_engine_client.messages import (MessageHeader, VersionInfoMessage,
 from fusion_engine_client.parsers import fast_indexer
 
 from p1_hitl.defs import HitlEnvArgs
+from p1_hitl.device_interfaces.scenario_controller import ScenarioController
 from p1_hitl.metric_analysis.metrics import (AlwaysTrueMetric,
                                              FatalMetricException,
                                              MaxElapsedTimeMetric,
@@ -84,7 +85,7 @@ def _setup_analysis(env_args: HitlEnvArgs) -> List[AnalyzerBase]:
     return analyzers
 
 
-def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs,
+def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs, log_dir: Path,
                  release_str: str) -> bool:
     try:
         params = env_args.get_selected_test_type().get_test_params()
@@ -92,6 +93,7 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs,
             metric_version_check.is_disabled = True
 
         analyzers = _setup_analysis(env_args)
+        scenario_controller = ScenarioController(env_args, log_dir, device_interface=interface)
         start_time = time.monotonic()
         logger.info(f'Monitoring device for {params.duration_sec} sec.')
         msg_count = 0
@@ -106,6 +108,11 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs,
                 logger.error(f'Exception collecting FusionEngine messages from device {exception_to_str(e)}')
                 return False
             MetricController.update_host_time()
+
+            events = scenario_controller.update_controller()
+            for event in events:
+                for analyzer in analyzers:
+                    analyzer.on_event(event)
 
             for msg in msgs:
                 msg_count += 1
@@ -206,6 +213,8 @@ def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs) -> bool:
 
     try:
         analyzers = _setup_analysis(env_args)
+        log_dir = playback_path.parent
+        scenario_controller = ScenarioController(env_args, log_dir)
 
         # Don't check the metrics from this file. These are primarily data integrity checks.
         for metric in MetricController.get_metrics_in_this_file():
@@ -213,6 +222,12 @@ def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs) -> bool:
 
         for msg in _fast_decoder(playback_path):
             MetricController.update_device_time(msg)
+
+            events = scenario_controller.update_controller()
+            for event in events:
+                for analyzer in analyzers:
+                    analyzer.on_event(event)
+
             for analyzer in analyzers:
                 analyzer.update(msg)
                 pass
