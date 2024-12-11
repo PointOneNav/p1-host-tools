@@ -14,7 +14,9 @@ class P1BinType(IntEnum):
     RTCM3_POLARIS = 0x21
     SBF = 0x40
     EXTERNAL_UNFRAMED_GNSS = 0x42
+    POLARIS_EPHEM = 0x77
     ATLAS_SBF = 0xa1
+    FUSION_ENGINE_MESSAGE = 0xc6
 
 
 class P1BinRecord(NamedTuple):
