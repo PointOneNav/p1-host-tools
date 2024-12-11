@@ -90,7 +90,8 @@ class HitlZiplineInterface(HitlDeviceInterfaceBase):
         # Download release from S3.
         aws_path = build_info["aws_path"]
         version_str = build_info["version"]
-        tar_filename = "p1_fusion_engine-%s-zipline.tar.gz" % (version_str[8:])
+        version_prefix = "zipline-"
+        tar_filename = "p1_fusion_engine-%s-zipline.tar.gz" % (version_str[len(version_prefix):])
 
         fd = io.BytesIO()
 
