@@ -10,11 +10,11 @@ _logger = logging.getLogger('point_one.p1bin_type')
 
 class P1BinType(IntEnum):
     INVALID = 0xFFFF
-    DEBUG = 0x01,
+    DEBUG = 0x01
     RTCM3_POLARIS = 0x21
-    M_TYPE_SBF = 0x40
+    SBF = 0x40
     EXTERNAL_UNFRAMED_GNSS = 0x42
-    M_TYPE_ATLAS_SBF = 0xa1
+    ATLAS_SBF = 0xa1
 
 
 class P1BinRecord(NamedTuple):
