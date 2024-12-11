@@ -62,17 +62,17 @@ def main():
     if cli_args.playback_log:
         # Find playback file
         try:
-            playback_file = find_log_file(
+            playback_file = Path(find_log_file(
                 cli_args.playback_log,
                 log_base_dir=cli_args.logs_base_dir,
                 candidate_files=[
                     'input.raw',
-                    'input.p1bin'])
+                    'input.p1bin']))
         except FileNotFoundError as e:
             logger.error(f'Playback log {cli_args.playback_log} found.')
             sys.exit(1)
         # Directory to store output files
-        output_dir = Path(playback_file).parent / PLAYBACK_DIR
+        output_dir = playback_file.parent / PLAYBACK_DIR
         os.makedirs(output_dir, exist_ok=True)
         # Clear any previous contents
         for file in os.listdir(output_dir):

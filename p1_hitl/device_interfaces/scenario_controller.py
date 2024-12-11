@@ -3,15 +3,16 @@ import logging
 import time
 from abc import ABC, abstractmethod
 from copy import deepcopy
+from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
-from typing import List, NamedTuple, Optional, TextIO
+from typing import List, NamedTuple, Optional
 
 from fusion_engine_client.messages import ResetRequest
 
 from p1_hitl.defs import TEST_EVENT_FILE, HitlEnvArgs, TestType
-from p1_hitl.metric_analysis.metrics import (MetricController, TimeSource,
-                                             Timestamp, custom_json)
+from p1_hitl.metric_analysis.metrics import (MetricController, Timestamp,
+                                             custom_json)
 from p1_runner.device_interface import DeviceInterface
 
 logger = logging.getLogger('point_one.hitl.scenario_controller')
@@ -27,7 +28,8 @@ class ResetType(Enum):
     COLD = auto()
 
 
-class EventEntry(NamedTuple):
+@dataclass(frozen=True)
+class EventEntry:
     timestamp: Timestamp
     event_type: EventType
     description: str
@@ -146,6 +148,7 @@ class ScenarioController:
                     event_time = self.playback_events[0].timestamp.p1_time
                     if event_time is None or event_time < current_p1_time:
                         break
+                    logger.info('Playing back event: ' + str(self.playback_events[0]))
 
                     events.append(self.playback_events.pop(0))
             return events

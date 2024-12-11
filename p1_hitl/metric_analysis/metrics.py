@@ -42,8 +42,8 @@ import struct
 import time
 from collections.abc import Callable
 from copy import deepcopy
-from dataclasses import asdict, dataclass, field
-from enum import IntEnum, auto
+from dataclasses import asdict, dataclass, field, is_dataclass
+from enum import Enum, IntEnum, auto
 from pathlib import Path
 from typing import (Any, BinaryIO, ClassVar, Dict, Iterable, List, NamedTuple,
                     Optional)
@@ -67,8 +67,10 @@ _METRIC_LOG_FORMAT = '<Id'
 
 
 def custom_json(obj):
-    if isinstance(obj, Timestamp):
-        return {'host_time': obj.host_time, 'p1_time': obj.p1_time, 'system_time': obj.system_time}
+    if isinstance(obj, Enum):
+        return obj.name
+    if is_dataclass(obj) and not isinstance(obj, type):
+        return asdict(obj)
     else:
         return str(obj)
 
