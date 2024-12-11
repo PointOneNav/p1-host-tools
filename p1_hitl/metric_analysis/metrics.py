@@ -614,6 +614,8 @@ class MaxElapsedTimeMetric(MetricBase):
 
     # Timestamp when this metric was last checked. `None` if never checked.
     __last_time = None
+    # Whether check was called after the metric timed out. Used to track what context to add.
+    __checked_after_failure = False
 
     def check(self) -> Optional[float]:
         elapsed = None
@@ -623,6 +625,14 @@ class MaxElapsedTimeMetric(MetricBase):
                 return None
             # Failures are updated in _time_elapsed() function.
             self._update_status(elapsed, False)
+            if self.failure_context is not None and not self.__checked_after_failure:
+                self.failure_context += f' Next checked after {elapsed:0.2f}s.'
+                self.__checked_after_failure = True
+        else:
+            if self.failure_context is not None and not self.__checked_after_failure:
+                elapsed = MetricController._current_time.get_elapsed(MetricController._start_time, self.time_source)
+                self.failure_context += f' First checked after {elapsed:0.2f}s.'
+                self.__checked_after_failure = True
         self.__last_time = deepcopy(MetricController._current_time)
         return elapsed
 
@@ -641,6 +651,10 @@ class MaxElapsedTimeMetric(MetricBase):
                     return
                 self._update_failure(elapsed > self.max_time_to_first_check_sec,
                                      f'{self.max_time_to_first_check_sec}s elapsed from test start without metric being checked.')
+
+    def _finalize(self):
+        if self.failure_context is not None and not self.__checked_after_failure:
+            self.failure_context += f' Check never called after failure.'
 
 
 class CdfThreshold(NamedTuple):
