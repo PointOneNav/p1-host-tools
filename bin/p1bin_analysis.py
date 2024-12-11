@@ -26,10 +26,10 @@ Analyze contents of a .p1bin and extract data types to their own files.
         "file does not exist, do not generate one. Otherwise, a .p1i file will be created automatically to "
         "improve data read speed in the future.")
     parser.add_argument('--log-base-dir', metavar='DIR', default=DEFAULT_LOG_BASE_DIR,
-                        help="The base directory containing FusionEngine logs to be searched if a log pattern is"
+                        help="The base directory containing FusionEngine logs to be searched if a log pattern is "
                              "specified.")
     parser.add_argument('-o', '--output', type=str, metavar='DIR',
-                        help="The directory where output will be stored. Defaults to the parent directory of the input"
+                        help="The directory where output will be stored. Defaults to the parent directory of the input "
                              "file, or to the log directory if reading from a log.")
     parser.add_argument('-p', '--prefix', type=str,
                         help="Use the specified prefix for the output file: `<prefix>.p1log`. Otherwise, use the "
