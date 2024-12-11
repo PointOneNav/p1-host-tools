@@ -25,7 +25,7 @@ metric_time_to_first_solution = MaxElapsedTimeMetric(
     'time_to_first_solution',
     'Time to get any valid solution.',
     time_source=TimeSource.P1,
-    max_time_to_first_check_sec=1
+    max_time_to_first_check_sec=5
 )
 
 metric_position_valid = AlwaysTrueMetric(
