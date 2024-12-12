@@ -13,7 +13,8 @@ from p1_hitl.defs import HitlEnvArgs
 from p1_hitl.device_interfaces.scenario_controller import ScenarioController
 from p1_hitl.metric_analysis.metrics import (AlwaysTrueMetric,
                                              FatalMetricException,
-                                             MaxElapsedTimeMetric,
+                                             MaxTimeBetweenChecks,
+                                             MaxTimeToFirstCheckMetric,
                                              MaxValueMetric, MetricController,
                                              TimeSource)
 from p1_runner.device_interface import (MAX_FE_MSG_SIZE, DeviceInterface,
@@ -23,29 +24,37 @@ from p1_runner.exception_utils import exception_to_str
 
 from .base_analysis import AnalyzerBase
 from .position_analysis import PositionAnalyzer
+from .reset_ttff_analysis import ResetTTFFAnalyzer
 from .sanity_analysis import SanityAnalyzer
 
 logger = logging.getLogger('point_one.hitl.analysis')
 
 MAX_SEC_TO_VERSION_MESSAGE = 60
 
-metric_message_host_time_elapsed = MaxElapsedTimeMetric(
-    'message_host_time_elapsed',
-    '''Max time to first message, and between subsequent messages.
-A failure indicates FE messages aren't getting from the device under test to the tester at the rate expected.
-This may be because the DUT stopped outputting messages, or had a large delay in its output.
-It is also possible that the test setup had an issue (disconnected cable, bad network, etc.) or that the testing host was trying to service too many devices and fell behind.''',
+metric_host_time_to_first_message = MaxTimeToFirstCheckMetric(
+    'host_time_to_first_message',
+    '''Max host time to first FE message.
+A failure indicates FE messages aren't being output from the device.
+It is also possible that the test setup had an issue (disconnected cable, bad network, etc.).''',
     TimeSource.HOST,
     max_time_to_first_check_sec=10,
+    is_fatal=True,
+)
+metric_host_time_between_messages = MaxTimeBetweenChecks(
+    'host_time_between_messages',
+    '''Max time between FE messages.
+A failure indicates FE messages aren't getting from the device under test to the tester at the rate expected.
+This may be because the DUT stopped outputting messages, or had a large delay in its output.
+It is also possible that the testing host was trying to service too many devices and fell behind.''',
+    TimeSource.HOST,
     max_time_between_checks_sec=0.2,
 )
-metric_message_host_time_elapsed_test_stop = MaxElapsedTimeMetric(
-    'message_host_time_elapsed_test_stop',
-    '''If no messages are received for this duration (before or after first message), stop the test.
-See message_host_time_elapsed for more details.''',
+metric_host_time_between_messages_stop = MaxTimeBetweenChecks(
+    'host_time_between_messages_stop',
+    '''If no messages are received for this duration, stop the test.
+See host_time_between_messages for more details.''',
     TimeSource.HOST,
-    max_time_to_first_check_sec=60,
-    max_time_between_checks_sec=60,
+    max_time_between_checks_sec=10,
     is_fatal=True,
 )
 metric_version_check = AlwaysTrueMetric(
@@ -79,9 +88,7 @@ REALTIME_POLL_INTERVAL = 0.05
 
 
 def _setup_analysis(env_args: HitlEnvArgs) -> List[AnalyzerBase]:
-    analyzers = [SanityAnalyzer(), PositionAnalyzer()]
-    for analyzer in analyzers:
-        analyzer.configure(env_args)
+    analyzers = [c(env_args) for c in [SanityAnalyzer, PositionAnalyzer, ResetTTFFAnalyzer]]
     return analyzers
 
 
@@ -120,8 +127,9 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs, log_dir: Pat
                 msg_offset: int = msg[3]  # type: ignore
                 msg = msg[:3]
                 MetricController.update_device_time(msg)
-                metric_message_host_time_elapsed.check()
-                metric_message_host_time_elapsed_test_stop.check()
+                metric_host_time_to_first_message.check()
+                metric_host_time_between_messages.check()
+                metric_host_time_between_messages_stop.check()
 
                 # Check for gaps in data
                 metric_no_fe_data_gaps.check(msg_offset - last_message_end_offset)

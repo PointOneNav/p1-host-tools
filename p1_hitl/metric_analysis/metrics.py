@@ -600,7 +600,100 @@ class MaxArrayValueMetric(MetricBase):
 
 
 @dataclass
+class MaxTimeToFirstCheckMetric(MetricBase):
+    '''!
+    Validates that a check is called within some period from the start of the test.
+
+    @note This metric is validated during MetricController.update_host_time() and MetricController.update_device_time()
+          calls.
+    '''
+    # Time sources to compare for determining the elapsed time.
+    time_source: TimeSource
+    # Metric will fail if `check()` is not called before this many seconds into the test.
+    max_time_to_first_check_sec: float
+
+    # Has check been called
+    __was_checked = False
+
+    def _get_elapsed(self):
+        return MetricController._current_time.get_elapsed(MetricController._start_time, self.time_source)
+
+    def check(self):
+        if self.failure_context is not None and not self.__was_checked:
+            elapsed = self._get_elapsed()
+            self.failure_context += f' First checked after {elapsed:0.2f}s.'
+        self.__was_checked = True
+
+    def _time_elapsed(self):
+        if not self.__was_checked:
+            elapsed = self._get_elapsed()
+            if elapsed is not None:
+                self._update_failure(elapsed > self.max_time_to_first_check_sec,
+                                     f'{self.max_time_to_first_check_sec}s elapsed from test start without metric being checked.')
+
+    def _finalize(self):
+        if self.failure_context is not None and not self.__was_checked:
+            self.failure_context += f' Check never called.'
+
+
+@dataclass
 class MaxElapsedTimeMetric(MetricBase):
+    '''!
+    Validates that the elapsed time between `start()` and `stop()` never exceeds a time threshold.
+
+    @note This metric is validated during MetricController.update_host_time() and MetricController.update_device_time()
+          calls.
+    '''
+    # Time sources to compare for determining the elapsed time.
+    time_source: TimeSource
+    # Metric will fail if more than this many seconds elapses between between `start()` and `stop()` calls.
+    max_elapsed_time_sec: float
+
+    # Timestamp when this metric was last checked. `None` if never checked.
+    __start_time = None
+    # Whether check was called after the metric timed out. Used to track what context to add.
+    __checked_after_failure = False
+
+    def _get_elapsed(self):
+        if isinstance(self.__start_time, Timestamp):
+            return MetricController._current_time.get_elapsed(self.__start_time, self.time_source)
+        else:
+            return None
+
+    def start(self):
+        # If this metric has already failed, finalize its context and don't restart the timer.
+        if self.failure_context is not None:
+            self.__start_time = None
+            self._finalize()
+        else:
+            self.__start_time = deepcopy(MetricController._current_time)
+
+    def stop(self) -> Optional[float]:
+        elapsed = self._get_elapsed()
+        if self.failure_context is not None and not self.__checked_after_failure:
+            self.failure_context += f' Stopped after {elapsed:0.2f}s.'
+            self.__checked_after_failure = True
+
+        self.__start_time = None
+        return elapsed
+
+    def is_running(self) -> bool:
+        return self.__start_time is not None
+
+    def _time_elapsed(self):
+        elapsed = self._get_elapsed()
+        if elapsed is None:
+            return
+        self._update_failure(elapsed > self.max_elapsed_time_sec,
+                             f'Not stopped before {self.max_elapsed_time_sec}s.')
+
+    def _finalize(self):
+        if self.failure_context is not None and not self.__checked_after_failure:
+            self.failure_context += f' Stop never called after failure.'
+
+
+@dataclass
+class MaxTimeBetweenChecks(MetricBase):
     '''!
     Validates that the elapsed time between checks never exceeds a time threshold.
 
@@ -609,50 +702,39 @@ class MaxElapsedTimeMetric(MetricBase):
     '''
     # Time sources to compare for determining the elapsed time.
     time_source: TimeSource
-    # Metric will fail if `check()` is not called before this many seconds into the test.
-    max_time_to_first_check_sec: Optional[float] = None
     # Metric will fail if more than this many seconds elapses between between `check()` calls.
-    max_time_between_checks_sec: Optional[float] = None
+    max_time_between_checks_sec: float
 
     # Timestamp when this metric was last checked. `None` if never checked.
     __last_time = None
     # Whether check was called after the metric timed out. Used to track what context to add.
     __checked_after_failure = False
 
-    def check(self) -> Optional[float]:
-        elapsed = None
+    def _get_elapsed(self):
         if isinstance(self.__last_time, Timestamp):
-            elapsed = MetricController._current_time.get_elapsed(self.__last_time, self.time_source)
-            if elapsed is None:
-                return None
+            return MetricController._current_time.get_elapsed(self.__last_time, self.time_source)
+        else:
+            return None
+
+    def check(self) -> Optional[float]:
+        elapsed = self._get_elapsed()
+        if elapsed is not None:
             # Failures are updated in _time_elapsed() function.
             self._update_status(elapsed, False)
             if self.failure_context is not None and not self.__checked_after_failure:
                 self.failure_context += f' Next checked after {elapsed:0.2f}s.'
                 self.__checked_after_failure = True
-        else:
-            if self.failure_context is not None and not self.__checked_after_failure:
-                elapsed = MetricController._current_time.get_elapsed(MetricController._start_time, self.time_source)
-                self.failure_context += f' First checked after {elapsed:0.2f}s.'
-                self.__checked_after_failure = True
+
         self.__last_time = deepcopy(MetricController._current_time)
         return elapsed
 
     def _time_elapsed(self):
         if isinstance(self.__last_time, Timestamp):
-            if self.max_time_between_checks_sec is not None:
-                elapsed = MetricController._current_time.get_elapsed(self.__last_time, self.time_source)
-                if elapsed is None:
-                    return
-                self._update_failure(elapsed > self.max_time_between_checks_sec,
-                                     f'{self.max_time_between_checks_sec}s elapsed between metric check calls.')
-        else:
-            if self.max_time_to_first_check_sec is not None:
-                elapsed = MetricController._current_time.get_elapsed(MetricController._start_time, self.time_source)
-                if elapsed is None:
-                    return
-                self._update_failure(elapsed > self.max_time_to_first_check_sec,
-                                     f'{self.max_time_to_first_check_sec}s elapsed from test start without metric being checked.')
+            elapsed = self._get_elapsed()
+            if elapsed is None:
+                return
+            self._update_failure(elapsed > self.max_time_between_checks_sec,
+                                 f'{self.max_time_between_checks_sec}s elapsed between metric check calls.')
 
     def _finalize(self):
         if self.failure_context is not None and not self.__checked_after_failure:

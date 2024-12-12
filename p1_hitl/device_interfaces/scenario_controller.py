@@ -146,7 +146,7 @@ class ScenarioController:
             if current_p1_time is not None:
                 while len(self.playback_events) > 0:
                     event_time = self.playback_events[0].timestamp.p1_time
-                    if event_time is None or event_time < current_p1_time:
+                    if event_time is None or event_time > current_p1_time:
                         break
                     logger.info('Playing back event: ' + str(self.playback_events[0]))
 

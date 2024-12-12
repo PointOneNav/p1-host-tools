@@ -7,7 +7,8 @@ from pymap3d import geodetic2ecef
 from p1_hitl.defs import HitlEnvArgs
 from p1_hitl.metric_analysis.metrics import (AlwaysTrueMetric, CdfThreshold,
                                              MaxArrayValueMetric,
-                                             MaxElapsedTimeMetric,
+                                             MaxTimeBetweenChecks,
+                                             MaxTimeToFirstCheckMetric,
                                              MaxValueMetric, MetricController,
                                              PercentTrueMetric, StatsMetric,
                                              TimeSource)
@@ -19,13 +20,6 @@ metric_fix_rate = PercentTrueMetric(
     'Percent of solutions in fix mode.',
     90.0,
     is_required=True,
-)
-
-metric_time_to_first_solution = MaxElapsedTimeMetric(
-    'time_to_first_solution',
-    'Time to get any valid solution.',
-    time_source=TimeSource.P1,
-    max_time_to_first_check_sec=5
 )
 
 metric_position_valid = AlwaysTrueMetric(
@@ -40,18 +34,24 @@ metric_p1_time_valid = AlwaysTrueMetric(
     is_required=True,
 )
 
-metric_pose_host_time_elapsed = MaxElapsedTimeMetric(
+metric_host_time_to_first_solution = MaxTimeToFirstCheckMetric(
+    'host_time_to_first_solution',
+    'Time to get any valid solution.',
+    time_source=TimeSource.HOST,
+    max_time_to_first_check_sec=10.0
+)
+
+metric_pose_host_time_elapsed = MaxTimeBetweenChecks(
     'pose_host_time_elapsed',
     'Max host time to first pose message, and between subsequent messages.',
     TimeSource.HOST,
-    max_time_to_first_check_sec=10,
     # Ideally, this should be specified for each device. I'm going to set this
     # conservatively initially, and bring down once we have better testing
     # integration and can make sure it doesn't generate false positives.
     max_time_between_checks_sec=0.5,
 )
 
-metric_pose_p1_time_elapsed = MaxElapsedTimeMetric(
+metric_pose_p1_time_elapsed = MaxTimeBetweenChecks(
     'pose_time_elapsed',
     'Max P1 time between pose messages.',
     TimeSource.P1,
@@ -227,16 +227,13 @@ def calculate_position_error(device_lla_deg, reference_lla_deg) -> tuple[float, 
 
 
 class PositionAnalyzer(AnalyzerBase):
-    def __init__(self) -> None:
-        self.got_first_valid = False
-
-    def configure(self, env_args: HitlEnvArgs):
-        self.env_args = env_args
-        self.params = env_args.get_selected_test_type().get_test_params()
+    def __init__(self, env_args: HitlEnvArgs):
+        super().__init__(env_args)
         if self.params.check_position and env_args.JENKINS_ANTENNA_LOCATION is None:
             raise KeyError(
                 f'JENKINS_ANTENNA_LOCATION must be specified test {env_args.get_selected_test_type().name} with position checking.')
 
+        self.got_first_valid = False
         self.last_p1_time = None
         self.last_ypr = None
 
@@ -257,7 +254,7 @@ class PositionAnalyzer(AnalyzerBase):
                 return
             self.got_first_valid = True
 
-            metric_time_to_first_solution.check()
+            metric_host_time_to_first_solution.check()
             metric_fix_rate.check(is_fixed)
             metric_position_valid.check(is_valid)
 

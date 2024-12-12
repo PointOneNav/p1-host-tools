@@ -15,7 +15,7 @@ from fusion_engine_client.parsers.decoder import MessageWithBytesTuple
 from p1_hitl.defs import EVENT_NOTIFICATION_FILE, DeviceType, HitlEnvArgs
 from p1_hitl.metric_analysis.metrics import (AlwaysTrueMetric, CdfThreshold,
                                              EqualValueMetric,
-                                             MaxElapsedTimeMetric,
+                                             MaxTimeToFirstCheckMetric,
                                              MaxValueMetric, MetricController,
                                              MinValueMetric, StatsMetric,
                                              TimeSource)
@@ -46,21 +46,21 @@ metric_monotonic_p1time = MinValueMetric(
     -0.1,
 )
 
-metric_user_config_received = MaxElapsedTimeMetric(
+metric_user_config_received = MaxTimeToFirstCheckMetric(
     'user_config_received',
     'Checks that UserConfig storage is sent out periodically.',
     time_source=TimeSource.P1,
     max_time_to_first_check_sec=60,
 )
 
-metric_filter_state_received = MaxElapsedTimeMetric(
+metric_filter_state_received = MaxTimeToFirstCheckMetric(
     'filter_state_received',
     'Checks that FilterState storage is sent out periodically.',
     time_source=TimeSource.P1,
     max_time_to_first_check_sec=60,
 )
 
-metric_calibration_received = MaxElapsedTimeMetric(
+metric_calibration_received = MaxTimeToFirstCheckMetric(
     'calibration_received',
     'Checks that Calibration storage is sent out periodically.',
     time_source=TimeSource.P1,
@@ -105,15 +105,13 @@ _RTOS_IDLE_TASK_NAME = 'IDLE'
 
 
 class SanityAnalyzer(AnalyzerBase):
-    def __init__(self) -> None:
+
+    def __init__(self, env_args: HitlEnvArgs):
+        super().__init__(env_args)
         self.last_seq_num: Optional[int] = None
         self.last_p1_time: Optional[Timestamp] = None
         self.rtos_task_name_map: dict[str, int] = {}
-        self.env_args: Optional[HitlEnvArgs] = None
         self.event_logger: Optional[EventNotificationLogger] = None
-
-    def configure(self, env_args: HitlEnvArgs):
-        self.env_args = env_args
 
     def update(self, msg: MessageWithBytesTuple):
         assert isinstance(self.env_args, HitlEnvArgs)

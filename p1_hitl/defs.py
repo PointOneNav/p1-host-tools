@@ -93,7 +93,7 @@ class TestType(Enum):
         elif self == TestType.SANITY:
             return TestParams(5 * 60, False, False, True, False)
         elif self == TestType.RESET_TESTS:
-            return TestParams(5 * 60, False, False, True, True)
+            return TestParams(8 * 60, True, True, True, True)
         elif self == TestType.ROOF_15_MIN:
             return TestParams(15 * 60, True, True, True, False)
         elif self == TestType.ROOF_NO_CORRECTIONS_15_MIN:
