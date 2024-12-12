@@ -117,7 +117,6 @@ class ScenarioController:
         test_type = self.env_args.get_selected_test_type()
         event_log_file = log_dir / TEST_EVENT_FILE
         if device_interface is not None:
-            assert device_interface is not None
             if test_type in SCENARIO_MAP:
                 self.event_log_fd = open(event_log_file, 'w')
                 self.scenario = SCENARIO_MAP[test_type](env_args, device_interface)

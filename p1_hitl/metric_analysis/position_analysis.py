@@ -202,7 +202,7 @@ def configure_metrics(env_args: HitlEnvArgs):
             # Can't resolve ENU position before yaw is initialized which increases position uncertainty.
             metric_fixed_pos_std_enu.is_disabled = True
 
-        # Disable some checks if we expect the GPS data to dropout or
+        # Disable some checks if the test is sending reset commands.
         if params.has_resets:
             metric_fix_rate.is_disabled = True
             metric_position_valid.is_disabled = True
