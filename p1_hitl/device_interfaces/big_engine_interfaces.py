@@ -1,4 +1,6 @@
 import io
+import logging
+import os
 import time
 from argparse import Namespace
 from pathlib import Path
@@ -23,7 +25,7 @@ SSH_KEY_PATH = "/home/pointone/.ssh/id_ed25519"
 
 
 class HitlBigEngineInterface(HitlDeviceInterfaceBase):
-    LOGGER = None
+    LOGGER = logging.getLogger('point_one.hitl.hitl_interface')
     OUTPUT_PORT = 30200
     DIAGNOSTIC_PORT = 30202
     POLARIS_API_KEY = ""
@@ -32,6 +34,7 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
     TAR_FILENAME_PREFIX = ""
     TAR_FILENAME_SUFFIX = ""
     RUNNER_CMD = ""
+    POLARIS_API_KEY = os.getenv('HITL_POLARIS_API_KEY')
 
     @staticmethod
     def get_device_config(args: HitlEnvArgs) -> Optional[DeviceConfig]:
