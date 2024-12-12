@@ -1,0 +1,146 @@
+import io
+import time
+from argparse import Namespace
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+import paramiko
+from scp import SCPClient
+
+from bin.config_tool import request_shutdown
+from p1_hitl.defs import HitlEnvArgs
+from p1_hitl.get_build_artifacts import download_file
+from p1_runner.device_interface import DeviceInterface
+from p1_test_automation.devices_config import DeviceConfig, open_data_source
+
+from .base_interfaces import HitlDeviceInterfaceBase
+
+RESTART_WAIT_TIME_SEC = 1
+DIAGNOSTIC_PORT = 30202
+
+SSH_USERNAME = "pointone"
+SSH_KEY_PATH = "/home/pointone/.ssh/id_ed25519"
+
+
+class HitlBigEngineInterface(HitlDeviceInterfaceBase):
+    LOGGER = None
+    OUTPUT_PORT = 30200
+    DIAGNOSTIC_PORT = 30202
+    POLARIS_API_KEY = ""
+    DEVICE_NAME = ""
+    VERSION_PREFIX = ""
+    TAR_FILENAME_PREFIX = ""
+    TAR_FILENAME_SUFFIX = ""
+    RUNNER_CMD = ""
+
+    @staticmethod
+    def get_device_config(args: HitlEnvArgs) -> Optional[DeviceConfig]:
+        if not args.check_fields(['JENKINS_LAN_IP']):
+            return None
+        else:
+            # Interface is TCP3, which is configured as the diagnostic port.
+            return DeviceConfig(name=args.HITL_NAME,
+                                tcp_address=args.JENKINS_LAN_IP,
+                                port=DIAGNOSTIC_PORT
+                                )
+
+    def __init__(self, config: DeviceConfig, env_args: HitlEnvArgs):
+        self.config = config
+        self.device_interface: Optional[DeviceInterface] = None
+        self.ssh_client = None
+
+    def init_device(self, build_info: Dict[str, Any], skip_reset=False,
+                    skip_corrections=False) -> Optional[DeviceInterface]:
+        # build_info example:
+        # {
+        #     "timestamp": 1725918926,
+        #     "version": "v2.1.0-917-g7e74d1b235",
+        #     "git_hash": "7e74d1b2356165d0e4408aa665ebf214e8a6dcb3",
+        #     "aws_path": "s3://pointone-build-artifacts/nautilus/quectel/v2.1.0-917-g7e74d1b235/"
+        # }
+
+        self.LOGGER.info(f'Initializing {self.DEVICE_NAME}.')
+
+        if self.config.tcp_address is None:
+            raise KeyError('Config missing TCP address.')
+
+        if skip_corrections:
+            polaris_api_key = None
+        else:
+            polaris_api_key = self.POLARIS_API_KEY
+
+        pkey = paramiko.Ed25519Key.from_private_key_file(SSH_KEY_PATH)
+
+        # Set up SSH automation tool.
+        self.ssh_client = paramiko.SSHClient()
+        self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        self.LOGGER.info(f'Attempting to connect to TCP address {self.config.tcp_address}')
+        try:
+            self.ssh_client.connect(self.config.tcp_address, username=SSH_USERNAME, pkey=pkey)
+        except Exception as e:
+            self.LOGGER.error("Failed to connect to TCP address %s: %s" % (self.config.tcp_address, str(e)))
+            return None
+
+        # Check for successfull connection.
+        transport = self.ssh_client.get_transport()
+        if transport is None or not transport.is_active():
+            self.LOGGER.error('Failed to connect to TCP address.')
+            return None
+
+        # Clear all files from previous runs.
+        self.ssh_client.exec_command("rm -rf p1_fusion_engine*")
+
+        # Download release from S3.
+        aws_path = build_info["aws_path"]
+        version_str = build_info["version"]
+        tar_filename = "%s%s%s" % (self.TAR_FILENAME_PREFIX, version_str[len(self.VERSION_PREFIX):], self.TAR_FILENAME_SUFFIX)
+
+        fd = io.BytesIO()
+
+        if not download_file(fd, aws_path, tar_filename):
+            self.LOGGER.error("Failed to download file %s from %s" % (tar_filename, aws_path))
+            return None
+
+        fd.seek(0)
+        scp = SCPClient(self.ssh_client.get_transport())
+        scp.putfo(fd, f'/home/pointone/{tar_filename}')
+
+        # Unzip the tar file.
+        _stdin, _stdout, _stderr = self.ssh_client.exec_command(f"tar -xzf {tar_filename}")
+        # Wait for exit status to ensure that tar command finished executing.
+        exit_status = _stdout.channel.recv_exit_status()
+
+        # Run bootstrap script.
+        channel = transport.open_session()
+        self.LOGGER.info('Starting engine.')
+        channel.exec_command(self.RUNNER_CMD)
+        # Manually wait to ensure that the bootstrap script kicks off in the background before continuing.
+        time.sleep(RESTART_WAIT_TIME_SEC)
+
+        # See if bootstrap script exited early.
+        if channel.exit_status_ready():
+            self.LOGGER.error('Fusion engine process exited prematurely.')
+            return None
+
+        # Need to set up a DeviceInterface object that can be used to connect to the Pi.
+        data_source = open_data_source(self.config)
+        if data_source is None:
+            self.LOGGER.error('Failed to open data source.')
+            return None
+
+        self.device_interface = DeviceInterface(data_source)
+        return self.device_interface
+
+    def shutdown_device(self, tests_passed: bool, output_dir: Path) -> Optional[DeviceInterface]:
+        if self.config.tcp_address is None or self.device_interface is None:
+            return
+
+        namespace_args = Namespace()
+        namespace_args.type = 'log'
+
+        if self.device_interface is not None:
+            request_shutdown(self.device_interface, namespace_args)
+            self.device_interface.data_source.stop()
+
+        if self.ssh_client is not None:
+            self.ssh_client.close()
