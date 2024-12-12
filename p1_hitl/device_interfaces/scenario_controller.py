@@ -144,13 +144,13 @@ class ResetScenario(ScenarioBase):
         if self.last_restart is None:
             if elapsed > 60:
                 events.append(self._send_reset(ResetType.HOT))
-        # Warm start 10 seconds after hot start.
+        # Warm start 15 seconds after hot start.
         elif self.last_restart is ResetType.HOT:
-            if elapsed > 10:
+            if elapsed > 15:
                 events.append(self._send_reset(ResetType.WARM))
-        # Cold start a minute after warm start.
+        # Cold start a 65 seconds after warm start.
         elif self.last_restart is ResetType.WARM:
-            if elapsed > 60:
+            if elapsed > 65:
                 events.append(self._send_reset(ResetType.COLD))
 
         return events
