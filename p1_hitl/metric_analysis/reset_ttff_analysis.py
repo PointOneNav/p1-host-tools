@@ -29,6 +29,8 @@ metric_time_between_reset_and_invalid = MaxElapsedTimeMetric(
 )
 
 RESET_NAMES = {k: k.name.lower() for k in ResetType}
+# NOTE: These times must be less then the time between resets or the end of the test specified in `ResetScenario` in
+#       "p1_hitl/device_interfaces/scenario_controller.py".
 RECOVERY_TIMES = {
     ResetType.HOT: 10.0,
     ResetType.WARM: 60,
@@ -70,9 +72,25 @@ MetricController.register_environment_config_customizations(configure_metrics)
 
 
 class ResetTTFFAnalyzer(AnalyzerBase):
+    '''!
+    @brief Checks for DUT performance when receiving reset commands.
+
+    See "p1_hitl/device_interfaces/scenario_controller.py" for details on the nature of the resets sent to the device.
+
+    This class has the following flow:
+    1. Wait for a reset event.
+    2. After the reset, wait for the pose solution type to go invalid.
+    3. After the pose is invalid measure the time until the solution type recovers.
+
+    The expectation is that the timing of the checks ensures that each check will have failed before the next reset is
+    sent.
+    '''
+
     def __init__(self, env_args: HitlEnvArgs):
         super().__init__(env_args)
+        # The last reset event that occurred.
         self.last_reset_event: Optional[EventEntry] = None
+        # Whether the DUT output has gone invalid for the current reset.
         self.invalid_seen_for_reset = False
 
     def update(self, msg: MessageWithBytesTuple):
@@ -101,6 +119,12 @@ class ResetTTFFAnalyzer(AnalyzerBase):
 
     def on_event(self, event: EventEntry):
         if event.event_type is EventType.RESET:
+            # If the last test failed, mark it as never having completed since we're about to send a new restart.
+            if self.last_reset_event is not None:
+                last_reset_type = ResetType[self.last_reset_event.description]
+                metric_time_between_invalid_and_valid[last_reset_type]._finalize()
+                metric_time_between_invalid_and_fixed[last_reset_type]._finalize()
+
             self.last_reset_event = event
             self.invalid_seen_for_reset = False
             metric_time_to_reset_response.start()

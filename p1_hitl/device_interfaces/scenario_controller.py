@@ -108,7 +108,8 @@ class ResetScenario(ScenarioBase):
         logger.info(f'Running reset scenario.')
 
     def _send_reset(self, reset_type: ResetType) -> EventEntry:
-        # These are the mapping of the reset "type"
+        # These are the mapping of the reset type to the reset mask sent to the device. These may need to be specific to
+        # the device being tested.
         reset_mask = {
             ResetType.HOT: ResetRequest.HOT_START,
             ResetType.WARM: ResetRequest.WARM_START,
