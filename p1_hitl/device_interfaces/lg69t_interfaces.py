@@ -175,10 +175,13 @@ class HitlLG69TInterface(HitlDeviceInterfaceBase):
         return self.device_interface
 
     def shutdown_device(self, tests_passed: bool, output_dir: Path):
+        logger.info('Stopping corrections updater.')
         self.position_updater.stop_and_join()
+        logger.info('Stopping corrections client.')
         if self.corrections_client is not None:
             self.corrections_client.stop()
             self.corrections_client.join()
 
+        logger.info('Stopping serial thread.')
         if self.device_interface:
             self.device_interface.data_source.stop()

@@ -104,7 +104,7 @@ def synchronize(ser: Serial, timeout=10.0):
     while time.time() < start_time + timeout:
         ser.write(SYNC_WORD1_BYTES)
         c = ser.read()
-        while len(c) > 0:
+        while len(c) > 0 and (time.time() < start_time + timeout):
             resp_data = resp_data[1:] + c
             if resp_data == RSP_WORD1_BYTES:
                 ser.write(SYNC_WORD2_BYTES)

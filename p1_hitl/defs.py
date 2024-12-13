@@ -22,6 +22,7 @@ MSG_TIME_LOG_FILENAME = 'msg_times.bin'
 ENV_DUMP_FILE = 'env.json'
 BUILD_INFO_FILE = 'build-info.json'
 EVENT_NOTIFICATION_FILE = 'event_notifications.txt'
+TEST_EVENT_FILE = 'test_events.json'
 LOG_FILES = [
     FAILURE_REPORT,
     FULL_REPORT,
@@ -30,7 +31,9 @@ LOG_FILES = [
     MSG_TIME_LOG_FILENAME,
     ENV_DUMP_FILE,
     BUILD_INFO_FILE,
-    EVENT_NOTIFICATION_FILE]
+    EVENT_NOTIFICATION_FILE,
+    TEST_EVENT_FILE,
+]
 
 
 class TestParams(NamedTuple):
@@ -45,6 +48,8 @@ class TestParams(NamedTuple):
     has_corrections: bool
     # Will the device be stationary.
     is_stationary: bool
+    # Is the device expected to reset during the scenario.
+    has_resets: bool
 
 
 class TestType(Enum):
@@ -58,6 +63,8 @@ class TestType(Enum):
     ROOF_15_MIN = auto()
     # Check for positioning performance with stationary clear sky with corrections disabled.
     ROOF_NO_CORRECTIONS_15_MIN = auto()
+    # Run test while sending hot, warm, and cold start commands.
+    RESET_TESTS = auto()
 
     # Multi-test scenarios
     NO_TESTS = auto()
@@ -71,7 +78,7 @@ class TestType(Enum):
         if self == TestType.NO_TESTS:
             return []
         if self == TestType.QUICK_TESTS:
-            return [self.CONFIGURATION, self.SANITY]
+            return [TestType.CONFIGURATION, TestType.SANITY]
         else:
             return [self]
 
@@ -83,13 +90,20 @@ class TestType(Enum):
         if self == TestType.CONFIGURATION:
             # This test doesn't have a fixed duration. The duration is determined by
             # how long the device takes to respond to commands.
-            return TestParams(0, False, False, True)
+            return TestParams(duration_sec=0, check_position=False,
+                              has_corrections=False, is_stationary=True, has_resets=False)
         elif self == TestType.SANITY:
-            return TestParams(5 * 60, False, False, True)
+            return TestParams(duration_sec=5 * 60, check_position=False,
+                              has_corrections=False, is_stationary=True, has_resets=False)
+        elif self == TestType.RESET_TESTS:
+            return TestParams(duration_sec=8 * 60, check_position=True,
+                              has_corrections=True, is_stationary=True, has_resets=True)
         elif self == TestType.ROOF_15_MIN:
-            return TestParams(15 * 60, True, True, True)
+            return TestParams(duration_sec=15 * 60, check_position=True,
+                              has_corrections=True, is_stationary=True, has_resets=False)
         elif self == TestType.ROOF_NO_CORRECTIONS_15_MIN:
-            return TestParams(15 * 60, True, False, True)
+            return TestParams(duration_sec=15 * 60, check_position=True,
+                              has_corrections=False, is_stationary=True, has_resets=False)
         else:
             raise NotImplementedError(f'Metric configuration for {self.name} is not implemented.')
 

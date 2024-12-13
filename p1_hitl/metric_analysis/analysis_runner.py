@@ -10,9 +10,11 @@ from fusion_engine_client.messages import (MessageHeader, VersionInfoMessage,
 from fusion_engine_client.parsers import fast_indexer
 
 from p1_hitl.defs import HitlEnvArgs
+from p1_hitl.device_interfaces.scenario_controller import ScenarioController
 from p1_hitl.metric_analysis.metrics import (AlwaysTrueMetric,
                                              FatalMetricException,
-                                             MaxElapsedTimeMetric,
+                                             MaxTimeBetweenChecks,
+                                             MaxTimeToFirstCheckMetric,
                                              MaxValueMetric, MetricController,
                                              TimeSource)
 from p1_runner.device_interface import (MAX_FE_MSG_SIZE, DeviceInterface,
@@ -22,29 +24,37 @@ from p1_runner.exception_utils import exception_to_str
 
 from .base_analysis import AnalyzerBase
 from .position_analysis import PositionAnalyzer
+from .reset_ttff_analysis import ResetTTFFAnalyzer
 from .sanity_analysis import SanityAnalyzer
 
 logger = logging.getLogger('point_one.hitl.analysis')
 
 MAX_SEC_TO_VERSION_MESSAGE = 60
 
-metric_message_host_time_elapsed = MaxElapsedTimeMetric(
-    'message_host_time_elapsed',
-    '''Max time to first message, and between subsequent messages.
-A failure indicates FE messages aren't getting from the device under test to the tester at the rate expected.
-This may be because the DUT stopped outputting messages, or had a large delay in its output.
-It is also possible that the test setup had an issue (disconnected cable, bad network, etc.) or that the testing host was trying to service too many devices and fell behind.''',
+metric_host_time_to_first_message = MaxTimeToFirstCheckMetric(
+    'host_time_to_first_message',
+    '''Max host time to first FE message.
+A failure indicates FE messages aren't being output from the device.
+It is also possible that the test setup had an issue (disconnected cable, bad network, etc.).''',
     TimeSource.HOST,
     max_time_to_first_check_sec=10,
+    is_fatal=True,
+)
+metric_host_time_between_messages = MaxTimeBetweenChecks(
+    'host_time_between_messages',
+    '''Max time between FE messages.
+A failure indicates FE messages aren't getting from the device under test to the tester at the rate expected.
+This may be because the DUT stopped outputting messages, or had a large delay in its output.
+It is also possible that the testing host was trying to service too many devices and fell behind.''',
+    TimeSource.HOST,
     max_time_between_checks_sec=0.2,
 )
-metric_message_host_time_elapsed_test_stop = MaxElapsedTimeMetric(
-    'message_host_time_elapsed_test_stop',
-    '''If no messages are received for this duration (before or after first message), stop the test.
-See message_host_time_elapsed for more details.''',
+metric_host_time_between_messages_stop = MaxTimeBetweenChecks(
+    'host_time_between_messages_stop',
+    '''If no messages are received for this duration, stop the test.
+See host_time_between_messages for more details.''',
     TimeSource.HOST,
-    max_time_to_first_check_sec=60,
-    max_time_between_checks_sec=60,
+    max_time_between_checks_sec=10,
     is_fatal=True,
 )
 metric_version_check = AlwaysTrueMetric(
@@ -78,13 +88,11 @@ REALTIME_POLL_INTERVAL = 0.05
 
 
 def _setup_analysis(env_args: HitlEnvArgs) -> List[AnalyzerBase]:
-    analyzers = [SanityAnalyzer(), PositionAnalyzer()]
-    for analyzer in analyzers:
-        analyzer.configure(env_args)
+    analyzers = [c(env_args) for c in [SanityAnalyzer, PositionAnalyzer, ResetTTFFAnalyzer]]
     return analyzers
 
 
-def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs,
+def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs, log_dir: Path,
                  release_str: str) -> bool:
     try:
         params = env_args.get_selected_test_type().get_test_params()
@@ -92,6 +100,7 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs,
             metric_version_check.is_disabled = True
 
         analyzers = _setup_analysis(env_args)
+        scenario_controller = ScenarioController(env_args, log_dir, device_interface=interface)
         start_time = time.monotonic()
         logger.info(f'Monitoring device for {params.duration_sec} sec.')
         msg_count = 0
@@ -107,14 +116,20 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs,
                 return False
             MetricController.update_host_time()
 
+            events = scenario_controller.update_controller()
+            for event in events:
+                for analyzer in analyzers:
+                    analyzer.on_event(event)
+
             for msg in msgs:
                 msg_count += 1
                 # The type hint is wrong since it ignores _return_offset.
                 msg_offset: int = msg[3]  # type: ignore
                 msg = msg[:3]
                 MetricController.update_device_time(msg)
-                metric_message_host_time_elapsed.check()
-                metric_message_host_time_elapsed_test_stop.check()
+                metric_host_time_to_first_message.check()
+                metric_host_time_between_messages.check()
+                metric_host_time_between_messages_stop.check()
 
                 # Check for gaps in data
                 metric_no_fe_data_gaps.check(msg_offset - last_message_end_offset)
@@ -206,6 +221,8 @@ def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs) -> bool:
 
     try:
         analyzers = _setup_analysis(env_args)
+        log_dir = playback_path.parent
+        scenario_controller = ScenarioController(env_args, log_dir)
 
         # Don't check the metrics from this file. These are primarily data integrity checks.
         for metric in MetricController.get_metrics_in_this_file():
@@ -213,6 +230,12 @@ def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs) -> bool:
 
         for msg in _fast_decoder(playback_path):
             MetricController.update_device_time(msg)
+
+            events = scenario_controller.update_controller()
+            for event in events:
+                for analyzer in analyzers:
+                    analyzer.on_event(event)
+
             for analyzer in analyzers:
                 analyzer.update(msg)
                 pass
