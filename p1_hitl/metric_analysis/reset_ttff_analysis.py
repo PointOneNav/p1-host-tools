@@ -108,8 +108,7 @@ class ResetTTFFAnalyzer(AnalyzerBase):
                 metric_time_between_invalid_and_valid[last_reset_type].start()
                 metric_time_between_invalid_and_fixed[last_reset_type].start()
                 self.invalid_seen_for_reset = True
-            elif self.invalid_seen_for_reset:
-                if payload.solution_type != SolutionType.Invalid:
+            elif payload.solution_type != SolutionType.Invalid and self.invalid_seen_for_reset:
                     metric_time_between_invalid_and_valid[last_reset_type].stop()
                     if payload.solution_type == SolutionType.RTKFixed:
                         elapsed = metric_time_between_invalid_and_fixed[last_reset_type].stop()

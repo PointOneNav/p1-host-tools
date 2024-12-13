@@ -80,8 +80,6 @@ class DeviceCmdInterface:
 class ScenarioBase(ABC):
     '''!
     This base class defines the interface that the scenario specific controllers have to interact with the system.
-
-    @warning Scenarios cannot read from the device_interface directly. This would cause missing data from the
     '''
 
     @abstractmethod
@@ -132,11 +130,12 @@ class ResetScenario(ScenarioBase):
         This controller does the following:
         1. Wait a minute for the DUT to navigate.
         2. Send a hot start reset.
-        3. Wait 10 seconds DUT to navigate.
+        3. Wait 15 seconds DUT to navigate.
         4. Send a warm start reset.
-        5. Wait 60 seconds DUT to navigate.
+        5. Wait 65 seconds DUT to navigate.
         6. Send a cold start reset.
-        7. Let the DUT run normally for the remainder of the test duration (~2.5 minutes).
+        7. Let the DUT run normally for the remainder of the test duration (~2.5 minutes) (see the test duration in
+           p1_hitl/defs.py).
         '''
         elapsed = time.monotonic() - self.last_restart_time
         events: list[EventEntry] = []
@@ -174,8 +173,8 @@ class ScenarioController:
 
     When running in realtime, these are events are logged so they can be played back at the correct times.
 
-    @warning The no data should be read from the DUT through the device_interface. This would cause data to be missed by
-    the analysis runner. The device_interface is wrapped in a "send only" class to avoid this.
+    @warning No data should be read from the DUT through the device_interface. This would cause data to be missed by
+             the analysis runner. The device_interface is wrapped in a "send only" class to avoid this.
 
     If we want to add feedback in the future, we can add a way to pass the decoded FE messages to the
     `update_controller()` function.

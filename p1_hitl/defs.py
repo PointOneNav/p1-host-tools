@@ -32,7 +32,8 @@ LOG_FILES = [
     ENV_DUMP_FILE,
     BUILD_INFO_FILE,
     EVENT_NOTIFICATION_FILE,
-    TEST_EVENT_FILE]
+    TEST_EVENT_FILE,
+]
 
 
 class TestParams(NamedTuple):
@@ -89,15 +90,20 @@ class TestType(Enum):
         if self == TestType.CONFIGURATION:
             # This test doesn't have a fixed duration. The duration is determined by
             # how long the device takes to respond to commands.
-            return TestParams(0, False, False, True, False)
+            return TestParams(duration_sec=0, check_position=False,
+                              has_corrections=False, is_stationary=True, has_resets=False)
         elif self == TestType.SANITY:
-            return TestParams(5 * 60, False, False, True, False)
+            return TestParams(duration_sec=5 * 60, check_position=False,
+                              has_corrections=False, is_stationary=True, has_resets=False)
         elif self == TestType.RESET_TESTS:
-            return TestParams(8 * 60, True, True, True, True)
+            return TestParams(duration_sec=8 * 60, check_position=True,
+                              has_corrections=True, is_stationary=True, has_resets=True)
         elif self == TestType.ROOF_15_MIN:
-            return TestParams(15 * 60, True, True, True, False)
+            return TestParams(duration_sec=15 * 60, check_position=True,
+                              has_corrections=True, is_stationary=True, has_resets=False)
         elif self == TestType.ROOF_NO_CORRECTIONS_15_MIN:
-            return TestParams(15 * 60, True, False, True, False)
+            return TestParams(duration_sec=15 * 60, check_position=True,
+                              has_corrections=False, is_stationary=True, has_resets=False)
         else:
             raise NotImplementedError(f'Metric configuration for {self.name} is not implemented.')
 
