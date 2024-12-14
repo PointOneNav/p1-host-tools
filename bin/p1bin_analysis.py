@@ -6,6 +6,10 @@ import sys
 from fusion_engine_client.utils.argument_parser import ArgumentParser
 from fusion_engine_client.utils.log import DEFAULT_LOG_BASE_DIR, find_log_file
 
+# Add the parent directory to the search path to enable p1_runner package imports when not installed in Python.
+repo_root = os.path.normpath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(repo_root)
+
 from p1_runner import trace as logging
 from p1_runner.p1bin_reader import P1BinReader, P1BinType
 from p1_runner.p1bin_type import find_matching_p1bin_types
