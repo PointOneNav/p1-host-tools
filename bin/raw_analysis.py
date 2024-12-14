@@ -272,7 +272,8 @@ parser.add_argument('--split-rtcm-base-id', action=ExtendedBooleanAction,
                     help="If set, separate the RTCM contents into separate files each time the base station changes. "
                          "The file names will end with '_N.rtcm' where N is the the count of base stations seen.")
 parser.add_argument('--check-gaps', action=ExtendedBooleanAction, default=True,
-                    help="If set, separate the contents of each format type into their own files.")
+                    help="If set, search for unframed bytes that do not belong to a complete message from any "
+                         "protocol, indicating the existence of a gap in the data stream.")
 parser.add_argument('log',
                     help="The log to be read. May be one of:\n"
                     "- The path to a binary log file\n"
