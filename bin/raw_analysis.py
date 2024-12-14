@@ -103,7 +103,7 @@ def index_messages(input_path, options):
                     else:
                         _logger.info(
                             f'Using existing index "{index_file_to_load}".')
-                        return index
+                        return index, file_size
 
     _logger.info(f"Indexing raw input.")
 
@@ -159,7 +159,7 @@ def index_messages(input_path, options):
                 (total_bytes_read, bytes_to_process, 100.0 * float(total_bytes_read) / bytes_to_process,
                     elapsed_sec, total_bytes_read / elapsed_sec / 1e6))
 
-    return load_index(index_file)
+    return load_index(index_file), file_size
 
 
 def load_index(index_file):
@@ -345,13 +345,31 @@ def raw_analysis(options):
         options.p1bin_type = [P1BinType.EXTERNAL_UNFRAMED_GNSS]
 
     logger.info(f"Output index stored in '{output_dir}'.")
-    index = index_messages(input_path, options)
+    index, file_size_bytes = index_messages(input_path, options)
 
     if options.check_gaps:
         find_gaps(index)
 
     if options.extract:
         generate_separated_logs(input_path, index, options)
+
+    _logger.info("")
+    format_string = '| {:<10} | {:>10} | {:>10} |'
+    _logger.info(format_string.format('Protocol', 'Messages', 'Bytes'))
+    _logger.info(format_string.format('-' * 10, '-' * 10, '-' * 10))
+    bytes_used = 0
+    for format in sorted(options.format):
+        message_length_bytes = [e[3] for e in index if e[0] == format]
+        format_bytes = sum(message_length_bytes)
+        bytes_used += format_bytes
+        _logger.info(format_string.format(format, len(message_length_bytes), format_bytes))
+
+    _logger.info("")
+    _logger.info(f"File size: {file_size_bytes} B")
+    processed_bytes = file_size_bytes - options.skip_bytes
+    if options.skip_bytes > 0:
+        _logger.info(f"File considered: {processed_bytes} B")
+    _logger.info(f"Unused: {processed_bytes - bytes_used} B")
 
 
 def extract_format(format):
