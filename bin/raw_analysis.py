@@ -153,6 +153,12 @@ def index_messages(input_path, options):
 
         timestamp_fd.write(f'{EOF_FORMAT},0,{bytes_to_process},0,\n')
 
+    total_bytes_read = bytes_to_process
+    _logger.log(logging.INFO,
+                'Processed %d/%d bytes (%.1f%%). [elapsed=%.1f sec, rate=%.1f MB/s]' %
+                (total_bytes_read, bytes_to_process, 100.0 * float(total_bytes_read) / bytes_to_process,
+                    elapsed_sec, total_bytes_read / elapsed_sec / 1e6))
+
     return load_index(index_file)
 
 
