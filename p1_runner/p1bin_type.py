@@ -17,6 +17,7 @@ class P1BinType(IntEnum):
     RTCM3_POLARIS_EPHEM = 0x77
     ATLAS_SBF = 0xa1
     FUSION_ENGINE_MESSAGE = 0xc6
+    RTCM3_UNKNOWN = 0x100
 
 
 class P1BinRecord(NamedTuple):
