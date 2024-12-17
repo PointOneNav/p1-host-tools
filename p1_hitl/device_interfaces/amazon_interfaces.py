@@ -4,8 +4,6 @@ import os
 from .big_engine_interfaces import HitlBigEngineInterface
 
 class HitlAmazonInterface(HitlBigEngineInterface):
-    OUTPUT_PORT = 30200
-    DIAGNOSTIC_PORT = 30202
     DEVICE_NAME = "Amazon"
     VERSION_PREFIX = "amazon-fleetedge-1-"
     TAR_FILENAME_PREFIX = "p1_fusion_engine-"

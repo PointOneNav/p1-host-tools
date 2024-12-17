@@ -18,6 +18,7 @@ from p1_test_automation.devices_config import DeviceConfig, open_data_source
 from .base_interfaces import HitlDeviceInterfaceBase
 
 RESTART_WAIT_TIME_SEC = 1
+OUTPUT_PORT = 30200
 DIAGNOSTIC_PORT = 30202
 
 SSH_USERNAME = "pointone"
@@ -26,8 +27,6 @@ SSH_KEY_PATH = "/home/pointone/.ssh/id_ed25519"
 
 class HitlBigEngineInterface(HitlDeviceInterfaceBase):
     LOGGER = logging.getLogger('point_one.hitl.hitl_interface')
-    OUTPUT_PORT = 30200
-    DIAGNOSTIC_PORT = 30202
     DEVICE_NAME = ""
     VERSION_PREFIX = ""
     TAR_FILENAME_PREFIX = ""

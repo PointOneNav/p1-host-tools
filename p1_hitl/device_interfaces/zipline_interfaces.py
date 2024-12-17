@@ -1,12 +1,10 @@
 import logging
 import os
 
-from .big_engine_interfaces import HitlBigEngineInterface
+from .big_engine_interfaces import HitlBigEngineInterface, DIAGNOSTIC_PORT, OUTPUT_PORT
 
 class HitlZiplineInterface(HitlBigEngineInterface):
     POLARIS_API_KEY = os.getenv('HITL_POLARIS_API_KEY')
-    OUTPUT_PORT = 30200
-    DIAGNOSTIC_PORT = 30202
     DEVICE_NAME = "Zipline"
     VERSION_PREFIX = "zipline-"
     TAR_FILENAME_PREFIX = "p1_fusion_engine-"
