@@ -14,11 +14,12 @@ logger = logging.getLogger('point_one.hitl.jenkins_ctrl')
 JENKINS_BASE_URL = 'https://build.pointonenav.com'
 
 BUILD_JOB_MAP = {
+    DeviceType.AMAZON: "amazon-fe1-build",
     DeviceType.ATLAS: "atlas-build-st-develop",
+    DeviceType.BMW_MOTO: "bmw-moto-build",
     DeviceType.LG69T_AM: "quectel-build",
     DeviceType.LG69T_AP: "quectel-build",
     DeviceType.ZIPLINE: "zipline-build",
-    DeviceType.AMAZON: "amazon-fe1-build",
 }
 
 # NOTE: Specifying "ins", or "gnss" doesn't appear to work correctly for the LG69T release job.

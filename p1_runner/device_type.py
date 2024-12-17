@@ -6,11 +6,15 @@ from typing import Optional
 class DeviceType(Enum):
     UNKNOWN = auto()
 
+    AMAZON = auto()
+    ATLAS = auto()
+    BMW_MOTO = auto()
     LG69T_AM = auto()
     LG69T_AP = auto()
     LG69T_AH = auto()
     LG69T_AJ = auto()
-    ATLAS = auto()
+    ZIPLINE = auto()
+
 
     BEAM2K = auto()
     DJI_MAVIC = auto()
@@ -20,8 +24,6 @@ class DeviceType(Enum):
     LC29H = auto()
     SEPTENTRIO = auto()
     UBLOX = auto()
-    ZIPLINE = auto()
-    AMAZON = auto()
 
     def is_lg69t(self) -> bool:
         return self in (DeviceType.LG69T_AH, DeviceType.LG69T_AM, DeviceType.LG69T_AP)
@@ -40,6 +42,7 @@ class DeviceType(Enum):
             DeviceType.LG69T_AP: 'lg69t-ap-v[0-9]*.*',
             DeviceType.ZIPLINE: 'zipline-v[0-9]*.*',
             DeviceType.AMAZON: 'amazon-fleetedge-1-v[0-9]*.*',
+            DeviceType.BMW_MOTO: 'bmw-moto-mic-v[0-9]*.*',
         }
 
     @classmethod
