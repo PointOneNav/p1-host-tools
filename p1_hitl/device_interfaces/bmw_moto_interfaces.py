@@ -4,7 +4,6 @@ import os
 from .big_engine_interfaces import HitlBigEngineInterface
 
 class HitlBMWMotoInterface(HitlBigEngineInterface):
-    POLARIS_API_KEY = os.getenv('HITL_POLARIS_API_KEY')
     OUTPUT_PORT = 30200
     DIAGNOSTIC_PORT = 30202
     DEVICE_NAME = "BMW Moto"

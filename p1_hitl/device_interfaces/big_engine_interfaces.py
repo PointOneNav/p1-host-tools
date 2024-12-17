@@ -28,13 +28,11 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
     LOGGER = logging.getLogger('point_one.hitl.hitl_interface')
     OUTPUT_PORT = 30200
     DIAGNOSTIC_PORT = 30202
-    POLARIS_API_KEY = ""
     DEVICE_NAME = ""
     VERSION_PREFIX = ""
     TAR_FILENAME_PREFIX = ""
     TAR_FILENAME_SUFFIX = ""
     RUNNER_CMD = ""
-    POLARIS_API_KEY = os.getenv('HITL_POLARIS_API_KEY')
 
     @staticmethod
     def get_device_config(args: HitlEnvArgs) -> Optional[DeviceConfig]:
@@ -66,11 +64,6 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
 
         if self.config.tcp_address is None:
             raise KeyError('Config missing TCP address.')
-
-        if skip_corrections:
-            polaris_api_key = None
-        else:
-            polaris_api_key = self.POLARIS_API_KEY
 
         pkey = paramiko.Ed25519Key.from_private_key_file(SSH_KEY_PATH)
 
