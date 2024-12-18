@@ -11,7 +11,7 @@ requirements = [
     "construct~=2.10.67",
     "deepdiff>=8.0.1",
     # Install fusion-engine-client from the internal Point One GitHub repository.
-    "fusion-engine-client[all] @ git+ssh://git@github.com/PointOneNav/fusion-engine-client-internal@f2315c78ddf51563ca05c69372f059066fac727a#subdirectory=python",
+    "fusion-engine-client[all] @ git+ssh://git@github.com/PointOneNav/fusion-engine-client-internal@f731baeea263ffb7c8959d2d501d700c2cce8f1e#subdirectory=python",
     "psutil>=5.9.4",
     "pynmea2~=1.18.0",
     "pyserial~=3.5",
