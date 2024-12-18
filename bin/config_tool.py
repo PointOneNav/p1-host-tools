@@ -41,10 +41,6 @@ def _args_to_point3f(cls, args, config_interface):
     return cls(args.x, args.y, args.z)
 
 
-def _args_to_heading_bias(cls, args, config_interface):
-    return cls(args.horizontal, args.vertical)
-
-
 SERIAL_TIMEOUT = 5
 
 DEFAULT_TCP_PORT = 30200
@@ -418,11 +414,11 @@ def _str_to_socket_type(key):
 
 
 PARAM_DEFINITION = {
-    'gnss': {'format': GnssLeverArmConfig, 'arg_parse': _args_to_point3f},
+    'gnss': {'format': GNSSLeverArmConfig, 'arg_parse': _args_to_point3f},
+    'gnss_aux': {'format': GNSSAuxLeverArmConfig, 'arg_parse': _args_to_point3f},
     'device': {'format': DeviceLeverArmConfig, 'arg_parse': _args_to_point3f},
     'orientation': {'format': DeviceCourseOrientationConfig, 'arg_parse': _args_to_coarse_orientation},
     'output': {'format': OutputLeverArmConfig, 'arg_parse': _args_to_point3f},
-    'heading_bias': {'format': HeadingBias, 'arg_parse': _args_to_heading_bias},
 
     'gnss_systems': {'format': EnabledGNSSSystemsConfig, 'arg_parse': _args_to_enabled_gnss_systems},
     'gnss_frequencies': {'format': EnabledGNSSFrequencyBandsConfig, 'arg_parse': _args_to_enabled_gnss_frequencies},
@@ -1220,8 +1216,15 @@ example:
     apply_param_parser = apply_parser.add_subparsers(dest='param', help="The name of the parameter to be modified.")
 
     # config_tool.py apply -- lever arms and device orientation
-    help = 'The GNSS antenna lever arm (in meters).'
+    help = 'The primary GNSS antenna lever arm (in meters).'
     param_parser.add_parser('gnss', help=help, description=help)
+    gnss_parser = apply_param_parser.add_parser('gnss', help=help, description=help)
+    gnss_parser.add_argument('x', type=float, help='The X offset with respect to the vehicle body (in meters).')
+    gnss_parser.add_argument('y', type=float, help='The Y offset with respect to the vehicle body (in meters).')
+    gnss_parser.add_argument('z', type=float, help='The Z offset with respect to the vehicle body (in meters).')
+
+    help = 'The secondary (auxiliary) GNSS antenna lever arm (in meters).'
+    param_parser.add_parser('gnss_aux', help=help, description=help)
     gnss_parser = apply_param_parser.add_parser('gnss', help=help, description=help)
     gnss_parser.add_argument('x', type=float, help='The X offset with respect to the vehicle body (in meters).')
     gnss_parser.add_argument('y', type=float, help='The Y offset with respect to the vehicle body (in meters).')
@@ -1240,12 +1243,6 @@ example:
     gnss_parser.add_argument('x', type=float, help='The X offset with respect to the vehicle body (in meters).')
     gnss_parser.add_argument('y', type=float, help='The Y offset with respect to the vehicle body (in meters).')
     gnss_parser.add_argument('z', type=float, help='The Z offset with respect to the vehicle body (in meters).')
-
-    help = 'The heading horizontal and vertical biases (in degrees).'
-    param_parser.add_parser('heading_bias', help=help, description=help)
-    heading_parser = apply_param_parser.add_parser('heading_bias', help=help, description=help)
-    heading_parser.add_argument('horizontal', type=float, help='The horizontal bias (yaw) in degrees.')
-    heading_parser.add_argument('vertical', type=float, help='The vertical bias (pitch) in degrees.')
 
     help = 'The orientation of the device (IMU) within the vehicle, specified using the directions of the device +X ' \
            'and +Z axes relative to the vehicle body axes (+X = forward, +Y = left, +Z = up).'
