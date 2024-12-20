@@ -3,6 +3,7 @@ import os
 
 from .big_engine_interfaces import HitlBigEngineInterface
 
+
 class HitlAmazonInterface(HitlBigEngineInterface):
     DEVICE_NAME = "Amazon"
     VERSION_PREFIX = "amazon-fleetedge-1-"
