@@ -6,7 +6,6 @@ from typing import Any, Dict, NamedTuple, Optional, Union
 
 import requests
 from balena import Balena
-from balena.models.release import ReleaseType
 
 logger = logging.getLogger('point_one.test_automation.atlas_device_ctrl')
 
