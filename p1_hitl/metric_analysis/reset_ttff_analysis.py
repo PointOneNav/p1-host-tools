@@ -109,12 +109,12 @@ class ResetTTFFAnalyzer(AnalyzerBase):
                 metric_time_between_invalid_and_fixed[last_reset_type].start()
                 self.invalid_seen_for_reset = True
             elif payload.solution_type != SolutionType.Invalid and self.invalid_seen_for_reset:
-                    metric_time_between_invalid_and_valid[last_reset_type].stop()
-                    if payload.solution_type == SolutionType.RTKFixed:
-                        elapsed = metric_time_between_invalid_and_fixed[last_reset_type].stop()
-                        if elapsed is not None:
-                            logger.info(
-                                f'{RESET_NAMES[last_reset_type]} reset recovered RTKFixed after {elapsed:0.1f}s')
+                metric_time_between_invalid_and_valid[last_reset_type].stop()
+                if payload.solution_type == SolutionType.RTKFixed:
+                    elapsed = metric_time_between_invalid_and_fixed[last_reset_type].stop()
+                    if elapsed is not None:
+                        logger.info(
+                            f'{RESET_NAMES[last_reset_type]} reset recovered RTKFixed after {elapsed:0.1f}s')
 
     def on_event(self, event: EventEntry):
         if event.event_type is EventType.RESET:

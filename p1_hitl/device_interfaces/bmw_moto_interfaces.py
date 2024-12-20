@@ -3,6 +3,7 @@ import os
 
 from .big_engine_interfaces import HitlBigEngineInterface
 
+
 class HitlBMWMotoInterface(HitlBigEngineInterface):
     DEVICE_NAME = "BMW Moto"
     VERSION_PREFIX = "bmw-moto-mic-"

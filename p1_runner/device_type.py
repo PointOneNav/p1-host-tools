@@ -15,7 +15,6 @@ class DeviceType(Enum):
     LG69T_AJ = auto()
     ZIPLINE = auto()
 
-
     BEAM2K = auto()
     DJI_MAVIC = auto()
 

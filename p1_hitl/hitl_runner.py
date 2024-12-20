@@ -17,7 +17,8 @@ from p1_hitl.defs import (BUILD_INFO_FILE, CONSOLE_FILE, ENV_DUMP_FILE,
                           FULL_REPORT, LOG_FILES, PLAYBACK_DIR, DeviceType,
                           HitlEnvArgs, TestType, get_args)
 from p1_hitl.device_interfaces import (HitlAmazonInterface, HitlAtlasInterface,
-                                       HitlBMWMotoInterface, HitlLG69TInterface,
+                                       HitlBMWMotoInterface,
+                                       HitlLG69TInterface,
                                        HitlZiplineInterface)
 from p1_hitl.get_build_artifacts import get_build_info
 from p1_hitl.git_cmds import GitWrapper

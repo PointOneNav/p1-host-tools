@@ -88,7 +88,9 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
         # Download release from S3.
         aws_path = build_info["aws_path"]
         version_str = build_info["version"]
-        tar_filename = "%s%s%s" % (self.TAR_FILENAME_PREFIX, version_str[len(self.VERSION_PREFIX):], self.TAR_FILENAME_SUFFIX)
+        tar_filename = "%s%s%s" % (self.TAR_FILENAME_PREFIX,
+                                   version_str[len(self.VERSION_PREFIX):],
+                                   self.TAR_FILENAME_SUFFIX)
 
         fd = io.BytesIO()
 

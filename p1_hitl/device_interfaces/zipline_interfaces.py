@@ -1,7 +1,9 @@
 import logging
 import os
 
-from .big_engine_interfaces import HitlBigEngineInterface, DIAGNOSTIC_PORT, OUTPUT_PORT
+from .big_engine_interfaces import (DIAGNOSTIC_PORT, OUTPUT_PORT,
+                                    HitlBigEngineInterface)
+
 
 class HitlZiplineInterface(HitlBigEngineInterface):
     POLARIS_API_KEY = os.getenv('HITL_POLARIS_API_KEY')

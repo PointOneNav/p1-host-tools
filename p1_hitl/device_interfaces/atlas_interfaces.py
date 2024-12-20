@@ -1,6 +1,7 @@
 import logging
 import time
 from argparse import Namespace
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -20,13 +21,28 @@ from p1_test_automation.devices_config import (BalenaConfig, DeviceConfig,
 from .base_interfaces import HitlDeviceInterfaceBase
 
 UPDATE_TIMEOUT_SEC = 60 * 20
-UPDATE_POLL_INTERVAL_SEC = 10
-UPDATE_WAIT_TIME_SEC = 60
+CMD_POLL_INTERVAL_SEC = 10
+RESTART_TIMEOUT_SEC = 60 * 2
 RESTART_WAIT_TIME_SEC = 30
 
 DIAGNOSTIC_PORT = 30202
 
 logger = logging.getLogger('point_one.hitl.atlas_interface')
+
+
+def cmd_with_retries(cmd: Callable[[], bool], timeout: float) -> bool:
+    logger.info(f'Will retry command for {timeout}s to wait for containers to startup.')
+    start_time = time.monotonic()
+    while True:
+        if cmd():
+            return True
+        else:
+            elapsed = time.monotonic() - start_time
+            if elapsed > timeout:
+                return False
+            else:
+                logger.info('Retrying command.')
+                time.sleep(CMD_POLL_INTERVAL_SEC)
 
 
 class HitlAtlasInterface(HitlDeviceInterfaceBase):
@@ -95,21 +111,23 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
 
                 if target_release == status.current_release:
                     logger.info(f'{status.name} finished updating.')
-                    # Sleep to give updated software a chance to get up and running.
-                    time.sleep(UPDATE_WAIT_TIME_SEC)
                     break
                 else:
-                    time.sleep(UPDATE_POLL_INTERVAL_SEC)
+                    time.sleep(CMD_POLL_INTERVAL_SEC)
 
         if not skip_reset:
-            logger.info('Sending factory reset.')
-            if not factory_reset(self.config.tcp_address, reset_networking=True):
+            logger.info(f'Sending factory reset.')
+            if not cmd_with_retries(lambda: factory_reset(self.config.tcp_address,
+                                    reset_networking=True), RESTART_TIMEOUT_SEC):
                 logger.error('Factory reset failed.')
                 return None
-
             time.sleep(RESTART_WAIT_TIME_SEC)
 
-        set_crash_log_action(self.config.tcp_address, CrashLogAction.FULL_LOG)  # type: ignore
+        logger.info(f'Setting crash log upload enabled.')
+        if not cmd_with_retries(lambda: set_crash_log_action(self.config.tcp_address, # type: ignore
+                                CrashLogAction.FULL_LOG), RESTART_TIMEOUT_SEC):
+            logger.error('Applying Nemo setting failed.')
+            return None
 
         log_status = get_log_status(self.config.tcp_address)  # type: ignore
         if log_status is None:
