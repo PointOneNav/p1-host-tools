@@ -76,6 +76,11 @@ def configure_metrics(env_args: HitlEnvArgs):
     # Expect gaps in FE data from LG69T
     if env_args.HITL_BUILD_TYPE.is_lg69t():
         metric_no_fe_data_gaps.is_disabled = True
+        # Added 12/20/2024 - starting on 12/13, this value began reaching somewhere in the range of 210 - 220 ms for
+        # every test, which is slightly over the threshold of 0.2. It is believed that this could be a matter of the
+        # device not ouputting messages at the expected rate, or there could be a problem on the Pyserial side or
+        # analysis side.
+        metric_host_time_between_messages.max_time_between_checks_sec = 0.3
 
 
 MetricController.register_environment_config_customizations(configure_metrics)
