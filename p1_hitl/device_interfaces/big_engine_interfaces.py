@@ -130,6 +130,7 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
         self.device_interface = DeviceInterface(data_source)
 
         # To test IMU data, enable the IMUOutput message on the diagnostic port.
+        # NOTE: This will leave unsaved UserConfig changes on the device.
         if not self.env_args.HITL_BUILD_TYPE.is_gnss_only():
             self.LOGGER.info(f'Enabling IMUOutput message.')
             if not enable_imu_output(self.device_interface):

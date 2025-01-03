@@ -152,6 +152,7 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
         self.device_interface = DeviceInterface(data_source)
 
         # To test IMU data, enable the IMUOutput message on the diagnostic port.
+        # NOTE: This will leave unsaved UserConfig changes on the device.
         logger.info(f'Enabling IMUOutput message.')
         if not enable_imu_output(self.device_interface):
             logger.error('Enabling IMUOutput failed.')
