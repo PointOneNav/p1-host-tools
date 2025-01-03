@@ -4,7 +4,7 @@ from typing import Optional
 from fusion_engine_client.messages import IMUOutput, Timestamp
 from fusion_engine_client.parsers.decoder import MessageWithBytesTuple
 
-from p1_hitl.defs import HitlEnvArgs
+from p1_hitl.defs import DeviceType, HitlEnvArgs
 from p1_hitl.metric_analysis.metrics import (AlwaysTrueMetric, CdfThreshold,
                                              MetricController, StatsMetric)
 
@@ -19,11 +19,7 @@ metric_imu_msg_valid_p1_time = AlwaysTrueMetric(
 metric_imu_msg_period = StatsMetric(
     'imu_msg_period',
     "The time between IMU messages should be close to the IMU's expected rate.",
-    # Defaults to 100Hz. Override based on platform.
-    max_threshold=0.015,
-    max_cdf_thresholds=[CdfThreshold(50, .011)],
-    min_cdf_thresholds=[CdfThreshold(50, .0099)],
-    min_threshold=0.0095,
+    # The actual thresholds are set based on the device in `configure_metrics()`.
     is_logged=True,
 )
 
@@ -40,13 +36,23 @@ def configure_metrics(env_args: HitlEnvArgs):
         for metric in imu_metrics:
             metric.is_disabled = True
     else:
-        # LG69T devices have a 26Hz IMU rate.
-        if env_args.HITL_BUILD_TYPE.is_lg69t():
+        # Atlas has 100Hz IMU rate.
+        if env_args.HITL_BUILD_TYPE in [DeviceType.ATLAS]:
+            nominal_period = 0.01
+            metric_imu_msg_period.max_threshold = nominal_period + 0.005
+            metric_imu_msg_period.min_threshold = nominal_period - 0.005
+            metric_imu_msg_period.max_cdf_thresholds = [CdfThreshold(50, nominal_period + 0.001)]
+            metric_imu_msg_period.min_cdf_thresholds = [CdfThreshold(50, nominal_period - 0.001)]
+        # LG69T devices have 26Hz IMU rate.
+        elif env_args.HITL_BUILD_TYPE.is_lg69t() or \
+                env_args.HITL_BUILD_TYPE in [DeviceType.AMAZON, DeviceType.BMW_MOTO, DeviceType.ZIPLINE]:
             nominal_period = 1.0 / 26.0
             metric_imu_msg_period.max_threshold = nominal_period + 0.01
             metric_imu_msg_period.min_threshold = nominal_period - 0.01
             metric_imu_msg_period.max_cdf_thresholds = [CdfThreshold(50, nominal_period + 0.001)]
             metric_imu_msg_period.min_cdf_thresholds = [CdfThreshold(50, nominal_period - 0.001)]
+        else:
+            raise NotImplementedError(f'IMU rate not configured for {env_args.HITL_BUILD_TYPE.name}.')
 
 
 MetricController.register_environment_config_customizations(configure_metrics)
