@@ -44,7 +44,7 @@ def configure_metrics(env_args: HitlEnvArgs):
         if env_args.HITL_BUILD_TYPE.is_lg69t():
             nominal_period = 1.0 / 26.0
             metric_imu_msg_period.max_threshold = nominal_period + 0.01
-            metric_imu_msg_period.max_threshold = nominal_period - 0.01
+            metric_imu_msg_period.min_threshold = nominal_period - 0.01
             metric_imu_msg_period.max_cdf_thresholds = [CdfThreshold(50, nominal_period + 0.001)]
             metric_imu_msg_period.min_cdf_thresholds = [CdfThreshold(50, nominal_period - 0.001)]
 
