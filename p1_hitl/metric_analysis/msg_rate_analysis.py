@@ -158,7 +158,6 @@ class MessageRateChecker:
             if channel_state.data_source is not None:
                 channel_state.data_source.stop()
 
-
     def new_diag_message(self, diag_fe_message_type: MessageType):
         for channel_state in self.channel_states:
             # Check the data rate for the diagnostic interface used for HITL analysis.
@@ -175,7 +174,7 @@ class MessageRateChecker:
                         # back-to-back messages of the same type.
                         # This assumes at least two types of messages are sent in a burst.
                         if nmea_type != channel_state.last_nmea_type:
-                            channel_state.nmea_counts[msg.message_id] += 1
+                            channel_state.nmea_counts[nmea_type] += 1
                             channel_state.last_nmea_type = nmea_type
 
                 if channel_state.fe_decoder is not None:
