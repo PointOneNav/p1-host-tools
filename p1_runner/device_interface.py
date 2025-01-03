@@ -156,7 +156,7 @@ class DeviceInterface:
     def _wait_for_fe_message(self, msg_type, response_timeout):
         start_time = time.time()
         while True:
-            msgs = self.fe_decoder.on_data(self.data_source.read(1))
+            msgs = self.fe_decoder.on_data(self.data_source.read(1, response_timeout))
             for msg in msgs:
                 if msg[0].message_type == msg_type:
                     logger.debug('Response: %s', str(msg[1]))

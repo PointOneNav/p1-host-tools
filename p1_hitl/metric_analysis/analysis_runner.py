@@ -23,6 +23,7 @@ from p1_runner.device_interface import (MAX_FE_MSG_SIZE, DeviceInterface,
 from p1_runner.exception_utils import exception_to_str
 
 from .base_analysis import AnalyzerBase
+from .msg_rate_analysis import MessageRateAnalyzer
 from .position_analysis import PositionAnalyzer
 from .reset_ttff_analysis import ResetTTFFAnalyzer
 from .sanity_analysis import SanityAnalyzer
@@ -92,19 +93,23 @@ PLAYBACK_READ_SIZE = 1024
 REALTIME_POLL_INTERVAL = 0.05
 
 
-def _setup_analysis(env_args: HitlEnvArgs) -> List[AnalyzerBase]:
+def _setup_analysis(env_args: HitlEnvArgs, is_playback) -> List[AnalyzerBase]:
     analyzers = [c(env_args) for c in [SanityAnalyzer, PositionAnalyzer, ResetTTFFAnalyzer]]
+    if not is_playback:
+        analyzers.append(MessageRateAnalyzer(env_args))
     return analyzers
 
 
 def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs, log_dir: Path,
                  release_str: str) -> bool:
+
+    analyzers = []
     try:
         params = env_args.get_selected_test_type().get_test_params()
         if params.duration_sec < MAX_SEC_TO_VERSION_MESSAGE:
             metric_version_check.is_disabled = True
 
-        analyzers = _setup_analysis(env_args)
+        analyzers = _setup_analysis(env_args, is_playback=False)
         scenario_controller = ScenarioController(env_args, log_dir, device_interface=interface)
         start_time = time.monotonic()
         logger.info(f'Monitoring device for {params.duration_sec} sec.')
@@ -158,6 +163,9 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs, log_dir: Pat
     except Exception as e:
         logger.error(f'Exception while analyzing FE messages:\n{traceback.format_exc()}')
         return False
+    finally:
+        for analyzer in analyzers:
+            analyzer.stop()
 
     return True
 
@@ -224,8 +232,9 @@ def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs) -> bool:
                 status.msg_count += 1
                 status.update()
 
+    analyzers = []
     try:
-        analyzers = _setup_analysis(env_args)
+        analyzers = _setup_analysis(env_args, is_playback=True)
         log_dir = playback_path.parent
         scenario_controller = ScenarioController(env_args, log_dir)
 
@@ -250,5 +259,8 @@ def run_analysis_playback(playback_path: Path, env_args: HitlEnvArgs) -> bool:
     except Exception as e:
         logger.error(f'Exception while analyzing FE messages:\n{traceback.format_exc()}')
         return False
+    finally:
+        for analyzer in analyzers:
+            analyzer.stop()
 
     return True
