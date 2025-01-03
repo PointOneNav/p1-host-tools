@@ -39,20 +39,16 @@ def configure_metrics(env_args: HitlEnvArgs):
         # Atlas has 100Hz IMU rate.
         if env_args.HITL_BUILD_TYPE in [DeviceType.ATLAS]:
             nominal_period = 0.01
-            metric_imu_msg_period.max_threshold = nominal_period + 0.005
-            metric_imu_msg_period.min_threshold = nominal_period - 0.005
-            metric_imu_msg_period.max_cdf_thresholds = [CdfThreshold(50, nominal_period + 0.001)]
-            metric_imu_msg_period.min_cdf_thresholds = [CdfThreshold(50, nominal_period - 0.001)]
         # LG69T devices have 26Hz IMU rate.
         elif env_args.HITL_BUILD_TYPE.is_lg69t() or \
                 env_args.HITL_BUILD_TYPE in [DeviceType.AMAZON, DeviceType.BMW_MOTO, DeviceType.ZIPLINE]:
             nominal_period = 1.0 / 26.0
-            metric_imu_msg_period.max_threshold = nominal_period + 0.01
-            metric_imu_msg_period.min_threshold = nominal_period - 0.01
-            metric_imu_msg_period.max_cdf_thresholds = [CdfThreshold(50, nominal_period + 0.001)]
-            metric_imu_msg_period.min_cdf_thresholds = [CdfThreshold(50, nominal_period - 0.001)]
         else:
             raise NotImplementedError(f'IMU rate not configured for {env_args.HITL_BUILD_TYPE.name}.')
+        metric_imu_msg_period.max_threshold = nominal_period + 0.005
+        metric_imu_msg_period.min_threshold = nominal_period - 0.005
+        metric_imu_msg_period.max_cdf_thresholds = [CdfThreshold(50, nominal_period + 0.001)]
+        metric_imu_msg_period.min_cdf_thresholds = [CdfThreshold(50, nominal_period - 0.001)]
 
 
 MetricController.register_environment_config_customizations(configure_metrics)
