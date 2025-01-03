@@ -118,7 +118,8 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs, log_dir: Pat
         last_logger_update = time.monotonic()
         # Used to look for CRC errors or gaps in FE data.
         interface.fe_decoder._return_offset = True
-        last_message_end_offset = 0
+        # Initialize offset incase interface already processed data.
+        last_message_end_offset = interface.fe_decoder._bytes_processed
         while time.monotonic() - start_time < params.duration_sec:
             try:
                 msgs = interface.poll_messages(response_timeout=REALTIME_POLL_INTERVAL)

@@ -29,7 +29,7 @@ metric_imu_msg_period = StatsMetric(
 
 metric_imu_msg_non_nan = AlwaysTrueMetric(
     'imu_msg_non_nan',
-    'All values in message should be non-nan.',
+    'accel_mps2 and gyro_rps should be non-nan.',
 )
 
 
@@ -73,10 +73,13 @@ class IMUAnalyzer(AnalyzerBase):
                 metric_imu_msg_period.check(time_diff)
             self.last_p1_time = payload.get_p1_time()
 
-            any_nan = any(
-                math.isnan(val) for val in (
-                    payload.accel_mps2 +
-                    payload.accel_std_mps2 +
-                    payload.gyro_rps +
-                    payload.gyro_std_rps))
-            metric_imu_msg_non_nan.check(not any_nan)
+            any_nan = False
+            failure_context = ''
+            # Note that gyro_std_rps and accel_std_mps2 are allowed to be NaN.
+            fields = {'accel_mps2', 'gyro_rps'}
+            for field in fields:
+                any_nan = any(math.isnan(v) for v in vars(payload)[field])
+                if any_nan:
+                    failure_context = f'{field} had a NaN value.'
+                    break
+            metric_imu_msg_non_nan.check(not any_nan, failure_context)

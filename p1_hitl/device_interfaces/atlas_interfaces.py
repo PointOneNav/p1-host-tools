@@ -19,6 +19,7 @@ from p1_test_automation.devices_config import (BalenaConfig, DeviceConfig,
                                                open_data_source)
 
 from .base_interfaces import HitlDeviceInterfaceBase
+from .interface_utils import enable_imu_output
 
 UPDATE_TIMEOUT_SEC = 60 * 20
 CMD_POLL_INTERVAL_SEC = 10
@@ -149,6 +150,13 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
             logger.error(f"Can't reopen Atlas TCP interface: {self.config.tcp_address}.")
             return None
         self.device_interface = DeviceInterface(data_source)
+
+        # To test IMU data, enable the IMUOutput message on the diagnostic port.
+        logger.info(f'Enabling IMUOutput message.')
+        if not enable_imu_output(self.device_interface):
+            logger.error('Enabling IMUOutput failed.')
+            return None
+
         return self.device_interface
 
     def shutdown_device(self, tests_passed: bool, output_dir: Path):
