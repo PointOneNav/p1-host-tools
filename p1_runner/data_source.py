@@ -205,8 +205,9 @@ class SerialDataSource(DataSource, serial.threaded.Protocol):
         if self.rx_thread is None:
             raise RuntimeError('Reading DeviceInterface without calling "start_rx_thread".')
         data = b''
-        start_time = time.time()
-        while size > 0 and time.time() - start_time < timeout:
+        start_time = time.monotonic()
+        now = start_time
+        while size > 0 and now - start_time <= timeout:
             logger.trace(f'Buffered {len(self.data_buffer)} B.')
             if not self.data_event.wait(RX_BYTE_TIMEOUT):
                 logger.debug('Timed out waiting for byte to be added to buffer.')
@@ -224,6 +225,7 @@ class SerialDataSource(DataSource, serial.threaded.Protocol):
                 size = 0
 
             self.data_lock.release()
+            now = time.monotonic()
         if self.rx_log:
             self.rx_log.write(data)
         return data
