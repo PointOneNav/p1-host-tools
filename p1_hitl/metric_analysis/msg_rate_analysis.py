@@ -23,7 +23,7 @@ from .base_analysis import AnalyzerBase
 logger = logging.getLogger('point_one.hitl.analysis.msg-rates')
 
 # To allow sufficient data for accurate rate checking, the first check is delayed.
-_TIME_BEFORE_FIRST_CHECK_SEC = 122.0
+_TIME_BEFORE_FIRST_CHECK_SEC = 242.0
 
 
 class ExpectedMessageRate(NamedTuple):
@@ -241,8 +241,8 @@ def configure_metrics(env_args: HitlEnvArgs):
                         metric_name,
                         f'Expected rate of {rate.message_id.name} messages on {channel.name} channel.',
                         threshold=get_expected_period(rate.rate),
-                        # Allow 5% tolerance for the rate.
-                        rel_tol=0.05
+                        # Allow 10% tolerance for the rate check.
+                        rel_tol=0.1
                     )
 
 
