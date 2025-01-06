@@ -206,6 +206,59 @@ def set_crash_log_action(tcp_address: str, action: CrashLogAction) -> bool:
     return True
 
 
+def set_corrections_settings(tcp_address: str, settings: dict[str, str | int]) -> bool:
+    """!
+    @brief Set the corrections settings over the Nemo REST API.
+
+    Settings Types:
+    ```
+    {
+        "corrections_source": "polaris",
+        "polaris_hostname": polaris_hostname,
+        "polaris_port": polaris_port,
+        "polaris_beacon_name": polaris_beacon_name
+    }
+
+    {
+        "corrections_source": "polaris_virtualrtk",
+        "polaris_hostname": polaris_hostname,
+        "polaris_port": polaris_port,
+        "polaris_beacon_name": polaris_beacon_name
+    }
+
+    {
+        "corrections_source": "ntrip",
+        "ntrip_hostname": ntrip_hostname,
+        "ntrip_mountpoint": ntrip_mountpoint,
+        "ntrip_username": ntrip_username,
+        "ntrip_password": ntrip_password
+    }
+
+    {
+        "corrections_source": "none",
+    }
+    ```
+
+    @param tcp_address host address of device to set.
+    @param settings dictionary of correction settings.
+
+    @return `true` on success and `false` on failure.
+    """
+    logger.debug(f"Setting corrections: {settings}.")
+    url = f"http://{tcp_address}/api/v1/application/set_corrections_settings"
+
+    try:
+        r = requests.post(url, json=settings, timeout=TIMEOUT_SEC)
+        r.raise_for_status()
+    except Exception as e:
+        logger.error(f"set_crash_log_action exception {e}.")
+        return False
+
+    logger.debug(r.json())
+
+    return True
+
+
 def send_logging_cmd_to_legacy_atlas(tcp_address: str, cmd: LoggingCmd) -> bool:
     """!
     @brief For an Atlas running a legacy `develop` build start or stop a log over the Nemo REST API.

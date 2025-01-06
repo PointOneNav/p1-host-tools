@@ -13,6 +13,7 @@ from p1_test_automation.atlas_device_ctrl import (AtlasBalenaController,
                                                   factory_reset,
                                                   get_log_status,
                                                   restart_application,
+                                                  set_corrections_settings,
                                                   set_crash_log_action,
                                                   upload_log)
 from p1_test_automation.devices_config import (BalenaConfig, DeviceConfig,
@@ -77,9 +78,9 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
 
         # TODO: Power cycle at some point?.
 
-        # TODO: Disable corrections if needed.
-
         logger.info(f'Initializing Atlas.')
+        # For type checking.
+        assert self.config.tcp_address is not None
 
         if self.config.balena is None:
             raise KeyError('Config missing Balena UUID.')
@@ -130,7 +131,13 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
             logger.error('Applying Nemo setting failed.')
             return None
 
-        log_status = get_log_status(self.config.tcp_address)  # type: ignore
+        if skip_corrections:
+            logger.info(f'Disabling corrections.')
+            if not set_corrections_settings(self.config.tcp_address, {"corrections_source": "none"}):
+                logger.error('Applying Nemo setting failed.')
+                return None
+
+        log_status = get_log_status(self.config.tcp_address)
         if log_status is None:
             logger.error('Error querying logs.')
             return None
