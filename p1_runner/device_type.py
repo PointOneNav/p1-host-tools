@@ -1,6 +1,6 @@
 import re
 from enum import Enum, auto
-from typing import Optional
+from typing import Dict, Optional
 
 
 class DeviceType(Enum):
@@ -34,7 +34,7 @@ class DeviceType(Enum):
         return self in (DeviceType.LG69T_AM, DeviceType.ZIPLINE)
 
     @classmethod
-    def mapping_device_to_regex(cls) -> dict['DeviceType', str]:
+    def mapping_device_to_regex(cls) -> Dict['DeviceType', str]:
         return {
             DeviceType.ATLAS: 'v[0-9]*.*',
             DeviceType.LG69T_AM: 'lg69t-am-v[0-9]*.*',
