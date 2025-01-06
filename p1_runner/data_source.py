@@ -211,6 +211,7 @@ class SerialDataSource(DataSource, serial.threaded.Protocol):
             logger.trace(f'Buffered {len(self.data_buffer)} B.')
             if not self.data_event.wait(RX_BYTE_TIMEOUT):
                 logger.debug('Timed out waiting for byte to be added to buffer.')
+                now = time.monotonic()
                 continue
             self.data_lock.acquire()
 
