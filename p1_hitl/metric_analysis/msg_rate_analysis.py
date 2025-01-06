@@ -150,6 +150,8 @@ class MessageRateChecker:
                     nmea_framer = NMEAFramer()
 
                 data_source = open_data_source(channel.device_config)
+                if data_source is None:
+                    raise RuntimeError(f'Could not connect {channel.name} to check default message rates.')
 
             self.channel_states.append(CheckerInterfaceState(data_source, nmea_framer, fe_decoder))
 
@@ -218,6 +220,8 @@ def get_expected_period(rate: MessageRate) -> float:
         return 30.0
     elif rate == MessageRate.INTERVAL_60_S:
         return 60.0
+    elif rate == MessageRate.ON_CHANGE:
+        raise ValueError('Period is not applicable for message rate ON_CHANGE.')
     else:
         raise ValueError(f'Unknown rate: {rate}')
 
