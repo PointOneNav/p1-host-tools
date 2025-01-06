@@ -17,3 +17,6 @@ class AnalyzerBase(ABC):
 
     def on_event(self, event: EventEntry):
         pass
+
+    def stop(self):
+        pass

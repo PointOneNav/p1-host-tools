@@ -124,7 +124,7 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
             time.sleep(RESTART_WAIT_TIME_SEC)
 
         logger.info(f'Setting crash log upload enabled.')
-        if not cmd_with_retries(lambda: set_crash_log_action(self.config.tcp_address, # type: ignore
+        if not cmd_with_retries(lambda: set_crash_log_action(self.config.tcp_address,  # type: ignore
                                 CrashLogAction.FULL_LOG), RESTART_TIMEOUT_SEC):
             logger.error('Applying Nemo setting failed.')
             return None
