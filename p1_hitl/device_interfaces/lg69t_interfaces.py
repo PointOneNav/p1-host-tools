@@ -23,6 +23,7 @@ from p1_test_automation.devices_config import (DeviceConfig, RelayConfig,
 from p1_test_automation.relay_controller import RelayController
 
 from .base_interfaces import HitlDeviceInterfaceBase
+from .interface_utils import enable_imu_output
 
 UPDATE_WAIT_TIME_SEC = 15
 RESTART_TIMEOUT_SEC = 10
@@ -88,6 +89,7 @@ class HitlLG69TInterface(HitlDeviceInterfaceBase):
         self.device_interface: Optional[DeviceInterface] = None
         self.corrections_client: Optional[NTRIPClient] = None
         self.reference_position_lla = env_args.JENKINS_ANTENNA_LOCATION
+        self.env_args = env_args
         self.position_updater = NTRIPPositionUpdater()
 
     def init_device(self, build_info: Dict[str, Any], skip_reset=False,
@@ -157,6 +159,14 @@ class HitlLG69TInterface(HitlDeviceInterfaceBase):
                 return None
             # Wait for reboot to finish. Prints error on failure.
             if not self.device_interface.wait_for_reboot(RESTART_TIMEOUT_SEC):
+                return None
+
+        # To test IMU data, enable the IMUOutput message on the diagnostic port.
+        # NOTE: This will leave unsaved UserConfig changes on the device.
+        if not self.env_args.HITL_BUILD_TYPE.is_gnss_only():
+            logger.info(f'Enabling IMUOutput message.')
+            if not enable_imu_output(self.device_interface):
+                logger.error('Enabling IMUOutput failed.')
                 return None
 
         if not skip_corrections:

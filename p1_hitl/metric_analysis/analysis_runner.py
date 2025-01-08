@@ -23,6 +23,7 @@ from p1_runner.device_interface import (MAX_FE_MSG_SIZE, DeviceInterface,
 from p1_runner.exception_utils import exception_to_str
 
 from .base_analysis import AnalyzerBase
+from .imu_analysis import IMUAnalyzer
 from .msg_rate_analysis import MessageRateAnalyzer
 from .position_analysis import PositionAnalyzer
 from .reset_ttff_analysis import ResetTTFFAnalyzer
@@ -94,7 +95,7 @@ REALTIME_POLL_INTERVAL = 0.05
 
 
 def _setup_analysis(env_args: HitlEnvArgs, is_playback) -> List[AnalyzerBase]:
-    analyzers = [c(env_args) for c in [SanityAnalyzer, PositionAnalyzer, ResetTTFFAnalyzer]]
+    analyzers = [c(env_args) for c in [IMUAnalyzer, PositionAnalyzer, ResetTTFFAnalyzer, SanityAnalyzer]]
     if not is_playback:
         analyzers.append(MessageRateAnalyzer(env_args))
     return analyzers
@@ -117,7 +118,8 @@ def run_analysis(interface: DeviceInterface, env_args: HitlEnvArgs, log_dir: Pat
         last_logger_update = time.monotonic()
         # Used to look for CRC errors or gaps in FE data.
         interface.fe_decoder._return_offset = True
-        last_message_end_offset = 0
+        # Initialize offset incase interface already processed data.
+        last_message_end_offset = interface.fe_decoder._bytes_processed
         while time.monotonic() - start_time < params.duration_sec:
             try:
                 msgs = interface.poll_messages(response_timeout=REALTIME_POLL_INTERVAL)

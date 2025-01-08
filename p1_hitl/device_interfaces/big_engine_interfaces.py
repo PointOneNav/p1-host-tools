@@ -16,6 +16,7 @@ from p1_runner.device_interface import DeviceInterface
 from p1_test_automation.devices_config import DeviceConfig, open_data_source
 
 from .base_interfaces import HitlDeviceInterfaceBase
+from .interface_utils import enable_imu_output
 
 RESTART_WAIT_TIME_SEC = 1
 OUTPUT_PORT = 30200
@@ -46,6 +47,7 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
 
     def __init__(self, config: DeviceConfig, env_args: HitlEnvArgs):
         self.config = config
+        self.env_args = env_args
         self.device_interface: Optional[DeviceInterface] = None
         self.ssh_client = None
 
@@ -126,9 +128,18 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
             return None
 
         self.device_interface = DeviceInterface(data_source)
+
+        # To test IMU data, enable the IMUOutput message on the diagnostic port.
+        # NOTE: This will leave unsaved UserConfig changes on the device.
+        if not self.env_args.HITL_BUILD_TYPE.is_gnss_only():
+            self.LOGGER.info(f'Enabling IMUOutput message.')
+            if not enable_imu_output(self.device_interface):
+                self.LOGGER.error('Enabling IMUOutput failed.')
+                return None
+
         return self.device_interface
 
-    def shutdown_device(self, tests_passed: bool, output_dir: Path) -> Optional[DeviceInterface]:
+    def shutdown_device(self, tests_passed: bool, output_dir: Path):
         if self.config.tcp_address is None or self.device_interface is None:
             return
 

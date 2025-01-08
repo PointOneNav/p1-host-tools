@@ -6,7 +6,7 @@ from typing import Dict, Optional
 class DeviceType(Enum):
     UNKNOWN = auto()
 
-    AMAZON = auto()
+    AMAZON_FLEETEDGE_V1 = auto()
     ATLAS = auto()
     BMW_MOTO = auto()
     LG69T_AM = auto()
@@ -40,7 +40,7 @@ class DeviceType(Enum):
             DeviceType.LG69T_AM: 'lg69t-am-v[0-9]*.*',
             DeviceType.LG69T_AP: 'lg69t-ap-v[0-9]*.*',
             DeviceType.ZIPLINE: 'zipline-v[0-9]*.*',
-            DeviceType.AMAZON: 'amazon-fleetedge-1-v[0-9]*.*',
+            DeviceType.AMAZON_FLEETEDGE_V1: 'amazon-fleetedge-1-v[0-9]*.*',
             DeviceType.BMW_MOTO: 'bmw-moto-mic-v[0-9]*.*',
         }
 

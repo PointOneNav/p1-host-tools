@@ -23,5 +23,5 @@ class HitlDeviceInterfaceBase(ABC):
         ...
 
     @abstractmethod
-    def shutdown_device(self, tests_passed: bool, output_dir: Path) -> Optional[DeviceInterface]:
+    def shutdown_device(self, tests_passed: bool, output_dir: Path):
         ...

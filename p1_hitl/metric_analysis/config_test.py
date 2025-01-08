@@ -862,7 +862,7 @@ def run_tests(env_args: HitlEnvArgs, device_config: DeviceConfig, logger_manager
             ])
     else:
         interface_name = {
-            DeviceType.AMAZON: 'tcp3',
+            DeviceType.AMAZON_FLEETEDGE_V1: 'tcp3',
             DeviceType.ATLAS: 'tcp3',
             DeviceType.BMW_MOTO: 'tcp3',
             DeviceType.ZIPLINE: 'tcp3'}.get(
