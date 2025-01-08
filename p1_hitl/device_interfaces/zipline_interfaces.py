@@ -14,4 +14,4 @@ class HitlZiplineInterface(HitlBigEngineInterface):
     RUNNER_CMD = f"""\
 ./p1_fusion_engine/run_fusion_engine.sh --lg69t-device /dev/zipline-lg69t \
 --device-id hitl --cache ./p1_fusion_engine/cache --tcp-output-port {OUTPUT_PORT} \
---tcp-diagnostics-port {DIAGNOSTIC_PORT} --corrections-source polaris --polaris {POLARIS_API_KEY}"""
+--tcp-diagnostics-port {DIAGNOSTIC_PORT} --polaris {POLARIS_API_KEY}"""

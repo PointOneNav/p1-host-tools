@@ -111,8 +111,18 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
 
         # Run bootstrap script.
         channel = transport.open_session()
+
+        RUNNER_CMD_PREFIX=''
+        if skip_corrections:
+            # This is made a little confusing by the sshd_config AcceptEnv parameter. I believe this means we can use
+            # the paramiko set_environment_variable or other methods for passing in environment variables. However,
+            # using normal shell methods within the SSH session to set environment variables still works.
+            #
+            # The scripts are setup not to override this value if it is set and to default to "auto" otherwise.
+            RUNNER_CMD_PREFIX = 'CORRECTIONS_SOURCE="none" '
+
         self.LOGGER.info('Starting engine.')
-        channel.exec_command(self.RUNNER_CMD)
+        channel.exec_command(RUNNER_CMD_PREFIX + self.RUNNER_CMD)
         # Manually wait to ensure that the bootstrap script kicks off in the background before continuing.
         time.sleep(RESTART_WAIT_TIME_SEC)
 
