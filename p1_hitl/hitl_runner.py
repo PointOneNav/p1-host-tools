@@ -150,7 +150,7 @@ def main():
             json.dump(build_info, fd)
 
     ################# Setup device under test #################
-        if env_args.HITL_BUILD_TYPE == DeviceType.AMAZON:
+        if env_args.HITL_BUILD_TYPE == DeviceType.AMAZON_FLEETEDGE_V1:
             hitl_device_interface_cls = HitlAmazonInterface
         elif env_args.HITL_BUILD_TYPE == DeviceType.ATLAS:
             hitl_device_interface_cls = HitlAtlasInterface

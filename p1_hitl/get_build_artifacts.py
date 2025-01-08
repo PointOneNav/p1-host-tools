@@ -18,7 +18,7 @@ def get_s3_path(version_str: str, build_type: DeviceType) -> str:
     # Determine path in ARTIFACT_BUCKET on S3 for build.
     if build_type.is_lg69t():
         return f'nautilus/quectel/{version_str}'
-    elif build_type is DeviceType.AMAZON:
+    elif build_type is DeviceType.AMAZON_FLEETEDGE_V1:
         return f'nautilus/amazon-fleetedge-1/{version_str[19:]}'
     elif build_type is DeviceType.ATLAS:
         return f'nautilus/atlas/{version_str}'

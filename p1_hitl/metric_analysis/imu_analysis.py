@@ -41,7 +41,7 @@ def configure_metrics(env_args: HitlEnvArgs):
             nominal_period = 0.01
         # LG69T devices have 26Hz IMU rate.
         elif env_args.HITL_BUILD_TYPE.is_lg69t() or \
-                env_args.HITL_BUILD_TYPE in [DeviceType.AMAZON, DeviceType.BMW_MOTO, DeviceType.ZIPLINE]:
+                env_args.HITL_BUILD_TYPE in [DeviceType.AMAZON_FLEETEDGE_V1, DeviceType.BMW_MOTO, DeviceType.ZIPLINE]:
             nominal_period = 1.0 / 26.0
         else:
             raise NotImplementedError(f'IMU rate not configured for {env_args.HITL_BUILD_TYPE.name}.')
