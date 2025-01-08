@@ -4,6 +4,7 @@ from typing import Optional, Union
 from fusion_engine_client.messages import *
 from fusion_engine_client.parsers import (FusionEngineDecoder,
                                           FusionEngineEncoder)
+from fusion_engine_client.parsers.decoder import MessageWithBytesTuple
 
 import p1_runner.trace as logging
 from p1_runner.data_source import RESPONSE_TIMEOUT, DataSource
@@ -135,6 +136,17 @@ class DeviceInterface:
 
         return reboot_started and reboot_finished
 
+    def wait_for_any_fe_message(self, response_timeout=RESPONSE_TIMEOUT) -> List[MessageWithBytesTuple]:
+        start_time = time.time()
+        while time.time() - start_time < response_timeout:
+            msgs = self.fe_decoder.on_data(self.data_source.read(1, response_timeout))
+            if len(msgs) > 0:
+                return msgs  # type: ignore
+        return []
+
+    def poll_messages(self, read_buffer_size=MAX_FE_MSG_SIZE, response_timeout=0.0) -> List[MessageWithBytesTuple]:
+        return self.fe_decoder.on_data(self.data_source.read(read_buffer_size, response_timeout))  # type: ignore
+
     def wait_for_message(self, msg_type, response_timeout=RESPONSE_TIMEOUT):
         if isinstance(msg_type, MessageType):
             return self._wait_for_fe_message(msg_type, response_timeout)
@@ -144,7 +156,7 @@ class DeviceInterface:
     def _wait_for_fe_message(self, msg_type, response_timeout):
         start_time = time.time()
         while True:
-            msgs = self.fe_decoder.on_data(self.data_source.read(1))
+            msgs = self.fe_decoder.on_data(self.data_source.read(1, response_timeout))
             for msg in msgs:
                 if msg[0].message_type == msg_type:
                     logger.debug('Response: %s', str(msg[1]))

@@ -8,7 +8,7 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import Type
 
-import construct # For ignoring wrapper class in DeepDiff
+import construct  # For ignoring wrapper class in DeepDiff
 from deepdiff import DeepDiff
 from fusion_engine_client.messages.configuration import (
     ConfigurationSource, DataType, DataVersion, PlatformStorageDataMessage,

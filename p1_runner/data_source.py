@@ -21,7 +21,7 @@ from p1_runner.log_manager import LogManager
 logger = logging.getLogger('point_one.data_source')
 
 
-RESPONSE_TIMEOUT = 5
+RESPONSE_TIMEOUT = 5.0
 RX_BYTE_TIMEOUT = 0.1
 MAX_DATA_BUFFER_SIZE = 10 * 1024 * 1024
 DATA_BUFFER_DROP_SIZE = 1 * 1024 * 1024
@@ -205,11 +205,13 @@ class SerialDataSource(DataSource, serial.threaded.Protocol):
         if self.rx_thread is None:
             raise RuntimeError('Reading DeviceInterface without calling "start_rx_thread".')
         data = b''
-        start_time = time.time()
-        while size > 0 and time.time() - start_time < timeout:
+        start_time = time.monotonic()
+        now = start_time
+        while size > 0 and now - start_time <= timeout:
             logger.trace(f'Buffered {len(self.data_buffer)} B.')
             if not self.data_event.wait(RX_BYTE_TIMEOUT):
                 logger.debug('Timed out waiting for byte to be added to buffer.')
+                now = time.monotonic()
                 continue
             self.data_lock.acquire()
 
@@ -224,6 +226,7 @@ class SerialDataSource(DataSource, serial.threaded.Protocol):
                 size = 0
 
             self.data_lock.release()
+            now = time.monotonic()
         if self.rx_log:
             self.rx_log.write(data)
         return data
