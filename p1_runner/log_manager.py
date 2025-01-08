@@ -61,7 +61,7 @@ class LogManager(threading.Thread):
         if self.directory_to_reuse:
             self.log_dir = self.directory_to_reuse
             if not os.path.exists(self.log_dir):
-                raise IOError("Log directory '%s' doesn't exists." % self.log_dir)
+                raise IOError("Log directory '%s' doesn't exist." % self.log_dir)
             else:
                 return
 
