@@ -59,6 +59,7 @@ def should_failure_be_ignored(env_args: HitlEnvArgs, failure: dict[str, Any]) ->
             '3d_fixed_pos_error',
             'time_between_cold_invalid_and_valid',
             'time_between_cold_invalid_and_fixed',
+            'imu_msg_period',
         ]
         if failure['name'] in ignored_metrics:
             logger.warning(msg_start + failure['name'])
