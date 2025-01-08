@@ -36,12 +36,11 @@ def configure_metrics(env_args: HitlEnvArgs):
         for metric in imu_metrics:
             metric.is_disabled = True
     else:
-        # Atlas has 100Hz IMU rate.
-        if env_args.HITL_BUILD_TYPE in [DeviceType.ATLAS]:
+        # 100Hz IMU devices.
+        if env_args.HITL_BUILD_TYPE in [DeviceType.ATLAS, DeviceType.BMW_MOTO, DeviceType.AMAZON_FLEETEDGE_V1]:
             nominal_period = 0.01
         # LG69T devices have 26Hz IMU rate.
-        elif env_args.HITL_BUILD_TYPE.is_lg69t() or \
-                env_args.HITL_BUILD_TYPE in [DeviceType.AMAZON_FLEETEDGE_V1, DeviceType.BMW_MOTO, DeviceType.ZIPLINE]:
+        elif env_args.HITL_BUILD_TYPE.is_lg69t():
             nominal_period = 1.0 / 26.0
         else:
             raise NotImplementedError(f'IMU rate not configured for {env_args.HITL_BUILD_TYPE.name}.')
