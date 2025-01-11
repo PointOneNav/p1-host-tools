@@ -105,6 +105,28 @@ metric_3d_fixed_pos_error = StatsMetric(
     is_logged=True,
 )
 
+metric_2d_pos_error = StatsMetric(
+    '2d_pos_error',
+    '2d position error (m) stats.',
+    max_threshold=20.0,
+    max_cdf_thresholds=[
+        CdfThreshold(90, 10.0),
+        CdfThreshold(50, 2.0),
+    ],
+    is_logged=True,
+)
+
+metric_3d_pos_error = StatsMetric(
+    '3d_pos_error',
+    '3d position error (m) stats.',
+    max_threshold=20.0,
+    max_cdf_thresholds=[
+        CdfThreshold(90, 10.0),
+        CdfThreshold(50, 2.0),
+    ],
+    is_logged=True,
+)
+
 metric_non_nan_position = AlwaysTrueMetric(
     'non_nan_position',
     'All positions should be non-nan values.',
@@ -269,6 +291,9 @@ class PositionAnalyzer(AnalyzerBase):
 
                 error_2d_m, error_3d_m = calculate_position_error(
                     payload.lla_deg, self.env_args.JENKINS_ANTENNA_LOCATION)
+
+                metric_2d_pos_error.check(error_2d_m)
+                metric_3d_pos_error.check(error_3d_m)
 
                 if is_fixed:
                     metric_2d_fixed_pos_error.check(error_2d_m)
