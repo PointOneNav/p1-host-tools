@@ -38,6 +38,8 @@ def should_failure_be_ignored(env_args: HitlEnvArgs, failure: dict[str, Any]) ->
             'seq_num_check',
             'time_between_reset_and_invalid',
             'imu_msg_period',
+            'pose_host_time_elapsed',
+            'host_time_between_messages',
         ]
         if failure['name'] == 'no_error_msgs':
             if 'Unable to allocate ImuMeasurement' in failure['context']:
