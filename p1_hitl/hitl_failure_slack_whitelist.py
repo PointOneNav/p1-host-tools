@@ -67,5 +67,16 @@ def should_failure_be_ignored(env_args: HitlEnvArgs, failure: dict[str, Any]) ->
         if failure['name'] in ignored_metrics:
             logger.warning(msg_start + failure['name'])
             return True
+    elif env_args.HITL_BUILD_TYPE is DeviceType.BMW_MOTO:
+        msg_start = 'Slack ignores known BMW Moto failure: '
+        ignored_metrics = [
+            'user_config_received',
+            'filter_state_received',
+            'calibration_received',
+        ]
+        if failure['name'] in ignored_metrics:
+            logger.warning(msg_start + failure['name'])
+            return True
+
 
     return False
