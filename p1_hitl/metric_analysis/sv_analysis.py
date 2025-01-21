@@ -53,7 +53,7 @@ MetricController.register_environment_config_customizations(configure_metrics)
 
 class SVAnalyzer(AnalyzerBase):
     def update(self, msg: MessageWithBytesTuple):
-        if self.env_args.HITL_BUILD_TYPE.is_gnss_only():
+        if not self.params.check_position:
             return
 
         _, payload, _ = msg
