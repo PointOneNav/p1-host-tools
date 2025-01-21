@@ -28,6 +28,7 @@ from .msg_rate_analysis import MessageRateAnalyzer
 from .position_analysis import PositionAnalyzer
 from .reset_ttff_analysis import ResetTTFFAnalyzer
 from .sanity_analysis import SanityAnalyzer
+from .sv_analysis import SVAnalyzer
 
 logger = logging.getLogger('point_one.hitl.analysis')
 
@@ -98,7 +99,7 @@ REALTIME_POLL_INTERVAL = 0.05
 
 
 def _setup_analysis(env_args: HitlEnvArgs, is_playback) -> List[AnalyzerBase]:
-    analyzers = [c(env_args) for c in [IMUAnalyzer, PositionAnalyzer, ResetTTFFAnalyzer, SanityAnalyzer]]
+    analyzers = [c(env_args) for c in [IMUAnalyzer, PositionAnalyzer, ResetTTFFAnalyzer, SanityAnalyzer, SVAnalyzer]]
     if not is_playback:
         analyzers.append(MessageRateAnalyzer(env_args))
     return analyzers
