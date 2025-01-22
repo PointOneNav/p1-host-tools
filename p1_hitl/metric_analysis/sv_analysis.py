@@ -9,6 +9,12 @@ from p1_hitl.metric_analysis.metrics import AlwaysTrueMetric, MetricController
 
 from .base_analysis import AnalyzerBase
 
+metric_gps_tracked = AlwaysTrueMetric(
+    'gps_tracked',
+    "GPS satellites are tracked for at least a portion of the test.",
+    is_required=True,
+)
+
 metric_glonass_tracked = AlwaysTrueMetric(
     'glonass_tracked',
     "Glonass satellites are tracked for at least a portion of the test.",
@@ -28,6 +34,7 @@ metric_beidou_tracked = AlwaysTrueMetric(
 )
 
 TRACKED_METRIC_MAP = {
+    SatelliteType.GPS: metric_gps_tracked,
     SatelliteType.GLONASS: metric_glonass_tracked,
     SatelliteType.GALILEO: metric_galileo_tracked,
     SatelliteType.BEIDOU: metric_beidou_tracked,
