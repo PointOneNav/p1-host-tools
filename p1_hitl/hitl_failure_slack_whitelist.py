@@ -28,6 +28,8 @@ def should_failure_be_ignored(env_args: HitlEnvArgs, failure: dict[str, Any]) ->
     #     'context': metric.failure_context
     # }
 
+    ignore_failure = False
+
     # Lots of known LG69T failures.
     if env_args.HITL_BUILD_TYPE.is_lg69t():
         msg_start = 'Slack ignores known LG69T failure: '
@@ -49,33 +51,35 @@ def should_failure_be_ignored(env_args: HitlEnvArgs, failure: dict[str, Any]) ->
                 logger.warning(msg_start + '"Timed out waiting for Teseo cold start" event.')
                 return True
         elif failure['name'] == 'monotonic_p1time' and float(failure['context']) < 0.5:
-            logger.warning(msg_start + 'monotonic_p1time')
-            return True
+            ignore_failure = True
         elif failure['name'] in ignored_metrics:
-            logger.warning(msg_start + failure['name'])
-            return True
-    elif env_args.HITL_BUILD_TYPE is DeviceType.ATLAS and env_args.get_selected_test_type() is TestType.RESET_TESTS:
-        msg_start = 'Slack ignores known Atlas reset failure: '
-        ignored_metrics = [
-            '2d_fixed_pos_error',
-            '3d_fixed_pos_error',
-            'time_between_cold_invalid_and_valid',
-            'time_between_cold_invalid_and_fixed',
-            'imu_msg_period',
-            'mem_usage',
-        ]
-        if failure['name'] in ignored_metrics:
-            logger.warning(msg_start + failure['name'])
-            return True
+            ignore_failure = True
+    elif env_args.HITL_BUILD_TYPE is DeviceType.ATLAS:
+        if env_args.get_selected_test_type() is TestType.RESET_TESTS:
+            ignore_failure = failure['name'] in [
+                '2d_fixed_pos_error',
+                '3d_fixed_pos_error',
+                'time_between_cold_invalid_and_valid',
+                'time_between_cold_invalid_and_fixed',
+                'imu_msg_period',
+                'mem_usage',
+            ]
+        else:
+            ignore_failure = failure['name'] in ['imu_msg_period']
     elif env_args.HITL_BUILD_TYPE is DeviceType.BMW_MOTO:
-        msg_start = 'Slack ignores known BMW Moto failure: '
-        ignored_metrics = [
+        ignore_failure = failure['name'] in [
             'user_config_received',
             'filter_state_received',
             'calibration_received',
         ]
-        if failure['name'] in ignored_metrics:
-            logger.warning(msg_start + failure['name'])
-            return True
+    elif env_args.HITL_BUILD_TYPE is DeviceType.AMAZON_FLEETEDGE_V1:
+        ignore_failure = failure['name'] in [
+            'pose_time_elapsed',
+            'fixed_max_velocity',
+            'monotonic_p1time',
+        ]
 
-    return False
+    if ignore_failure:
+        logger.warning('Slack ignores whitelisted failure: ' + failure['name'])
+
+    return ignore_failure
