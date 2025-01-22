@@ -112,7 +112,7 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
         # Run bootstrap script.
         channel = transport.open_session()
 
-        RUNNER_CMD_PREFIX=''
+        RUNNER_CMD_PREFIX = ''
         if skip_corrections:
             # This is made a little confusing by the sshd_config AcceptEnv parameter. I believe this means we can use
             # the paramiko set_environment_variable or other methods for passing in environment variables. However,

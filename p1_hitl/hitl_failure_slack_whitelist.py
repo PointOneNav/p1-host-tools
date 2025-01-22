@@ -78,5 +78,4 @@ def should_failure_be_ignored(env_args: HitlEnvArgs, failure: dict[str, Any]) ->
             logger.warning(msg_start + failure['name'])
             return True
 
-
     return False
