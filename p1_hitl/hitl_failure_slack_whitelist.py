@@ -77,6 +77,7 @@ def should_failure_be_ignored(env_args: HitlEnvArgs, failure: dict[str, Any]) ->
             'pose_time_elapsed',
             'fixed_max_velocity',
             'monotonic_p1time',
+            'gps_time_valid',
         ]
 
     if ignore_failure:

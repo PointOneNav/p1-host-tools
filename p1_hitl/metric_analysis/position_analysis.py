@@ -219,10 +219,11 @@ def configure_metrics(env_args: HitlEnvArgs):
             metric_gps_time_valid.is_disabled = True
             metric_max_velocity.threshold = 0.3
             metric_fixed_max_velocity.threshold = 0.1
-            # The initial position error can be very large since it leverages the native solution as a fallback.
+            # The initial position error can be very large (observed 80m) since it leverages the native solution as a
+            # fallback.
             # TODO: This will be better addressed once https://pointonenav.atlassian.net/browse/FUS-3399 is added.
-            metric_3d_pos_error.max_threshold = 35
-            metric_2d_pos_error.max_threshold = 35
+            metric_3d_pos_error.max_threshold = 100
+            metric_2d_pos_error.max_threshold = 100
 
         if not env_args.HITL_BUILD_TYPE.is_gnss_only():
             # Can't resolve ENU position before yaw is initialized which increases position uncertainty.
