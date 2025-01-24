@@ -167,13 +167,14 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
 
         return self.device_interface
 
-    def shutdown_device(self, tests_passed: bool, output_dir: Path):
+    def shutdown_device(self, tests_passed: bool, output_dir: Path) -> bool:
+        exit_succeeded = True
         if self.config.tcp_address is None or self.device_interface is None:
-            return
+            return True
 
         namespace_args = Namespace()
         namespace_args.type = 'log'
-        request_shutdown(self.device_interface, namespace_args)
+        exit_succeeded &= request_shutdown(self.device_interface, namespace_args)
         self.device_interface.data_source.stop()
 
         # Upload new device logs after failures.
@@ -181,10 +182,12 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
             log_status = get_log_status(self.config.tcp_address)
             if log_status is None:
                 logger.error('Error querying logs.')
-                return
+                return False
             with open(output_dir / UPLOADED_LOG_LIST_FILE, 'w') as fd:
                 for log in log_status['logs']:
                     if log['guid'] not in self.old_log_guids:
                         upload_log(self.config.tcp_address, log['guid'])
                         logger.warning(f'Uploading device log: {log["guid"]}')
                         fd.write(f'{log["guid"]}\n')
+
+        return exit_succeeded
