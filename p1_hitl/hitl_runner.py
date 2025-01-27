@@ -176,7 +176,7 @@ def main():
 
     ################# Run tests #################
     tests_completed = False
-    tests_completed = False
+    tests_passed = False
     shutdown_succeeded = False
     MetricController.enable_logging(output_dir, not cli_args.playback_log, cli_args.log_metric_values)
     if cli_args.playback_log:
@@ -210,10 +210,7 @@ def main():
             report = MetricController.generate_report()
             tests_passed = not report['has_failures']
     finally:
-        try:
-            shutdown_succeeded = hitl_device_interface.shutdown_device(tests_passed, output_dir)
-        except:
-            pass
+        shutdown_succeeded = hitl_device_interface.shutdown_device(tests_passed, output_dir)
         if log_manager is not None:
             log_manager.stop()
 
