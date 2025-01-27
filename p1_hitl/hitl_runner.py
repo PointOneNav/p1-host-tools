@@ -176,7 +176,7 @@ def main():
 
     ################# Run tests #################
     tests_completed = False
-    tests_completed = False
+    tests_passed = False
     shutdown_succeeded = False
     MetricController.enable_logging(output_dir, not cli_args.playback_log, cli_args.log_metric_values)
     if cli_args.playback_log:
@@ -192,6 +192,7 @@ def main():
                 sys.exit(1)
             # The config test exercises starting the data source as part of its test.
             device_interface.data_source.stop()
+            hitl_device_interface.device_interface = None
             tests_completed = run_config_tests(env_args, device_config, log_manager)
         else:
             if cli_args.playback_log:
@@ -210,10 +211,7 @@ def main():
             report = MetricController.generate_report()
             tests_passed = not report['has_failures']
     finally:
-        try:
-            shutdown_succeeded = hitl_device_interface.shutdown_device(tests_passed, output_dir)
-        except:
-            pass
+        shutdown_succeeded = hitl_device_interface.shutdown_device(tests_passed, output_dir)
         if log_manager is not None:
             log_manager.stop()
 
