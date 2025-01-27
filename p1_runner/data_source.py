@@ -239,8 +239,8 @@ class SerialDataSource(DataSource, serial.threaded.Protocol):
         self.rx_thread.start()
 
     def stop(self):
-        self.flush_rx()
         if self.rx_thread:
+            self.flush_rx()
             self.rx_thread.stop()
             self.rx_thread = None
         self.serial_in.close()

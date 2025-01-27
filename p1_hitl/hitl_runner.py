@@ -192,6 +192,7 @@ def main():
                 sys.exit(1)
             # The config test exercises starting the data source as part of its test.
             device_interface.data_source.stop()
+            hitl_device_interface.device_interface = None
             tests_completed = run_config_tests(env_args, device_config, log_manager)
         else:
             if cli_args.playback_log:
