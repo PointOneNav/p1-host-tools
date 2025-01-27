@@ -111,7 +111,7 @@ Software Version: `{version_str}`
 {msg}
 
 '''
-    files_to_attach = []
+    files_to_attach = None
     if log_dir:
         slack_mrkdwn += f'''\
 Console output, configuration, and data uploaded to:
