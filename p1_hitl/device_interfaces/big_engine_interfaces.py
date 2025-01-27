@@ -9,7 +9,7 @@ import paramiko
 from scp import SCPClient
 
 from bin.config_tool import request_shutdown
-from p1_hitl.defs import HitlEnvArgs
+from p1_hitl.defs import UPLOADED_LOG_LIST_FILE, HitlEnvArgs
 from p1_hitl.get_build_artifacts import download_file
 from p1_runner.device_interface import DeviceInterface
 from p1_test_automation.devices_config import DeviceConfig, open_data_source
@@ -132,6 +132,9 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
         # Clear all files from previous runs.
         ssh_client.exec_command("rm -rf p1_fusion_engine*")
 
+        # Clear all previously recorded logs.
+        ssh_client.exec_command("rm -rf /logs")
+
         # Download release from S3.
         aws_path = build_info["aws_path"]
         version_str = build_info["version"]
@@ -220,6 +223,21 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
             namespace_args.type = 'log'
             exit_succeeded &= request_shutdown(self.device_interface, namespace_args)
             self.device_interface.data_source.stop()
+
+        # Upload new device log after failure.
+        if not tests_passed:
+            # Extract latest Log ID from remote device. This line extracts the target of the symbolic link
+            # /logs/current_log and then parses out the log ID.
+            stdin, stdout, stderr = self.ssh_client.exec_command("echo $(basename $(ls -l /logs/current_log | awk -F'-> ' '{print $2}'))")
+            log_id = stdout.readline()
+
+            scp = SCPClient(self.ssh_client.get_transport())
+            scp.get('/logs', '/logs', recursive=True)
+
+            # Add log ID to log list.
+            with open(output_dir / UPLOADED_LOG_LIST_FILE, 'w') as fd:
+                # Write to file.
+                fd.write(log_id)
 
         # Stop the process.
         if self.ssh_client is not None and self.ssh_channel is not None:
