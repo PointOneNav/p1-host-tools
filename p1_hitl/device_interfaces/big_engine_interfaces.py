@@ -33,6 +33,10 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
     TAR_FILENAME_PREFIX = ""
     TAR_FILENAME_SUFFIX = ""
     RUNNER_CMD = ""
+    # NOTE: This assumes the process binary is named `fusion_engine`. This may need to be child class specific
+    # if this can't be assumed.
+    STOP_CMD = 'pkill -SIGTERM -e fusion_engine'
+    KILL_CMD = 'pkill -SIGKILL -e fusion_engine'
 
     @staticmethod
     def get_device_config(args: HitlEnvArgs) -> Optional[DeviceConfig]:
@@ -123,6 +127,8 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
             self.LOGGER.error('Failed to connect to TCP address.')
             return None
 
+        # Stop any existing runs.
+        ssh_client.exec_command(self.KILL_CMD)
         # Clear all files from previous runs.
         ssh_client.exec_command("rm -rf p1_fusion_engine*")
 
@@ -218,10 +224,7 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
         # Stop the process.
         if self.ssh_client is not None and self.ssh_channel is not None:
             self.LOGGER.info('Stopping process.')
-            # NOTE: This assumes the process binary is named `fusion_engine`. This may need to be child class specific
-            # if this can't be assumed.
-            STOP_CMD = 'pkill -SIGTERM -e fusion_engine'
-            self.ssh_client.exec_command(STOP_CMD)
+            self.ssh_client.exec_command(self.STOP_CMD)
             start_time = time.monotonic()
             while time.monotonic() - start_time < PROCESS_STOP_TIMEOUT_SEC:
                 time.sleep(0.1)
