@@ -129,7 +129,7 @@ See attachments in reply for more details.
                 "Additional uploaded device logs collected during run"),
             FileEntry(log_dir / ENV_DUMP_FILE, "The environment arguments for the run"),
             FileEntry(log_dir / BUILD_INFO_FILE, "Metadata for the build loaded on the device"),]
-        files_to_attach = [f for f in files_to_check if f.file_path.exists()]
+        files_to_attach = [f for f in files_to_check if f.file_path.exists() and f.file_path.stat().st_size > 0]
 
     send_slack_message(channel, token, slack_mrkdwn, files_to_attach)
 
