@@ -229,15 +229,20 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
             # Extract latest Log ID from remote device. This line extracts the target of the symbolic link
             # /logs/current_log and then parses out the log ID.
             stdin, stdout, stderr = self.ssh_client.exec_command("echo $(basename $(ls -l /logs/current_log | awk -F'-> ' '{print $2}'))")
-            log_id = stdout.readline()
+            error = stderr.read().decode()
+            if error:
+                self.LOGGER.error(f"Error extracting log ID on device: {error}")
 
-            scp = SCPClient(self.ssh_client.get_transport())
-            scp.get('/logs', '/logs', recursive=True)
+            else:
+                log_id = stdout.read().decode()
 
-            # Add log ID to log list.
-            with open(output_dir / UPLOADED_LOG_LIST_FILE, 'w') as fd:
-                # Write to file.
-                fd.write(log_id)
+                scp = SCPClient(self.ssh_client.get_transport())
+                scp.get('/logs/current_log', '/logs', recursive=True)
+
+                # Add log ID to log list.
+                with open(output_dir / UPLOADED_LOG_LIST_FILE, 'w') as fd:
+                    # Write to file.
+                    fd.write(log_id)
 
         # Stop the process.
         if self.ssh_client is not None and self.ssh_channel is not None:
