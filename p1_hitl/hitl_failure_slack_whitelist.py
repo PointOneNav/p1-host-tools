@@ -68,15 +68,8 @@ def should_failure_be_ignored(env_args: HitlEnvArgs, failure: dict[str, Any]) ->
             ignore_failure = failure['name'] in ['imu_msg_period']
     elif env_args.HITL_BUILD_TYPE is DeviceType.AMAZON_FLEETEDGE_V1:
         ignore_failure = failure['name'] in [
-            'pose_time_elapsed',
             'fixed_max_velocity',
-            'monotonic_p1time',
             'gps_time_valid',
-        ]
-    elif env_args.HITL_BUILD_TYPE is DeviceType.BMW_MOTO:
-        ignore_failure = failure['name'] in [
-            'pose_time_elapsed',
-            'monotonic_p1time',
         ]
 
     if ignore_failure:

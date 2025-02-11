@@ -50,7 +50,8 @@ A failure indicates FE messages aren't getting from the device under test to the
 This may be because the DUT stopped outputting messages, or had a large delay in its output.
 It is also possible that the testing host was trying to service too many devices and fell behind.''',
     TimeSource.HOST,
-    max_time_between_checks_sec=0.2,
+    # This is being set conservatively since the host time stamping is the limiting factor.
+    max_time_between_checks_sec=0.5,
 )
 metric_host_time_between_messages_stop = MaxTimeBetweenChecks(
     'host_time_between_messages_stop',

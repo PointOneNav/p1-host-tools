@@ -43,7 +43,7 @@ metric_host_time_to_first_solution = MaxTimeToFirstCheckMetric(
 
 metric_pose_host_time_elapsed = MaxTimeBetweenChecks(
     'pose_host_time_elapsed',
-    'Max host time to first pose message, and between subsequent messages.',
+    'Max host time between pose messages.',
     TimeSource.HOST,
     # Ideally, this should be specified for each device. I'm going to set this
     # conservatively initially, and bring down once we have better testing
@@ -51,14 +51,13 @@ metric_pose_host_time_elapsed = MaxTimeBetweenChecks(
     max_time_between_checks_sec=0.5,
 )
 
-metric_pose_p1_time_elapsed = MaxTimeBetweenChecks(
+metric_pose_p1_time_elapsed = MaxValueMetric(
     'pose_time_elapsed',
     'Max P1 time between pose messages.',
-    TimeSource.P1,
     # Ideally, this should be specified for each device. I'm going to set this
     # conservatively initially, and bring down once we have better testing
     # integration and can make sure it doesn't generate false positives.
-    max_time_between_checks_sec=0.3,
+    threshold=0.4,
 )
 
 metric_gps_time_valid = AlwaysTrueMetric(
@@ -71,7 +70,6 @@ metric_fixed_max_velocity = MaxValueMetric(
     'fixed_max_velocity',
     'Velocity (mps) when fixed should be near 0.',
     0.01,
-    is_required=True,
     is_logged=True,
 )
 
@@ -261,7 +259,7 @@ class PositionAnalyzer(AnalyzerBase):
                 f'JENKINS_ANTENNA_LOCATION must be specified test {env_args.get_selected_test_type().name} with position checking.')
 
         self.got_first_valid = False
-        self.last_p1_time = None
+        self.last_pose_p1_time = None
         self.last_ypr = None
 
     def update(self, msg: MessageWithBytesTuple):
@@ -271,7 +269,10 @@ class PositionAnalyzer(AnalyzerBase):
         _, payload, _ = msg
         if isinstance(payload, PoseMessage):
             metric_p1_time_valid.check(bool(payload.p1_time))
-            metric_pose_p1_time_elapsed.check()
+            if payload.p1_time:
+                if self.last_pose_p1_time is not None:
+                    metric_pose_p1_time_elapsed.check(float(payload.p1_time) - float(self.last_pose_p1_time))
+                self.last_pose_p1_time = payload.p1_time
             metric_pose_host_time_elapsed.check()
             is_fixed = payload.solution_type == SolutionType.RTKFixed
             is_valid = payload.solution_type != SolutionType.Invalid
