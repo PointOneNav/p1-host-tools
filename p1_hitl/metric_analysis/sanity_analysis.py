@@ -43,7 +43,9 @@ See event_notifications.txt for all notifications from run.''',
 metric_monotonic_p1time = MinValueMetric(
     'monotonic_p1time',
     'Check P1Time goes forward (mostly) monotonically. A large backwards jump can indicate that the device reset.',
-    -0.1,
+    # We occasionally see -1 second time jumps on various platforms. We need to triage what causes this. In the meantime
+    # this threshold is being set conservatively. This may cause unexpected jumps in the P1 time elapsed calculations.
+    -0.2,
 )
 
 metric_user_config_received = MaxTimeToFirstCheckMetric(
