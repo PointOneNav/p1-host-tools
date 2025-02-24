@@ -71,6 +71,12 @@ def should_failure_be_ignored(env_args: HitlEnvArgs, failure: dict[str, Any]) ->
             'fixed_max_velocity',
             'gps_time_valid',
         ]
+    elif env_args.HITL_BUILD_TYPE is DeviceType.BMW_MOTO:
+        ignore_failure = failure['name'] in [
+            'imu_msg_period',
+            'tcp1_calibration_status_rate',
+            'tcp2_p1calstatus_rate',
+        ]
 
     if ignore_failure:
         logger.warning('Slack ignores whitelisted failure: ' + failure['name'])
