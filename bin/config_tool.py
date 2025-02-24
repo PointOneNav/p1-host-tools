@@ -152,6 +152,28 @@ def _str_to_tick_direction(tick_direction_str):
     return _tick_direction_map.get(tick_direction_str, TickDirection.OFF)
 
 
+# A bit mask used to select a set of profilers to enable:
+#     SYSTEM = 1 << 0
+#     COUNTERS = 1 << 1
+#     EXECUTIONS = 1 << 2
+#     EXECUTION_STATS = 1 << 3
+#     PIPELINES = 1 << 4
+# By default enable all profiling besides EXECUTIONS.
+_profile_level_map = {
+    "off": 0,
+    "on": 0b11011,
+    "detailed": 0b11111
+}
+
+
+def _args_to_profile_level(cls, args, config_interface):
+    if args.value.isdigit():
+        mask_val = int(args.value)
+    else:
+        mask_val = _profile_level_map.get(args.value, 0)
+    return ProfilingMask(mask_val)
+
+
 _iono_delay_model_map = {
     "auto": IonoDelayModel.AUTO,
     "off": IonoDelayModel.OFF,
@@ -433,6 +455,8 @@ PARAM_DEFINITION = {
 
     'watchdog_enabled': {'format': WatchdogTimerEnabled, 'arg_parse': _args_to_bool},
     'user_device_id': {'format': UserDeviceID, 'arg_parse': _args_to_id},
+
+    'profiling_enabled': {'format': ProfilingMask, 'arg_parse': _args_to_profile_level},
 
     'uart1_baud': {'format': Uart1BaudConfig, 'arg_parse': _args_to_int_gen('baud_rate')},
     'uart2_baud': {'format': Uart2BaudConfig, 'arg_parse': _args_to_int_gen('baud_rate')},
@@ -1417,6 +1441,12 @@ using their existing values.''')
     hardware_tick_config_parser.add_argument('--meters-per-tick', '--wheel-ticks-to-m', type=float,
                                              help='The scale factor to convert from wheel encoder ticks to distance '
                                                   '(in meters/tick).')
+
+    help = 'Configure system profiling support.'
+    param_parser.add_parser('profiling_enabled', help=help, description=help)
+    profiling_enabled_parser = apply_param_parser.add_parser('profiling_enabled', help=help, description=help)
+    profiling_enabled_parser.add_argument('value', help='Sets which profiling features are enabled.',
+                                          choices=_profile_level_map.keys())
 
     # config_tool.py apply -- output interface/stream control
     help = 'Configure the UART1 serial baud rate.'
