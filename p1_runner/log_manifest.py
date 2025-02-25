@@ -24,10 +24,15 @@ class LogManifest(object):
         self.device_id = None
         self.device_type = None
         self.device_version = None
-        self.system_config_path = None
         self.sw_version = None
 
+        self.system_config_path = None
+        self.base_path = None
+        self.ephemeris_path = None
+
         self.channels = []
+
+        self.metadata = {}
 
     def to_json(self, pretty=True):
         data = copy.deepcopy(self.__dict__)
@@ -76,12 +81,15 @@ class LogManifest(object):
 
         result.device_id = data.get('device_id', None)
         result.device_type = DeviceType.from_string(data.get('device_type', None))
-
         result.device_version = data.get('device_version', None)
-        result.system_config_path = data.get('system_config_path', None)
         result.sw_version = data.get('sw_version', None)
 
+        result.system_config_path = data.get('system_config_path', None)
+        result.base_path = data.get('base_path', None)
+        result.ephemeris_path = data.get('ephemeris_path', None)
+
         result.channels = data.get('channels', [])
+        result.metadata = data.get('metadata', {})
 
         return result
 
