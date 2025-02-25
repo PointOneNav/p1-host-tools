@@ -1249,7 +1249,7 @@ example:
 
     help = 'The secondary (auxiliary) GNSS antenna lever arm (in meters).'
     param_parser.add_parser('gnss_aux', help=help, description=help)
-    gnss_parser = apply_param_parser.add_parser('gnss', help=help, description=help)
+    gnss_parser = apply_param_parser.add_parser('gnss_aux', help=help, description=help)
     gnss_parser.add_argument('x', type=float, help='The X offset with respect to the vehicle body (in meters).')
     gnss_parser.add_argument('y', type=float, help='The Y offset with respect to the vehicle body (in meters).')
     gnss_parser.add_argument('z', type=float, help='The Z offset with respect to the vehicle body (in meters).')
