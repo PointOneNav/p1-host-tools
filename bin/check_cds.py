@@ -37,7 +37,7 @@ def main():
     parser = ArgumentParser(
         usage='%s [OPTIONS]... LOG' % execute_command,
         description="""\
-Check a log's raw IMU data for possible c_ds values.""" % execute_command)
+Check a log's raw IMU data for possible c_ds values.""")
 
     parser.add_argument(
         '-v', '--verbose', action='count', default=0,
