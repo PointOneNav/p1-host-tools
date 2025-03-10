@@ -244,8 +244,10 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
 
                 scp = SCPClient(self.ssh_client.get_transport())
                 if self.env_args.HITL_BUILD_TYPE == DeviceType.ZIPLINE:
+                    self.LOGGER.info("Adding file %s from device into output directory." % log_data)
                     scp.get(log_data_path, output_dir, recursive=True)
                 else:
+                    self.LOGGER.info("Adding log %s from device to log upload list." % log_data)
                     scp.get(log_data_path, '/logs', recursive=True)
 
                     # Add log ID to log list.
