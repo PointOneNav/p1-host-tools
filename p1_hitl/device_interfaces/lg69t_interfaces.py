@@ -23,7 +23,7 @@ from p1_test_automation.devices_config import (DeviceConfig, RelayConfig,
 from p1_test_automation.relay_controller import RelayController
 
 from .base_interfaces import HitlDeviceInterfaceBase
-from .interface_utils import enable_imu_output
+from .interface_utils import enable_imu_output, set_imu_orientation
 
 UPDATE_WAIT_TIME_SEC = 15
 RESTART_TIMEOUT_SEC = 10
@@ -161,9 +161,16 @@ class HitlLG69TInterface(HitlDeviceInterfaceBase):
             if not self.device_interface.wait_for_reboot(RESTART_TIMEOUT_SEC):
                 return None
 
-        # To test IMU data, enable the IMUOutput message on the diagnostic port.
+        # To test IMU data, set the coarse orientation (c_ds) and enable the IMUOutput message on the diagnostic port.
         # NOTE: This will leave unsaved UserConfig changes on the device.
         if not self.env_args.HITL_BUILD_TYPE.is_gnss_only():
+            if self.env_args.JENKINS_COARSE_ORIENTATION is None:
+                logger.error(f"INS device must set JENKINS_COARSE_ORIENTATION.")
+                return None
+            logger.info(f'Setting coarse IMU orientation.')
+            if not set_imu_orientation(self.device_interface, self.env_args.JENKINS_COARSE_ORIENTATION):
+                logger.error('Setting coarse IMU orientation failed.')
+                return None
             logger.info(f'Enabling IMUOutput message.')
             if not enable_imu_output(self.device_interface):
                 logger.error('Enabling IMUOutput failed.')

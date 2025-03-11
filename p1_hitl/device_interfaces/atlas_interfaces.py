@@ -20,7 +20,7 @@ from p1_test_automation.devices_config import (BalenaConfig, DeviceConfig,
                                                open_data_source)
 
 from .base_interfaces import HitlDeviceInterfaceBase
-from .interface_utils import enable_imu_output
+from .interface_utils import enable_imu_output, set_imu_orientation
 
 UPDATE_TIMEOUT_SEC = 60 * 20
 CMD_POLL_INTERVAL_SEC = 10
@@ -64,6 +64,7 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
         self.old_log_guids: set[str] = set()
         self.config = config
         self.device_interface: Optional[DeviceInterface] = None
+        self.coarse_orientation = env_args.JENKINS_COARSE_ORIENTATION
 
     def init_device(self, build_info: Dict[str, Any], skip_reset=False,
                     skip_corrections=False) -> Optional[DeviceInterface]:
@@ -158,8 +159,15 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
             return None
         self.device_interface = DeviceInterface(data_source)
 
-        # To test IMU data, enable the IMUOutput message on the diagnostic port.
+        # To test IMU data, set the coarse orientation (c_ds) and enable the IMUOutput message on the diagnostic port.
         # NOTE: This will leave unsaved UserConfig changes on the device.
+        if self.coarse_orientation is None:
+            logger.error(f"Atlas device must set JENKINS_COARSE_ORIENTATION.")
+            return None
+        logger.info(f'Setting coarse IMU orientation.')
+        if not set_imu_orientation(self.device_interface, self.coarse_orientation):
+            logger.error('Setting coarse IMU orientation failed.')
+            return None
         logger.info(f'Enabling IMUOutput message.')
         if not enable_imu_output(self.device_interface):
             logger.error('Enabling IMUOutput failed.')

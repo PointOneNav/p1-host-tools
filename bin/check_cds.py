@@ -2,16 +2,18 @@
 
 import os
 import sys
-from typing import  List, Optional
+from collections import defaultdict
+from textwrap import indent
+from typing import Optional, TypeAlias
 
-from fusion_engine_client.messages import (DataType, DataVersion, RawIMUOutput,
-                                           PlatformStorageDataMessage,
-                                           VersionInfoMessage)
-from fusion_engine_client.parsers import MixedLogReader
-from fusion_engine_client.analysis.data_loader import DataLoader
-from fusion_engine_client.utils.log import DEFAULT_LOG_BASE_DIR, locate_log
 import numpy as np
 import numpy.typing as npt
+from fusion_engine_client.analysis.data_loader import DataLoader
+from fusion_engine_client.messages import (DataType, Direction,
+                                           PlatformStorageDataMessage,
+                                           RawIMUOutput, VersionInfoMessage)
+from fusion_engine_client.parsers import MixedLogReader
+from fusion_engine_client.utils.log import DEFAULT_LOG_BASE_DIR, locate_log
 
 # Add the parent directory to the search path to enable p1_runner package imports when not installed in Python.
 repo_root = os.path.normpath(os.path.join(os.path.dirname(__file__), '..'))
@@ -19,11 +21,45 @@ sys.path.append(repo_root)
 
 from p1_runner import trace as logging
 from p1_runner.argument_parser import ArgumentParser
-from p1_runner.import_config_loader import (add_config_loader_args, UserConfigType,
+from p1_runner.import_config_loader import (UserConfigType,
+                                            add_config_loader_args,
                                             get_config_loader_class)
 from p1_runner.trace import HighlightFormatter
 
 logger = logging.getLogger('point_one.check_cds')
+
+
+MAX_SEARCH_TIME_SEC = 10 * 60
+
+
+CDSValue: TypeAlias = tuple[int, int, int, int, int, int, int, int, int]
+
+
+def matrix_to_key(c_ds: npt.NDArray) -> CDSValue:
+    return tuple(int(x) for x in c_ds.reshape([c_ds.size]))  # type: ignore
+
+
+_VEC_DIRECTION_MAPPING = {
+    tuple([1, 0, 0]): Direction.FORWARD,
+    tuple([-1, 0, 0]): Direction.BACKWARD,
+    tuple([0, 1, 0]): Direction.LEFT,
+    tuple([0, -1, 0]): Direction.RIGHT,
+    tuple([0, 0, 1]): Direction.UP,
+    tuple([0, 0, -1]): Direction.DOWN,
+}
+
+
+def vector_to_direction(vec: npt.NDArray) -> Direction:
+    key = tuple(int(i) for i in vec)
+    return _VEC_DIRECTION_MAPPING.get(key, Direction.INVALID)
+
+
+def matrix_to_config(c_ds: npt.ArrayLike):
+    c_ds_matrix = np.array(c_ds).reshape([3, 3])
+    return {
+        'x_direction': vector_to_direction(c_ds_matrix[0, :]),
+        'z_direction': vector_to_direction(c_ds_matrix[2, :])
+    }
 
 # - Define "s" frame defined by X, Y, and Z axes, as the frame in which its
 #   positive Z direction is approximately pointing up. In navigation, ths "s"
@@ -38,21 +74,29 @@ logger = logging.getLogger('point_one.check_cds')
 # - Note: This method does _Not_ find which axis of x, y, or z is close to the
 #   forward or lateral direction, but only finds the axis closest to the
 #   vertical direction, as HITL test requires so.
-def find_cds(accel_mps2):
-    c_ds = np.zeros([3, 3])
-    c_ds_last = np.zeros([3, 3])
-    count = 0
-    index = 0
+
+
+def find_cds(time_sec: npt.NDArray, accel_mps2: npt.NDArray):
+    c_ds_last: Optional[CDSValue] = None
+    start_time = time_sec[0]
+
+    counts: dict[tuple[int, int, int, int, int, int, int, int, int], int] = defaultdict(int)
+
     #  Step 0. c_sd is unknown at this point
     #  c_sd  x  y  z
     #  X     ?  ?  ?  x
     #  Y     ?  ?  ?  y
     #  Z     ?  ?  ?  z
-    for accel in zip(accel_mps2[0], accel_mps2[1], accel_mps2[2]):
-        c_sd =  np.zeros([3, 3])
+    for time, accel in zip(time_sec, accel_mps2.transpose()):
+        elapsed = time - start_time
+        if elapsed > MAX_SEARCH_TIME_SEC:
+            logger.info(f'Stopping search after {MAX_SEARCH_TIME_SEC}s limit.')
+            break
+
+        c_sd = np.zeros([3, 3])
         # Z
         #  Step 1. Find the 3rd row of c_sd by finding the max norm in accel x,
-        #  y, or z. It shouls be close to +9.8 or -9.8 unless heavily tilted.
+        #  y, or z. It should be close to +9.8 or -9.8 unless heavily tilted.
         #  c_sd  x  y  z
         #  X     ?  ?  ?  x
         #  Y     ?  ?  ?  y
@@ -101,27 +145,35 @@ def find_cds(accel_mps2):
         #  Z    -1  0  0  z
 
         # Navigation requires its transpose, c_ds
-        c_ds = c_sd.transpose()
+        c_ds = matrix_to_key(c_sd.transpose())
         # Check if computed c_ds is continuously the same for a certain numbers.
-        if np.array_equal(c_ds, c_ds_last):
-            count = count + 1
-            print("At index =", index, ", ", count,
-                  "of c_ds computed are the same continuously.")
-        else:
-            count = 0
-            print("At index =", index, ", accel data changed, "
-                                       "so, let count be 0.")
-        threshold = 10
-        if count >= threshold:
-            print("At index =", index, ", ", count,
-                  "of c_ds computed are the same >=", threshold,
-                  "times. Good enough, returning c_ds")
-            print("c_sd = ", c_sd)
-            print("Returning c_ds = ", c_ds)
-            break
+        if c_ds_last is not None:
+            if c_ds != c_ds_last:
+                logger.info(f"At time={elapsed:.2f}, a different c_ds was computed from gravity.")
+        counts[c_ds] += 1
         c_ds_last = c_ds
-        index = index + 1
-    return c_ds
+
+    sorted_counts = dict(sorted(counts.items(), key=lambda item: item[1]))
+    total = len(time_sec)
+    for c_ds_key, count in sorted_counts.items():
+        print(f'Orientation found {count}/{total} ({count/total*100.0:.1f}%) of log:')
+        print('''\
+    "sensors": {{
+        "imus/0": {{
+            "c_ds": {{
+                "values": [
+                    {},  {}, {},
+                    {}, {}, {},
+                    {},  {}, {}
+                ]
+            }}
+        }}
+    }}
+'''.format(*[float(x) for x in c_ds_key]))
+        c_ds_last = c_ds_key
+    print(f'    {matrix_to_config(c_ds_key)}')
+    return c_ds_last
+
 
 def main():
     if getattr(sys, 'frozen', False):
@@ -156,7 +208,7 @@ Check a log's raw IMU data for possible c_ds values.""")
     options = parser.parse_args()
 
     if options.verbose == 0:
-        logging.basicConfig(level=logging.INFO, format='%(message)s', stream=sys.stdout)
+        logging.basicConfig(level=logging.INFO, format='%(message)s', stream=sys.stderr)
     else:
         logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                             stream=sys.stdout)
@@ -182,7 +234,6 @@ Check a log's raw IMU data for possible c_ds values.""")
         logger.info('Loading %s.' % input_path)
     else:
         logger.info('Loading %s (log ID: %s).' % (input_path, log_id))
-
 
     imu_reader = DataLoader(input_path)
     imu_data = imu_reader.read(message_types=[RawIMUOutput.MESSAGE_TYPE], return_numpy=True)[RawIMUOutput.MESSAGE_TYPE]
@@ -215,14 +266,14 @@ Check a log's raw IMU data for possible c_ds values.""")
             # NOTE: Assuming the first IMU is used.
             # The matrix contents are stored in row-major order.
             c_ds_array = np.array(obj.sensors.imus[0].c_ds.values)
-            c_ds_in_user_config = c_ds_array.reshape((3,3))
+            c_ds_in_user_config = c_ds_array.reshape((3, 3))
     except StopIteration:
-        logger.exception('No version information found in log.')
+        logger.warning('No version information found in log.')
     except Exception as e:
         logger.exception('Failed to load UserConfig.')
 
     if c_ds_in_user_config is None:
-        logger.error('Unable to load existing UserConfig.')
+        logger.warning('Unable to load existing UserConfig.')
     else:
         print('c_ds loaded from log UserConfig is:')
         print(c_ds_in_user_config)
@@ -230,8 +281,8 @@ Check a log's raw IMU data for possible c_ds values.""")
     p1_time = imu_data.p1_time
     accel_mps2 = imu_data.accel_mps2
     gyro_rps = imu_data.gyro_rps
-    # TODO: Compute gravity vector and suggest possible c_ds
-    c_ds = find_cds(accel_mps2)
+    computed_cds = find_cds(p1_time, accel_mps2)
+
 
 if __name__ == "__main__":
     main()

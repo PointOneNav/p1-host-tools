@@ -16,7 +16,7 @@ from p1_runner.device_type import DeviceType
 from p1_test_automation.devices_config import DeviceConfig, open_data_source
 
 from .base_interfaces import HitlDeviceInterfaceBase
-from .interface_utils import enable_imu_output
+from .interface_utils import enable_imu_output, set_imu_orientation
 
 RESTART_WAIT_TIME_SEC = 10
 PROCESS_STOP_TIMEOUT_SEC = 10
@@ -87,7 +87,7 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
                         return True
                     else:
                         self.LOGGER.error(f"FE process exited with error code: {ret_code}")
-                        self.LOGGER.error("Process final output:\n" + ('='*80) + '\n' + console_output + ('='*80))
+                        self.LOGGER.error("Process final output:\n" + ('=' * 80) + '\n' + console_output + ('=' * 80))
                         return False
                 except ValueError as e:
                     self.LOGGER.error(f"Could not parse return code: {e}")
@@ -207,9 +207,16 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
 
         self.device_interface = DeviceInterface(data_source)
 
-        # To test IMU data, enable the IMUOutput message on the diagnostic port.
+        # To test IMU data, set the coarse orientation (c_ds) and enable the IMUOutput message on the diagnostic port.
         # NOTE: This will leave unsaved UserConfig changes on the device.
         if not self.env_args.HITL_BUILD_TYPE.is_gnss_only():
+            if self.env_args.JENKINS_COARSE_ORIENTATION is None:
+                self.LOGGER.error(f"INS device must set JENKINS_COARSE_ORIENTATION.")
+                return None
+            self.LOGGER.info(f'Setting coarse IMU orientation.')
+            if not set_imu_orientation(self.device_interface, self.env_args.JENKINS_COARSE_ORIENTATION):
+                self.LOGGER.error('Setting coarse IMU orientation failed.')
+                return None
             self.LOGGER.info(f'Enabling IMUOutput message.')
             if not enable_imu_output(self.device_interface):
                 self.LOGGER.error('Enabling IMUOutput failed.')
