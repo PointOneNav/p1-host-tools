@@ -12,7 +12,7 @@ from typing import Any, Dict, Optional
 repo_root = Path(__file__).parents[1].resolve()
 sys.path.append(str(repo_root))
 
-from bin.config_tool import apply_config, request_reset, save_config
+from bin.config_tool import request_reset
 from firmware_tools.lg69t.firmware_tool import run_update
 from p1_hitl.defs import HitlEnvArgs
 from p1_hitl.get_build_artifacts import download_file
@@ -23,7 +23,7 @@ from p1_test_automation.devices_config import (DeviceConfig, RelayConfig,
 from p1_test_automation.relay_controller import RelayController
 
 from .base_interfaces import HitlDeviceInterfaceBase
-from .interface_utils import enable_imu_output, set_imu_orientation
+from .interface_utils import enable_imu_output
 
 UPDATE_WAIT_TIME_SEC = 15
 RESTART_TIMEOUT_SEC = 10
@@ -73,7 +73,10 @@ class NTRIPPositionUpdater:
 class HitlLG69TInterface(HitlDeviceInterfaceBase):
     @staticmethod
     def get_device_config(args: HitlEnvArgs) -> Optional[DeviceConfig]:
-        if not args.check_fields(['JENKINS_UART1', 'JENKINS_UART2', 'JENKINS_RESET_RELAY']):
+        fields = ['JENKINS_UART1', 'JENKINS_UART2', 'JENKINS_RESET_RELAY']
+        if not args.HITL_BUILD_TYPE.is_gnss_only():
+            fields += 'JENKINS_COARSE_ORIENTATION'
+        if not args.check_fields(fields):
             return None
         else:
             assert args.JENKINS_RESET_RELAY is not None  # For type check.
@@ -162,18 +165,12 @@ class HitlLG69TInterface(HitlDeviceInterfaceBase):
                 return None
 
         # To test IMU data, set the coarse orientation (c_ds) and enable the IMUOutput message on the diagnostic port.
-        # NOTE: This will leave unsaved UserConfig changes on the device.
+        # NOTE: This will leave unsaved UserConfig changes on the device. This also results in the c_ds changing shortly
+        # after the start of the log. This may interfere with playback if this is not handled correctly.
         if not self.env_args.HITL_BUILD_TYPE.is_gnss_only():
-            if self.env_args.JENKINS_COARSE_ORIENTATION is None:
-                logger.error(f"INS device must set JENKINS_COARSE_ORIENTATION.")
-                return None
-            logger.info(f'Setting coarse IMU orientation.')
-            if not set_imu_orientation(self.device_interface, self.env_args.JENKINS_COARSE_ORIENTATION):
-                logger.error('Setting coarse IMU orientation failed.')
-                return None
-            logger.info(f'Enabling IMUOutput message.')
-            if not enable_imu_output(self.device_interface):
-                logger.error('Enabling IMUOutput failed.')
+            if not enable_imu_output(self.device_interface,
+                                     self.env_args.JENKINS_COARSE_ORIENTATION, save=False):  # type: ignore
+                logger.error('Setting up IMU orientation and output failed.')
                 return None
 
         if not skip_corrections:

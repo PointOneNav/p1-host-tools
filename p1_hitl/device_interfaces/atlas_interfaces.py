@@ -20,7 +20,7 @@ from p1_test_automation.devices_config import (BalenaConfig, DeviceConfig,
                                                open_data_source)
 
 from .base_interfaces import HitlDeviceInterfaceBase
-from .interface_utils import enable_imu_output, set_imu_orientation
+from .interface_utils import enable_imu_output
 
 UPDATE_TIMEOUT_SEC = 60 * 20
 CMD_POLL_INTERVAL_SEC = 10
@@ -50,7 +50,7 @@ def cmd_with_retries(cmd: Callable[[], bool], timeout: float) -> bool:
 class HitlAtlasInterface(HitlDeviceInterfaceBase):
     @staticmethod
     def get_device_config(args: HitlEnvArgs) -> Optional[DeviceConfig]:
-        if not args.check_fields(['JENKINS_LAN_IP', 'JENKINS_ATLAS_BALENA_UUID']):
+        if not args.check_fields(['JENKINS_LAN_IP', 'JENKINS_ATLAS_BALENA_UUID', 'JENKINS_COARSE_ORIENTATION']):
             return None
         else:
             balena_uuid: str = args.JENKINS_ATLAS_BALENA_UUID  # type: ignore # Already did None check.
@@ -64,6 +64,8 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
         self.old_log_guids: set[str] = set()
         self.config = config
         self.device_interface: Optional[DeviceInterface] = None
+        # For type checker.
+        assert env_args.JENKINS_COARSE_ORIENTATION is not None
         self.coarse_orientation = env_args.JENKINS_COARSE_ORIENTATION
 
     def init_device(self, build_info: Dict[str, Any], skip_reset=False,
@@ -144,6 +146,17 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
             return None
         self.old_log_guids = {l['guid'] for l in log_status['logs']}
 
+        # To test IMU data, set the coarse orientation (c_ds) and enable the IMUOutput message on the diagnostic port.
+        data_source = open_data_source(self.config)
+        if data_source is None:
+            logger.error(f"Can't open Atlas TCP interface: {self.config.tcp_address}.")
+            return None
+        device_interface = DeviceInterface(data_source)
+        logger.info(f'Setting up IMU orientation and output.')
+        if not enable_imu_output(device_interface, self.coarse_orientation, save=True):
+            logger.error('Setting up IMU orientation and output failed.')
+            return None
+
         if not skip_reset:
             logger.info('Restarting Atlas with diagnostic logging')
             # Restart nautilus container with logging enabled at startup.
@@ -158,20 +171,6 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
             logger.error(f"Can't reopen Atlas TCP interface: {self.config.tcp_address}.")
             return None
         self.device_interface = DeviceInterface(data_source)
-
-        # To test IMU data, set the coarse orientation (c_ds) and enable the IMUOutput message on the diagnostic port.
-        # NOTE: This will leave unsaved UserConfig changes on the device.
-        if self.coarse_orientation is None:
-            logger.error(f"Atlas device must set JENKINS_COARSE_ORIENTATION.")
-            return None
-        logger.info(f'Setting coarse IMU orientation.')
-        if not set_imu_orientation(self.device_interface, self.coarse_orientation):
-            logger.error('Setting coarse IMU orientation failed.')
-            return None
-        logger.info(f'Enabling IMUOutput message.')
-        if not enable_imu_output(self.device_interface):
-            logger.error('Enabling IMUOutput failed.')
-            return None
 
         return self.device_interface
 

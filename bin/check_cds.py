@@ -3,7 +3,6 @@
 import os
 import sys
 from collections import defaultdict
-from textwrap import indent
 from typing import Optional, TypeAlias
 
 import numpy as np
@@ -21,8 +20,7 @@ sys.path.append(repo_root)
 
 from p1_runner import trace as logging
 from p1_runner.argument_parser import ArgumentParser
-from p1_runner.import_config_loader import (UserConfigType,
-                                            add_config_loader_args,
+from p1_runner.import_config_loader import (add_config_loader_args,
                                             get_config_loader_class)
 from p1_runner.trace import HighlightFormatter
 
@@ -48,6 +46,10 @@ _VEC_DIRECTION_MAPPING = {
     tuple([0, 0, -1]): Direction.DOWN,
 }
 
+_DIRECTION_VEC_MAPPING = {
+    v: k for k, v in _VEC_DIRECTION_MAPPING.items()
+}
+
 
 def vector_to_direction(vec: npt.NDArray) -> Direction:
     key = tuple(int(i) for i in vec)
@@ -60,6 +62,14 @@ def matrix_to_config(c_ds: npt.ArrayLike):
         'x_direction': vector_to_direction(c_ds_matrix[0, :]),
         'z_direction': vector_to_direction(c_ds_matrix[2, :])
     }
+
+
+def config_to_key(c_ds_config: tuple[Direction, Direction]) -> CDSValue:
+  device_x = _DIRECTION_VEC_MAPPING[c_ds_config[0]]
+  device_z = _DIRECTION_VEC_MAPPING[c_ds_config[1]]
+  device_y = tuple(int(x) for x in np.cross(np.array(device_z), np.array(device_x)))
+  return device_x + device_y + device_z # type: ignore
+
 
 # - Define "s" frame defined by X, Y, and Z axes, as the frame in which its
 #   positive Z direction is approximately pointing up. In navigation, ths "s"
@@ -282,6 +292,7 @@ Check a log's raw IMU data for possible c_ds values.""")
     accel_mps2 = imu_data.accel_mps2
     gyro_rps = imu_data.gyro_rps
     computed_cds = find_cds(p1_time, accel_mps2)
+    print(config_to_key((Direction.DOWN, Direction.RIGHT)))
 
 
 if __name__ == "__main__":
