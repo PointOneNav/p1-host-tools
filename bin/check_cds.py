@@ -25,6 +25,103 @@ from p1_runner.trace import HighlightFormatter
 
 logger = logging.getLogger('point_one.check_cds')
 
+# - Define "s" frame defined by X, Y, and Z axes, as the frame in which its
+#   positive Z direction is approximately pointing up. In navigation, ths "s"
+#   frame is very close to the vehicle body frame, "b", only with small
+#   calibration angles are left uncomputed to reach "b".
+# - Define raw IMU device frame, "d", defined by x, y, and z axes.
+# - This method finds rotation matrix c_"sd" (from "d" to "s") first by finding
+#   which axis of x, y, or z is most closely aligned to the vertical direction,
+#   then returns c_"ds" (which is the transpose of c_sd) as needed for our c++
+#   code.
+#
+# - Note: This method does _Not_ find which axis of x, y, or z is close to the
+#   forward or lateral direction, but only finds the axis closest to the
+#   vertical direction, as HITL test requires so.
+def find_cds(accel_mps2):
+    c_ds = np.zeros([3, 3])
+    c_ds_last = np.zeros([3, 3])
+    count = 0
+    index = 0
+    #  Step 0. c_sd is unknown at this point
+    #  c_sd  x  y  z
+    #  X     ?  ?  ?  x
+    #  Y     ?  ?  ?  y
+    #  Z     ?  ?  ?  z
+    for accel in zip(accel_mps2[0], accel_mps2[1], accel_mps2[2]):
+        c_sd =  np.zeros([3, 3])
+        # Z
+        #  Step 1. Find the 3rd row of c_sd by finding the max norm in accel x,
+        #  y, or z. It shouls be close to +9.8 or -9.8 unless heavily tilted.
+        #  c_sd  x  y  z
+        #  X     ?  ?  ?  x
+        #  Y     ?  ?  ?  y
+        #  Z     ?  ?  ?  z <-----
+        # For the test data as an example, accel_x shows -9.8, accel_y shows a
+        # small value, accel_z shows a small value, too. Them max norm is found
+        # as i = 0 (x), and its sign is -1. We put the found sign to the
+        # c_sd[2, i]
+        zind = np.argmax(np.abs(accel))
+        z_sign = 0
+        if accel[zind] >= 0:
+            zsign = 1
+        else:
+            zsign = -1
+        c_sd[2, zind] = zsign
+
+        # X
+        # Step 2. Fill the 1st row of c_sd. Note that 1st row and 2nd row are
+        # arbitrary, whichever goes as long as they form right-handed coordinate
+        # system. For the 1st row, we can put "1" for the column not selected
+        # by the 3rd row.
+        #  c_sd  x  y  z
+        #  X     ?  ?  ?  x <-----
+        #  Y     ?  ?  ?  y
+        #  Z    -1  0  0  z
+        if zind == 0:
+            xind = 1
+        elif zind == 1 or zind == 2:
+            xind = 0
+        c_sd[0, xind] = 1
+
+        # Y
+        # Step 3. Fill the 2nd row of c_sd. This can be done by vector product
+        # of the Z(3rd row) and X(1st row).
+        #  c_sd  x  y  z
+        #  X     0  1  0  x
+        #  Y     ?  ?  ?  y <-----
+        #  Z    -1  0  0  z
+        c_sd[1] = np.cross(c_sd[2, :], c_sd[0, :])
+
+        # Summary
+        # We've found c_sd as
+        #  c_sd  x  y  z
+        #  X     0  1  0  x
+        #  Y     0  0 -1  y
+        #  Z    -1  0  0  z
+
+        # Navigation requires its transpose, c_ds
+        c_ds = c_sd.transpose()
+        # Check if computed c_ds is continuously the same for a certain numbers.
+        if np.array_equal(c_ds, c_ds_last):
+            count = count + 1
+            print("At index =", index, ", ", count,
+                  "of c_ds computed are the same continuously.")
+        else:
+            count = 0
+            print("At index =", index, ", accel data changed, "
+                                       "so, let count be 0.")
+        threshold = 10
+        if count >= threshold:
+            print("At index =", index, ", ", count,
+                  "of c_ds computed are the same >=", threshold,
+                  "times. Good enough, returning c_ds")
+            print("c_sd = ", c_sd)
+            print("Returning c_ds = ", c_ds)
+            break
+        c_ds_last = c_ds
+        index = index + 1
+    return c_ds
 
 def main():
     if getattr(sys, 'frozen', False):
@@ -134,6 +231,7 @@ Check a log's raw IMU data for possible c_ds values.""")
     accel_mps2 = imu_data.accel_mps2
     gyro_rps = imu_data.gyro_rps
     # TODO: Compute gravity vector and suggest possible c_ds
+    c_ds = find_cds(accel_mps2)
 
 if __name__ == "__main__":
     main()
