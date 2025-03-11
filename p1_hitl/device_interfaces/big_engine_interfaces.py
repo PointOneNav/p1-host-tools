@@ -227,33 +227,25 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
 
         # Upload new device log after failure.
         if not tests_passed:
-            # Extract latest Log ID from remote device. This line extracts the target of the symbolic link
-            # /logs/current_log and then parses out the log ID.
-            if self.env_args.HITL_BUILD_TYPE == DeviceType.ZIPLINE:
-                log_data_path = "/home/pointone/p1_fusion_engine/cache/logs/console.txt"
-            else:
-                log_data_path = "/logs/current_log"
+            # Extract latest Log ID from remote device by extracting the target of the symbolic link
+            # /logs/current_log and then parsing out the log ID.
+            log_path = "/logs/current_log"
 
-            stdin, stdout, stderr = self.ssh_client.exec_command("echo $(basename $(ls -l %s | awk -F'-> ' '{print $2}'))" % log_data_path)
+            stdin, stdout, stderr = self.ssh_client.exec_command("echo $(basename $(ls -l %s | awk -F'-> ' '{print $2}'))" % log_path)
             error = stderr.read().decode()
             if error:
                 self.LOGGER.error(f"Error extracting log data on device: {error}")
 
             else:
-                log_data = stdout.read().decode()
-
+                log_id = stdout.read().decode()
                 scp = SCPClient(self.ssh_client.get_transport())
-                if self.env_args.HITL_BUILD_TYPE == DeviceType.ZIPLINE:
-                    self.LOGGER.info("Adding file %s from device into output directory." % log_data)
-                    scp.get(log_data_path, output_dir, recursive=True)
-                else:
-                    self.LOGGER.info("Adding log %s from device to log upload list." % log_data)
-                    scp.get(log_data_path, '/logs', recursive=True)
+                self.LOGGER.info("Adding log %s from device to log upload list." % log_id)
+                scp.get(log_path, '/logs', recursive=True)
 
-                    # Add log ID to log list.
-                    with open(output_dir / UPLOADED_LOG_LIST_FILE, 'w') as fd:
-                        # Write to file.
-                        fd.write(log_data)
+                # Add log ID to log list.
+                with open(output_dir / UPLOADED_LOG_LIST_FILE, 'w') as fd:
+                    # Write to file.
+                    fd.write(log_id)
 
         # Stop the process.
         if self.ssh_client is not None and self.ssh_channel is not None:

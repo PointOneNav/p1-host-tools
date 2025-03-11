@@ -17,7 +17,6 @@ PLAYBACK_DIR = 'playback'
 FAILURE_REPORT = 'hitl_failures.json'
 FULL_REPORT = 'hitl_report.json'
 CONSOLE_FILE = 'hitl_console.txt'
-BIG_ENGINE_CONSOLE_FILE = 'console.txt'
 UPLOADED_LOG_LIST_FILE = 'uploaded_device_logs.txt'
 MSG_TIME_LOG_FILENAME = 'msg_times.bin'
 ENV_DUMP_FILE = 'env.json'
@@ -28,7 +27,6 @@ LOG_FILES = [
     FAILURE_REPORT,
     FULL_REPORT,
     CONSOLE_FILE,
-    BIG_ENGINE_CONSOLE_FILE,
     UPLOADED_LOG_LIST_FILE,
     MSG_TIME_LOG_FILENAME,
     ENV_DUMP_FILE,
