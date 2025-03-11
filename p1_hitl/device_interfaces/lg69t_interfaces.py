@@ -75,7 +75,7 @@ class HitlLG69TInterface(HitlDeviceInterfaceBase):
     def get_device_config(args: HitlEnvArgs) -> Optional[DeviceConfig]:
         fields = ['JENKINS_UART1', 'JENKINS_UART2', 'JENKINS_RESET_RELAY']
         if not args.HITL_BUILD_TYPE.is_gnss_only():
-            fields += 'JENKINS_COARSE_ORIENTATION'
+            fields.append('JENKINS_COARSE_ORIENTATION')
         if not args.check_fields(fields):
             return None
         else:

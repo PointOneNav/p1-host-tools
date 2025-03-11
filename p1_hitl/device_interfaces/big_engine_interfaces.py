@@ -45,7 +45,7 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
     def get_device_config(args: HitlEnvArgs) -> Optional[DeviceConfig]:
         fields = ['JENKINS_LAN_IP']
         if not args.HITL_BUILD_TYPE.is_gnss_only():
-            fields += 'JENKINS_COARSE_ORIENTATION'
+            fields.append('JENKINS_COARSE_ORIENTATION')
         if not args.check_fields(fields):
             return None
         else:
