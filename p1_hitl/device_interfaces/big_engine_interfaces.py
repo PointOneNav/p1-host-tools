@@ -134,7 +134,11 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
         ssh_client.exec_command("rm -rf p1_fusion_engine*")
 
         # Clear all previously recorded logs.
-        ssh_client.exec_command("rm -rf /logs/*")
+        if self.env_args.HITL_BUILD_TYPE == DeviceType.ZIPLINE:
+            self.LOGGER.info("removing files")
+            ssh_client.exec_command("rm -rf /home/pointone/p1_fusion_engine/cache/logs/*")
+        else:
+            ssh_client.exec_command("rm -rf /logs/*")
 
         # Download release from S3.
         aws_path = build_info["aws_path"]
@@ -229,7 +233,10 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
         if not tests_passed:
             # Extract latest Log ID from remote device by extracting the target of the symbolic link
             # /logs/current_log and then parsing out the log ID.
-            log_path = "/logs/current_log"
+            if self.env_args.HITL_BUILD_TYPE == DeviceType.ZIPLINE:
+                log_path = "/home/pointone/p1_fusion_engine/cache/logs/current_log"
+            else:
+                log_path = "/logs/current_log"
 
             stdin, stdout, stderr = self.ssh_client.exec_command("echo $(basename $(ls -l %s | awk -F'-> ' '{print $2}'))" % log_path)
             error = stderr.read().decode()
