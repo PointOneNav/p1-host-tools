@@ -120,6 +120,8 @@ class HitlLG69TInterface(HitlDeviceInterfaceBase):
                 logger.error('No JENKINS_ANTENNA_LOCATION key specified in environment.')
                 return None
 
+        ################# Step 1: Update LG69T #####################
+
         with NamedTemporaryFile(suffix='.p1fw') as tmp_file:
             if not download_file(tmp_file, build_info['aws_path'], r'.*\.p1fw'):
                 return None
@@ -153,6 +155,8 @@ class HitlLG69TInterface(HitlDeviceInterfaceBase):
             return None
         self.device_interface = DeviceInterface(data_source)
 
+        ################# Step 2: Factory Reset #####################
+
         if not skip_reset:
             # NOTE: This triggers a reboot which marks the start of the run.
             logger.info('Sending factory reset.')
@@ -164,9 +168,12 @@ class HitlLG69TInterface(HitlDeviceInterfaceBase):
             if not self.device_interface.wait_for_reboot(RESTART_TIMEOUT_SEC):
                 return None
 
+        ################# Step 3: Restore settings #####################
+
         # To test IMU data, set the coarse orientation (c_ds) and enable the IMUOutput message on the diagnostic port.
         # NOTE: This will leave unsaved UserConfig changes on the device. This also results in the c_ds changing shortly
-        # after the start of the log. This may interfere with playback if this is not handled correctly.
+        # after the start of the log. This may interfere with playback if this is not handled correctly. We do this
+        # instead of saving the settings and doing an additional restart to reduce the number of flash writes.
         if not self.env_args.HITL_BUILD_TYPE.is_gnss_only():
             if not enable_imu_output(self.device_interface,
                                      self.env_args.JENKINS_COARSE_ORIENTATION, save=False):  # type: ignore

@@ -88,6 +88,8 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
         if self.config.balena is None:
             raise KeyError('Config missing Balena UUID.')
 
+        ################# Step 1: Update Atlas Using Balena #####################
+
         balena_ctrl = AtlasBalenaController()
         release_str = build_info['balena_release']
         status = balena_ctrl.get_status(self.config.balena.uuid)
@@ -120,6 +122,8 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
                 else:
                     time.sleep(CMD_POLL_INTERVAL_SEC)
 
+        ################# Step 2: Factory Reset #####################
+
         if not skip_reset:
             logger.info(f'Sending factory reset.')
             if not cmd_with_retries(lambda: factory_reset(self.config.tcp_address,
@@ -127,6 +131,8 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
                 logger.error('Factory reset failed.')
                 return None
             time.sleep(RESTART_WAIT_TIME_SEC)
+
+        ################# Step 3: Set Custom Settings #####################
 
         logger.info(f'Setting crash log upload enabled.')
         if not cmd_with_retries(lambda: set_crash_log_action(self.config.tcp_address,  # type: ignore
@@ -147,6 +153,7 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
         self.old_log_guids = {l['guid'] for l in log_status['logs']}
 
         # To test IMU data, set the coarse orientation (c_ds) and enable the IMUOutput message on the diagnostic port.
+        # We save these before restarting so engine starts up with the right settings.
         data_source = open_data_source(self.config)
         if data_source is None:
             logger.error(f"Can't open Atlas TCP interface: {self.config.tcp_address}.")
@@ -156,6 +163,8 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
         if not enable_imu_output(device_interface, self.coarse_orientation, save=True):
             logger.error('Setting up IMU orientation and output failed.')
             return None
+
+        ################# Step 4: Do Deterministic Restart #####################
 
         if not skip_reset:
             logger.info('Restarting Atlas with diagnostic logging')

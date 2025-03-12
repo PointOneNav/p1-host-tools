@@ -165,6 +165,8 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
             self.LOGGER.error('Failed to connect to TCP address.')
             return None
 
+        ################# Step 1: Install Engine on CPU #####################
+
         # Stop any existing runs.
         ssh_client.exec_command(self.KILL_CMD)
         # Clear all files from previous runs.
@@ -217,9 +219,12 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
 
         gnss_config_patch_args = ''
         # To test IMU data, set the coarse orientation (c_ds) and enable the IMUOutput message on the diagnostic port.
+        # We do this with a patch so that the engine starts up with the right settings.
         if not self.env_args.HITL_BUILD_TYPE.is_gnss_only():
             self._write_imu_patch(scp)
             gnss_config_patch_args=f' --user-config-patch={GNSS_CONFIG_PATCH_PATH}'
+
+        ################# Step 2: Run Engine #####################
 
         # From https://docs.paramiko.org/en/stable/api/channel.html:
         #  Because SSH2 has a windowing kind of flow control, if you stop reading data from a Channel and its buffer
