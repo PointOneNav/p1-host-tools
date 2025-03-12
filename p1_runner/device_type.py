@@ -14,6 +14,7 @@ class DeviceType(Enum):
     LG69T_AH = auto()
     LG69T_AJ = auto()
     ZIPLINE = auto()
+    P1_LG69T_GNSS = auto()
 
     BEAM2K = auto()
     DJI_MAVIC = auto()
@@ -42,6 +43,7 @@ class DeviceType(Enum):
             DeviceType.ZIPLINE: 'zipline-v[0-9]*.*',
             DeviceType.AMAZON_FLEETEDGE_V1: 'amazon-fleetedge-1-v[0-9]*.*',
             DeviceType.BMW_MOTO: 'bmw-moto-mic-v[0-9]*.*',
+            DeviceType.P1_LG69T_GNSS: 'p1-lg69t-gnss-v[0-9]*.*',
         }
 
     @classmethod
