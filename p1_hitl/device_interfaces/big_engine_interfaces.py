@@ -8,9 +8,9 @@ from typing import Any, Dict, Optional
 import paramiko
 from scp import SCPClient
 
-from bin.config_tool import request_shutdown
 from bin.check_cds import config_to_key
-from p1_hitl.defs import HitlEnvArgs, UPLOADED_LOG_LIST_FILE
+from bin.config_tool import request_shutdown
+from p1_hitl.defs import UPLOADED_LOG_LIST_FILE, HitlEnvArgs
 from p1_hitl.get_build_artifacts import download_file
 from p1_runner.device_interface import DeviceInterface
 from p1_runner.device_type import DeviceType
@@ -28,6 +28,7 @@ SSH_USERNAME = "pointone"
 SSH_KEY_PATH = "/home/pointone/.ssh/id_ed25519"
 
 GNSS_CONFIG_PATCH_PATH = '/home/pointone/p1_fusion_engine/gnss_config_patch.json'
+
 
 class HitlBigEngineInterface(HitlDeviceInterfaceBase):
     LOGGER = logging.getLogger('point_one.hitl.hitl_interface')
@@ -100,7 +101,7 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
         self.LOGGER.warning(f"FE process wasn't started.")
         return True
 
-    def _write_imu_patch(self, scp:SCPClient):
+    def _write_imu_patch(self, scp: SCPClient):
         fd = io.StringIO()
         # For type checking.
         assert self.env_args.JENKINS_COARSE_ORIENTATION is not None
@@ -130,7 +131,6 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
 '''.format(*config_to_key(self.env_args.JENKINS_COARSE_ORIENTATION)))
         fd.seek(0)
         scp.putfo(fd, GNSS_CONFIG_PATCH_PATH)
-
 
     def init_device(self, build_info: Dict[str, Any], skip_reset=False,
                     skip_corrections=False) -> Optional[DeviceInterface]:
@@ -222,7 +222,7 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
         # We do this with a patch so that the engine starts up with the right settings.
         if not self.env_args.HITL_BUILD_TYPE.is_gnss_only():
             self._write_imu_patch(scp)
-            gnss_config_patch_args=f' --user-config-patch={GNSS_CONFIG_PATCH_PATH}'
+            gnss_config_patch_args = f' --user-config-patch={GNSS_CONFIG_PATCH_PATH}'
 
         ################# Step 2: Run Engine #####################
 
@@ -279,7 +279,8 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
             else:
                 log_path = "/logs/current_log"
 
-            stdin, stdout, stderr = self.ssh_client.exec_command("echo $(basename $(ls -l %s | awk -F'-> ' '{print $2}'))" % log_path)
+            stdin, stdout, stderr = self.ssh_client.exec_command(
+                "echo $(basename $(ls -l %s | awk -F'-> ' '{print $2}'))" % log_path)
             error = stderr.read().decode()
             if error:
                 self.LOGGER.error(f"Error extracting log data on device: {error}")

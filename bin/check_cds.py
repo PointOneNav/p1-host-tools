@@ -65,10 +65,10 @@ def matrix_to_config(c_ds: npt.ArrayLike):
 
 
 def config_to_key(c_ds_config: tuple[Direction, Direction]) -> CDSValue:
-  device_x = _DIRECTION_VEC_MAPPING[c_ds_config[0]]
-  device_z = _DIRECTION_VEC_MAPPING[c_ds_config[1]]
-  device_y = tuple(int(x) for x in np.cross(np.array(device_z), np.array(device_x)))
-  return device_x + device_y + device_z # type: ignore
+    device_x = _DIRECTION_VEC_MAPPING[c_ds_config[0]]
+    device_z = _DIRECTION_VEC_MAPPING[c_ds_config[1]]
+    device_y = tuple(int(x) for x in np.cross(np.array(device_z), np.array(device_x)))
+    return device_x + device_y + device_z  # type: ignore
 
 
 # - Define "s" frame defined by X, Y, and Z axes, as the frame in which its
