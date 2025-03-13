@@ -36,6 +36,7 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
     VERSION_PREFIX = ""
     TAR_FILENAME_PREFIX = ""
     TAR_FILENAME_SUFFIX = ""
+    LOG_DIR = Path('/logs')
     RUNNER_CMD = ""
     # NOTE: This assumes the process binary is named `fusion_engine`. This may need to be child class specific
     # if this can't be assumed.
@@ -170,14 +171,11 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
         # Stop any existing runs.
         ssh_client.exec_command(self.KILL_CMD)
         # Clear all files from previous runs.
+        self.LOGGER.info("Clearing data from previous runs.")
         ssh_client.exec_command("rm -rf p1_fusion_engine*")
 
         # Clear all previously recorded logs.
-        if self.env_args.HITL_BUILD_TYPE == DeviceType.ZIPLINE:
-            self.LOGGER.info("removing files")
-            ssh_client.exec_command("rm -rf /home/pointone/p1_fusion_engine/cache/logs/*")
-        else:
-            ssh_client.exec_command("rm -rf /logs/*")
+        ssh_client.exec_command(f"rm -rf {self.LOG_DIR}/*")
 
         # Download release from S3.
         aws_path = build_info["aws_path"]
@@ -271,30 +269,29 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
             self.device_interface.data_source.stop()
 
         # Upload new device log after failure.
-        if not tests_passed:
-            # Extract latest Log ID from remote device by extracting the target of the symbolic link
-            # /logs/current_log and then parsing out the log ID.
-            if self.env_args.HITL_BUILD_TYPE == DeviceType.ZIPLINE:
-                log_path = "/home/pointone/p1_fusion_engine/cache/logs/current_log"
-            else:
-                log_path = "/logs/current_log"
+        if not tests_passed and self.ssh_client is not None:
+            transport = self.ssh_client.get_transport()
+            if transport is not None:
+                # Extract latest Log ID from remote device by extracting the target of the symbolic link
+                # /logs/current_log and then parsing out the log ID.
+                log_path = str(self.LOG_DIR / 'current_log')
 
-            stdin, stdout, stderr = self.ssh_client.exec_command(
-                "echo $(basename $(ls -l %s | awk -F'-> ' '{print $2}'))" % log_path)
-            error = stderr.read().decode()
-            if error:
-                self.LOGGER.error(f"Error extracting log data on device: {error}")
+                stdin, stdout, stderr = self.ssh_client.exec_command(
+                    "echo $(basename $(ls -l %s | awk -F'-> ' '{print $2}'))" % log_path)
+                error = stderr.read().decode()
+                if error:
+                    self.LOGGER.error(f"Error extracting log data on device: {error}")
 
-            else:
-                log_id = stdout.read().decode()
-                scp = SCPClient(self.ssh_client.get_transport())
-                self.LOGGER.info("Adding log %s from device to log upload list." % log_id)
-                scp.get(log_path, '/logs', recursive=True)
+                else:
+                    log_id = stdout.read().decode()
+                    scp = SCPClient(transport)
+                    self.LOGGER.info("Adding log %s from device to log upload list." % log_id)
+                    scp.get(log_path, '/logs', recursive=True)
 
-                # Add log ID to log list.
-                with open(output_dir / UPLOADED_LOG_LIST_FILE, 'w') as fd:
-                    # Write to file.
-                    fd.write(log_id)
+                    # Add log ID to log list.
+                    with open(output_dir / UPLOADED_LOG_LIST_FILE, 'w') as fd:
+                        # Write to file.
+                        fd.write(log_id)
 
         # Stop the process.
         if self.ssh_client is not None and self.ssh_channel is not None:
