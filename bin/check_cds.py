@@ -172,9 +172,9 @@ def find_cds(time_sec: npt.NDArray, accel_mps2: npt.NDArray):
         "imus/0": {{
             "c_ds": {{
                 "values": [
-                    {},  {}, {},
                     {}, {}, {},
-                    {},  {}, {}
+                    {}, {}, {},
+                    {}, {}, {}
                 ]
             }}
         }}

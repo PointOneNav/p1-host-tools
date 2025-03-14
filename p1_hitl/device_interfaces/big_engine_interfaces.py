@@ -112,9 +112,9 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
         "imus/0": {{
             "c_ds": {{
                 "values": [
-                    {},  {}, {},
                     {}, {}, {},
-                    {},  {}, {}
+                    {}, {}, {},
+                    {}, {}, {}
                 ]
             }}
         }}
