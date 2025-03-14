@@ -50,7 +50,7 @@ def cmd_with_retries(cmd: Callable[[], bool], timeout: float) -> bool:
 class HitlAtlasInterface(HitlDeviceInterfaceBase):
     @staticmethod
     def get_device_config(args: HitlEnvArgs) -> Optional[DeviceConfig]:
-        if not args.check_fields(['JENKINS_LAN_IP', 'JENKINS_ATLAS_BALENA_UUID']):
+        if not args.check_fields(['JENKINS_LAN_IP', 'JENKINS_ATLAS_BALENA_UUID', 'JENKINS_COARSE_ORIENTATION']):
             return None
         else:
             balena_uuid: str = args.JENKINS_ATLAS_BALENA_UUID  # type: ignore # Already did None check.
@@ -64,6 +64,9 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
         self.old_log_guids: set[str] = set()
         self.config = config
         self.device_interface: Optional[DeviceInterface] = None
+        # For type checker.
+        assert env_args.JENKINS_COARSE_ORIENTATION is not None
+        self.coarse_orientation = env_args.JENKINS_COARSE_ORIENTATION
 
     def init_device(self, build_info: Dict[str, Any], skip_reset=False,
                     skip_corrections=False) -> Optional[DeviceInterface]:
@@ -84,6 +87,8 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
 
         if self.config.balena is None:
             raise KeyError('Config missing Balena UUID.')
+
+        ################# Step 1: Update Atlas Using Balena #####################
 
         balena_ctrl = AtlasBalenaController()
         release_str = build_info['balena_release']
@@ -117,6 +122,8 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
                 else:
                     time.sleep(CMD_POLL_INTERVAL_SEC)
 
+        ################# Step 2: Factory Reset #####################
+
         if not skip_reset:
             logger.info(f'Sending factory reset.')
             if not cmd_with_retries(lambda: factory_reset(self.config.tcp_address,
@@ -124,6 +131,8 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
                 logger.error('Factory reset failed.')
                 return None
             time.sleep(RESTART_WAIT_TIME_SEC)
+
+        ################# Step 3: Set Custom Settings #####################
 
         logger.info(f'Setting crash log upload enabled.')
         if not cmd_with_retries(lambda: set_crash_log_action(self.config.tcp_address,  # type: ignore
@@ -143,6 +152,20 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
             return None
         self.old_log_guids = {l['guid'] for l in log_status['logs']}
 
+        # To test IMU data, set the coarse orientation (c_ds) and enable the IMUOutput message on the diagnostic port.
+        # We save these before restarting so engine starts up with the right settings.
+        data_source = open_data_source(self.config)
+        if data_source is None:
+            logger.error(f"Can't open Atlas TCP interface: {self.config.tcp_address}.")
+            return None
+        device_interface = DeviceInterface(data_source)
+        logger.info(f'Setting up IMU orientation and output.')
+        if not enable_imu_output(device_interface, self.coarse_orientation, save=True):
+            logger.error('Setting up IMU orientation and output failed.')
+            return None
+
+        ################# Step 4: Do Deterministic Restart #####################
+
         if not skip_reset:
             logger.info('Restarting Atlas with diagnostic logging')
             # Restart nautilus container with logging enabled at startup.
@@ -157,13 +180,6 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
             logger.error(f"Can't reopen Atlas TCP interface: {self.config.tcp_address}.")
             return None
         self.device_interface = DeviceInterface(data_source)
-
-        # To test IMU data, enable the IMUOutput message on the diagnostic port.
-        # NOTE: This will leave unsaved UserConfig changes on the device.
-        logger.info(f'Enabling IMUOutput message.')
-        if not enable_imu_output(self.device_interface):
-            logger.error('Enabling IMUOutput failed.')
-            return None
 
         return self.device_interface
 

@@ -12,7 +12,7 @@ from typing import Any, Dict, Optional
 repo_root = Path(__file__).parents[1].resolve()
 sys.path.append(str(repo_root))
 
-from bin.config_tool import apply_config, request_reset, save_config
+from bin.config_tool import request_reset
 from firmware_tools.lg69t.firmware_tool import run_update
 from p1_hitl.defs import HitlEnvArgs
 from p1_hitl.get_build_artifacts import download_file
@@ -73,7 +73,10 @@ class NTRIPPositionUpdater:
 class HitlLG69TInterface(HitlDeviceInterfaceBase):
     @staticmethod
     def get_device_config(args: HitlEnvArgs) -> Optional[DeviceConfig]:
-        if not args.check_fields(['JENKINS_UART1', 'JENKINS_UART2', 'JENKINS_RESET_RELAY']):
+        fields = ['JENKINS_UART1', 'JENKINS_UART2', 'JENKINS_RESET_RELAY']
+        if not args.HITL_BUILD_TYPE.is_gnss_only():
+            fields.append('JENKINS_COARSE_ORIENTATION')
+        if not args.check_fields(fields):
             return None
         else:
             assert args.JENKINS_RESET_RELAY is not None  # For type check.
@@ -117,6 +120,8 @@ class HitlLG69TInterface(HitlDeviceInterfaceBase):
                 logger.error('No JENKINS_ANTENNA_LOCATION key specified in environment.')
                 return None
 
+        ################# Step 1: Update LG69T #####################
+
         with NamedTemporaryFile(suffix='.p1fw') as tmp_file:
             if not download_file(tmp_file, build_info['aws_path'], r'.*\.p1fw'):
                 return None
@@ -150,6 +155,8 @@ class HitlLG69TInterface(HitlDeviceInterfaceBase):
             return None
         self.device_interface = DeviceInterface(data_source)
 
+        ################# Step 2: Factory Reset #####################
+
         if not skip_reset:
             # NOTE: This triggers a reboot which marks the start of the run.
             logger.info('Sending factory reset.')
@@ -161,12 +168,16 @@ class HitlLG69TInterface(HitlDeviceInterfaceBase):
             if not self.device_interface.wait_for_reboot(RESTART_TIMEOUT_SEC):
                 return None
 
-        # To test IMU data, enable the IMUOutput message on the diagnostic port.
-        # NOTE: This will leave unsaved UserConfig changes on the device.
+        ################# Step 3: Restore settings #####################
+
+        # To test IMU data, set the coarse orientation (c_ds) and enable the IMUOutput message on the diagnostic port.
+        # NOTE: This will leave unsaved UserConfig changes on the device. This also results in the c_ds changing shortly
+        # after the start of the log. This may interfere with playback if this is not handled correctly. We do this
+        # instead of saving the settings and doing an additional restart to reduce the number of flash writes.
         if not self.env_args.HITL_BUILD_TYPE.is_gnss_only():
-            logger.info(f'Enabling IMUOutput message.')
-            if not enable_imu_output(self.device_interface):
-                logger.error('Enabling IMUOutput failed.')
+            if not enable_imu_output(self.device_interface,
+                                     self.env_args.JENKINS_COARSE_ORIENTATION, save=False):  # type: ignore
+                logger.error('Setting up IMU orientation and output failed.')
                 return None
 
         if not skip_corrections:

@@ -6,6 +6,7 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import List, NamedTuple, Optional
 
+from fusion_engine_client.messages import Direction
 from fusion_engine_client.utils.log import DEFAULT_LOG_BASE_DIR, find_log_file
 
 from p1_runner.device_type import DeviceType
@@ -130,6 +131,11 @@ class HitlEnvArgs(NamedTuple):
     # geodetic latitude, longitude, and altitude (in degrees/degrees/meters),
     # expressed using the WGS-84 reference ellipsoid.
     JENKINS_ANTENNA_LOCATION: Optional[tuple[float, float, float]] = None
+    # The coarse orientation for the device IMU given as the string values: x_direction,z_direction . (e.x.
+    # `FORWARD,UP`). See DeviceCourseOrientationConfig in fusion_engine_client/messages/configuration.py and
+    # bin/check_cds.py.
+    # NOTE: This only needs to accurately set which direction the gravity vector in for stationary devices.
+    JENKINS_COARSE_ORIENTATION: Optional[tuple[Direction, Direction]] = None
     # Only for test on devices with TCP interfaces.
     JENKINS_LAN_IP: Optional[str] = None
     JENKINS_ATLAS_BALENA_UUID: Optional[str] = None
@@ -176,6 +182,12 @@ class HitlEnvArgs(NamedTuple):
                         parts = env_in_dict[arg].split(':')
                         if len(parts) == 2:
                             env_dict[arg] = tuple([parts[0], int(parts[1])])
+                        else:
+                            raise ValueError()
+                    elif arg == 'JENKINS_COARSE_ORIENTATION':
+                        parts = env_in_dict[arg].split(',')
+                        if len(parts) == 2:
+                            env_dict[arg] = tuple(Direction[v.upper()] for v in parts)
                         else:
                             raise ValueError()
                     else:

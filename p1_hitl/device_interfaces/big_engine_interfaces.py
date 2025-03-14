@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional
 import paramiko
 from scp import SCPClient
 
+from bin.check_cds import config_to_key
 from bin.config_tool import request_shutdown
 from p1_hitl.defs import UPLOADED_LOG_LIST_FILE, HitlEnvArgs
 from p1_hitl.get_build_artifacts import download_file
@@ -26,6 +27,8 @@ DIAGNOSTIC_PORT = 30202
 SSH_USERNAME = "pointone"
 SSH_KEY_PATH = "/home/pointone/.ssh/id_ed25519"
 
+GNSS_CONFIG_PATCH_PATH = '/home/pointone/p1_fusion_engine/gnss_config_patch.json'
+
 
 class HitlBigEngineInterface(HitlDeviceInterfaceBase):
     LOGGER = logging.getLogger('point_one.hitl.hitl_interface')
@@ -33,6 +36,7 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
     VERSION_PREFIX = ""
     TAR_FILENAME_PREFIX = ""
     TAR_FILENAME_SUFFIX = ""
+    LOG_DIR = Path('/logs')
     RUNNER_CMD = ""
     # NOTE: This assumes the process binary is named `fusion_engine`. This may need to be child class specific
     # if this can't be assumed.
@@ -41,7 +45,10 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
 
     @staticmethod
     def get_device_config(args: HitlEnvArgs) -> Optional[DeviceConfig]:
-        if not args.check_fields(['JENKINS_LAN_IP']):
+        fields = ['JENKINS_LAN_IP']
+        if not args.HITL_BUILD_TYPE.is_gnss_only():
+            fields.append('JENKINS_COARSE_ORIENTATION')
+        if not args.check_fields(fields):
             return None
         else:
             # Interface is TCP3, which is configured as the diagnostic port.
@@ -87,13 +94,44 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
                         return True
                     else:
                         self.LOGGER.error(f"FE process exited with error code: {ret_code}")
-                        self.LOGGER.error("Process final output:\n" + ('='*80) + '\n' + console_output + ('='*80))
+                        self.LOGGER.error("Process final output:\n" + ('=' * 80) + '\n' + console_output + ('=' * 80))
                         return False
                 except ValueError as e:
                     self.LOGGER.error(f"Could not parse return code: {e}")
                     return False
         self.LOGGER.warning(f"FE process wasn't started.")
         return True
+
+    def _write_imu_patch(self, scp: SCPClient):
+        fd = io.StringIO()
+        # For type checking.
+        assert self.env_args.JENKINS_COARSE_ORIENTATION is not None
+        fd.write('''\
+{{
+    "sensors": {{
+        "imus/0": {{
+            "c_ds": {{
+                "values": [
+                    {}, {}, {},
+                    {}, {}, {},
+                    {}, {}, {}
+                ]
+            }}
+        }}
+    }},
+    "comm_interfaces": {{
+        "tcp_sockets/2": {{
+            "output_rates": {{
+                "fusion_engine_rates": {{
+                    "imu_output": "ON_CHANGE"
+                }}
+            }}
+        }}
+    }}
+}}
+'''.format(*config_to_key(self.env_args.JENKINS_COARSE_ORIENTATION)))
+        fd.seek(0)
+        scp.putfo(fd, GNSS_CONFIG_PATCH_PATH)
 
     def init_device(self, build_info: Dict[str, Any], skip_reset=False,
                     skip_corrections=False) -> Optional[DeviceInterface]:
@@ -128,17 +166,16 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
             self.LOGGER.error('Failed to connect to TCP address.')
             return None
 
+        ################# Step 1: Install Engine on CPU #####################
+
         # Stop any existing runs.
         ssh_client.exec_command(self.KILL_CMD)
         # Clear all files from previous runs.
+        self.LOGGER.info("Clearing data from previous runs.")
         ssh_client.exec_command("rm -rf p1_fusion_engine*")
 
         # Clear all previously recorded logs.
-        if self.env_args.HITL_BUILD_TYPE == DeviceType.ZIPLINE:
-            self.LOGGER.info("removing files")
-            ssh_client.exec_command("rm -rf /home/pointone/p1_fusion_engine/cache/logs/*")
-        else:
-            ssh_client.exec_command("rm -rf /logs/*")
+        ssh_client.exec_command(f"rm -rf {self.LOG_DIR}/*")
 
         # Download release from S3.
         aws_path = build_info["aws_path"]
@@ -178,6 +215,15 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
 
         self.LOGGER.info('Starting engine.')
 
+        gnss_config_patch_args = ''
+        # To test IMU data, set the coarse orientation (c_ds) and enable the IMUOutput message on the diagnostic port.
+        # We do this with a patch so that the engine starts up with the right settings.
+        if not self.env_args.HITL_BUILD_TYPE.is_gnss_only():
+            self._write_imu_patch(scp)
+            gnss_config_patch_args = f' --user-config-patch={GNSS_CONFIG_PATCH_PATH}'
+
+        ################# Step 2: Run Engine #####################
+
         # From https://docs.paramiko.org/en/stable/api/channel.html:
         #  Because SSH2 has a windowing kind of flow control, if you stop reading data from a Channel and its buffer
         #  fills up, the server will be unable to send you any more data until you read some of it.
@@ -187,8 +233,9 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
         # Note that the newline in the echo is automatically escaped in the exec_command.
         BUFFER_OUTPUT_AND_EXIT_CODE = ' 2>&1 | tail -n 100; echo "\n${PIPESTATUS[0]}"'
         channel.set_combine_stderr(True)
-        self.LOGGER.info((RUNNER_CMD_PREFIX + self.RUNNER_CMD + BUFFER_OUTPUT_AND_EXIT_CODE).replace('\n', '\\n'))
-        channel.exec_command(RUNNER_CMD_PREFIX + self.RUNNER_CMD + BUFFER_OUTPUT_AND_EXIT_CODE)
+        full_run_cmd = RUNNER_CMD_PREFIX + self.RUNNER_CMD + gnss_config_patch_args + BUFFER_OUTPUT_AND_EXIT_CODE
+        self.LOGGER.info(full_run_cmd.replace('\n', '\\n'))
+        channel.exec_command(full_run_cmd)
         # Manually wait to ensure that the bootstrap script kicks off in the background before continuing.
         time.sleep(RESTART_WAIT_TIME_SEC)
 
@@ -207,14 +254,6 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
 
         self.device_interface = DeviceInterface(data_source)
 
-        # To test IMU data, enable the IMUOutput message on the diagnostic port.
-        # NOTE: This will leave unsaved UserConfig changes on the device.
-        if not self.env_args.HITL_BUILD_TYPE.is_gnss_only():
-            self.LOGGER.info(f'Enabling IMUOutput message.')
-            if not enable_imu_output(self.device_interface):
-                self.LOGGER.error('Enabling IMUOutput failed.')
-                return None
-
         return self.device_interface
 
     def shutdown_device(self, tests_passed: bool, output_dir: Path) -> bool:
@@ -230,29 +269,29 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
             self.device_interface.data_source.stop()
 
         # Upload new device log after failure.
-        if not tests_passed:
-            # Extract latest Log ID from remote device by extracting the target of the symbolic link
-            # /logs/current_log and then parsing out the log ID.
-            if self.env_args.HITL_BUILD_TYPE == DeviceType.ZIPLINE:
-                log_path = "/home/pointone/p1_fusion_engine/cache/logs/current_log"
-            else:
-                log_path = "/logs/current_log"
+        if not tests_passed and self.ssh_client is not None:
+            transport = self.ssh_client.get_transport()
+            if transport is not None:
+                # Extract latest Log ID from remote device by extracting the target of the symbolic link
+                # /logs/current_log and then parsing out the log ID.
+                log_path = str(self.LOG_DIR / 'current_log')
 
-            stdin, stdout, stderr = self.ssh_client.exec_command("echo $(basename $(ls -l %s | awk -F'-> ' '{print $2}'))" % log_path)
-            error = stderr.read().decode()
-            if error:
-                self.LOGGER.error(f"Error extracting log data on device: {error}")
+                stdin, stdout, stderr = self.ssh_client.exec_command(
+                    "echo $(basename $(ls -l %s | awk -F'-> ' '{print $2}'))" % log_path)
+                error = stderr.read().decode()
+                if error:
+                    self.LOGGER.error(f"Error extracting log data on device: {error}")
 
-            else:
-                log_id = stdout.read().decode()
-                scp = SCPClient(self.ssh_client.get_transport())
-                self.LOGGER.info("Adding log %s from device to log upload list." % log_id)
-                scp.get(log_path, '/logs', recursive=True)
+                else:
+                    log_id = stdout.read().decode()
+                    scp = SCPClient(transport)
+                    self.LOGGER.info("Adding log %s from device to log upload list." % log_id)
+                    scp.get(log_path, '/logs', recursive=True)
 
-                # Add log ID to log list.
-                with open(output_dir / UPLOADED_LOG_LIST_FILE, 'w') as fd:
-                    # Write to file.
-                    fd.write(log_id)
+                    # Add log ID to log list.
+                    with open(output_dir / UPLOADED_LOG_LIST_FILE, 'w') as fd:
+                        # Write to file.
+                        fd.write(log_id)
 
         # Stop the process.
         if self.ssh_client is not None and self.ssh_channel is not None:
