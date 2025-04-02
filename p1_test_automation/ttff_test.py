@@ -232,6 +232,7 @@ def run_tests():
         # script, as the fixup script may have unintended impacts on the Teseo's startup.
         time.sleep(2)
 
+        ######## 8. START/RESTART THE FUSION ENGINE PROCESS ########
         # Restart fusion engine service.
         print("Starting Fusion Engine service.")
         _stdin, _stdout, _stderr = ssh_client.exec_command(f"sudo systemctl start p1_fusion_engine.service")
@@ -263,7 +264,7 @@ def run_tests():
         log_id = stdout.read().decode()
         logger.info("%s: Current log ID: %s" % (strftime("%a, %d %b %Y %X +0000", gmtime()), log_id))
 
-        ######## 8. STOP TIMER AT FIRST FIX ########
+        ######## 9. STOP TIMER AT FIRST FIX ########
         logger.info("%s: Waiting for first valid solution" % strftime("%a, %d %b %Y %X +0000", gmtime()))
         while True:
             try:
@@ -280,7 +281,7 @@ def run_tests():
 
         end_time = time.time()
 
-        ######## 9. RECORD RESULTS ########
+        ######## 10. RECORD RESULTS ########
         total_time_elapsed = end_time - start_time
         time_since_cold_start_sent = end_time - time_cold_start_sent
         times.append(total_time_elapsed)
