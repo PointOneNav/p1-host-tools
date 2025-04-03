@@ -154,7 +154,7 @@ def main():
             hitl_device_interface_cls = HitlAmazonInterface
         elif env_args.HITL_BUILD_TYPE == DeviceType.ATLAS:
             hitl_device_interface_cls = HitlAtlasInterface
-        elif env_args.HITL_BUILD_TYPE == DeviceType.BMW_MOTO:
+        elif env_args.HITL_BUILD_TYPE == DeviceType.BMW_MOTO_MIC:
             hitl_device_interface_cls = HitlBMWMotoInterface
         elif env_args.HITL_BUILD_TYPE.is_lg69t():
             hitl_device_interface_cls = HitlLG69TInterface

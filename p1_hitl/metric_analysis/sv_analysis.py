@@ -51,7 +51,7 @@ def configure_metrics(env_args: HitlEnvArgs):
     else:
         # Don't expect Glonass on LG69T based platforms.
         if env_args.HITL_BUILD_TYPE.is_lg69t() or env_args.HITL_BUILD_TYPE in [
-                DeviceType.BMW_MOTO, DeviceType.AMAZON_FLEETEDGE_V1, DeviceType.ZIPLINE]:
+                DeviceType.BMW_MOTO_MIC, DeviceType.AMAZON_FLEETEDGE_V1, DeviceType.ZIPLINE]:
             metric_glonass_tracked.is_disabled = True
 
 
