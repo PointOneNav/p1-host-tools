@@ -71,7 +71,7 @@ def should_failure_be_ignored(env_args: HitlEnvArgs, failure: dict[str, Any]) ->
             'fixed_max_velocity',
             'gps_time_valid',
         ]
-    elif env_args.HITL_BUILD_TYPE is DeviceType.BMW_MOTO:
+    elif env_args.HITL_BUILD_TYPE is DeviceType.BMW_MOTO_MIC:
         ignore_failure = failure['name'] in [
             'imu_msg_period',
             'tcp1_calibration_status_rate',

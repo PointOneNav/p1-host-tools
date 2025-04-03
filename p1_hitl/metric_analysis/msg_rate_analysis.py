@@ -94,7 +94,7 @@ def get_device_defaults(env_args: HitlEnvArgs) -> list[DataChannelDefaultsCheck]
                 expected_msg_rates=fe_rates
             )
         ]
-    elif build_type in [DeviceType.AMAZON_FLEETEDGE_V1, DeviceType.ATLAS, DeviceType.BMW_MOTO]:
+    elif build_type in [DeviceType.AMAZON_FLEETEDGE_V1, DeviceType.ATLAS, DeviceType.BMW_MOTO_MIC]:
         return [
             # TCP1 (FE)
             DataChannelDefaultsCheck(

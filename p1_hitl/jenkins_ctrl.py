@@ -16,7 +16,7 @@ JENKINS_BASE_URL = 'https://build.pointonenav.com'
 BUILD_JOB_MAP = {
     DeviceType.AMAZON_FLEETEDGE_V1: "amazon-fe1-build",
     DeviceType.ATLAS: "atlas-build-st-develop",
-    DeviceType.BMW_MOTO: "bmw-moto-build",
+    DeviceType.BMW_MOTO_MIC: "bmw-moto-build",
     DeviceType.LG69T_AM: "quectel-build",
     DeviceType.LG69T_AP: "quectel-build",
     DeviceType.ZIPLINE: "zipline-build",

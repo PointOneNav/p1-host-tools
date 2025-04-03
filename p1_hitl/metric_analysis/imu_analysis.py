@@ -37,7 +37,7 @@ def configure_metrics(env_args: HitlEnvArgs):
             metric.is_disabled = True
     else:
         # 100Hz IMU devices.
-        if env_args.HITL_BUILD_TYPE in [DeviceType.ATLAS, DeviceType.BMW_MOTO, DeviceType.AMAZON_FLEETEDGE_V1]:
+        if env_args.HITL_BUILD_TYPE in [DeviceType.ATLAS, DeviceType.BMW_MOTO_MIC, DeviceType.AMAZON_FLEETEDGE_V1]:
             nominal_period = 0.01
         # LG69T devices have 26Hz IMU rate.
         elif env_args.HITL_BUILD_TYPE.is_lg69t():

@@ -22,7 +22,7 @@ def get_s3_path(version_str: str, build_type: DeviceType) -> str:
         return f'nautilus/amazon-fleetedge-1/{version_str[19:]}'
     elif build_type is DeviceType.ATLAS:
         return f'nautilus/atlas/{version_str}'
-    elif build_type is DeviceType.BMW_MOTO:
+    elif build_type is DeviceType.BMW_MOTO_MIC:
         return f'nautilus/bmw-moto-mic/{version_str[13:]}'
     elif build_type is DeviceType.ZIPLINE:
         return f'nautilus/zipline/{version_str[8:]}'

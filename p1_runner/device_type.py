@@ -8,7 +8,7 @@ class DeviceType(Enum):
 
     AMAZON_FLEETEDGE_V1 = auto()
     ATLAS = auto()
-    BMW_MOTO = auto()
+    BMW_MOTO_MIC = auto()
     LG69T_AM = auto()
     LG69T_AP = auto()
     LG69T_AH = auto()
@@ -42,7 +42,7 @@ class DeviceType(Enum):
             DeviceType.LG69T_AP: 'lg69t-ap-v[0-9]*.*',
             DeviceType.ZIPLINE: 'zipline-v[0-9]*.*',
             DeviceType.AMAZON_FLEETEDGE_V1: 'amazon-fleetedge-1-v[0-9]*.*',
-            DeviceType.BMW_MOTO: 'bmw-moto-mic-v[0-9]*.*',
+            DeviceType.BMW_MOTO_MIC: 'bmw-moto-mic-v[0-9]*.*',
             DeviceType.P1_LG69T_GNSS: 'p1-lg69t-gnss-v[0-9]*.*',
         }
 
