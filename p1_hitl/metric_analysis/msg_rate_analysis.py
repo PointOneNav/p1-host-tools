@@ -106,7 +106,21 @@ def get_device_defaults(env_args: HitlEnvArgs) -> list[DataChannelDefaultsCheck]
             DataChannelDefaultsCheck(
                 name='tcp2',
                 device_config=DeviceConfig(name='tcp2', tcp_address=env_args.JENKINS_LAN_IP, port=30201),
-                # Since only FE is being passed from decoder in analysis_runner, can only check FE rates.
+                expected_msg_rates=NMEA_DEFAULT_RATES
+            )
+        ]
+    elif build_type is DeviceType.P1_LG69T_GNSS:
+        return [
+            # TCP1 (FE)
+            DataChannelDefaultsCheck(
+                name='tcp1',
+                device_config=DeviceConfig(name='tcp1', tcp_address=env_args.JENKINS_LAN_IP, port=30200),
+                expected_msg_rates=FE_GNSS_ONLY_DEFAULT_RATES
+            ),
+            # TCP2 (NMEA)
+            DataChannelDefaultsCheck(
+                name='tcp2',
+                device_config=DeviceConfig(name='tcp2', tcp_address=env_args.JENKINS_LAN_IP, port=30201),
                 expected_msg_rates=NMEA_DEFAULT_RATES
             )
         ]

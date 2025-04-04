@@ -32,7 +32,7 @@ class DeviceType(Enum):
         return self.is_lg69t() or self is DeviceType.LC29H
 
     def is_gnss_only(self) -> bool:
-        return self in (DeviceType.LG69T_AM, DeviceType.ZIPLINE)
+        return self in (DeviceType.LG69T_AM, DeviceType.ZIPLINE, DeviceType.P1_LG69T_GNSS)
 
     @classmethod
     def mapping_device_to_regex(cls) -> Dict['DeviceType', str]:

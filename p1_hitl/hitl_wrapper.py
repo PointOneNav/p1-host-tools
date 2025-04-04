@@ -20,7 +20,8 @@ from p1_hitl import hitl_failure_slack_whitelist
 from p1_hitl.defs import (BUILD_INFO_FILE, CONSOLE_FILE, DEFAULT_LOG_BASE_DIR,
                           ENV_DUMP_FILE, EVENT_NOTIFICATION_FILE,
                           FAILURE_REPORT, FULL_REPORT, LOG_FILES, PLAYBACK_DIR,
-                          UPLOADED_LOG_LIST_FILE, HitlEnvArgs, get_args)
+                          UPLOADED_DEVICE_LOGS_LIST_FILE, HitlEnvArgs,
+                          get_args)
 from p1_hitl.hitl_slack_interface import FileEntry, send_slack_message
 from p1_runner.log_manager import LogManager
 from p1_test_automation.regression_interface import report_hitl_result
@@ -91,7 +92,8 @@ def report_failure(msg: str, env_args: Optional[HitlEnvArgs] = None, log_base_di
     if env_args:
         version_str = f'{env_args.HITL_VERSION_ANNOTATION} ({env_args.HITL_DUT_VERSION})' if env_args.HITL_VERSION_ANNOTATION else env_args.HITL_DUT_VERSION
         slack_mrkdwn = f'''\
-*HITL {env_args.get_selected_test_type().name} Test Failed*
+*HITL Test Failed*
+Test Type: `{env_args.get_selected_test_type().name}`
 Node: `{env_args.HITL_NAME}`
 Platform Config: `{env_args.HITL_BUILD_TYPE.name}`
 Software Version: `{version_str}`
@@ -113,19 +115,32 @@ Software Version: `{version_str}`
 '''
     files_to_attach = None
     if log_dir:
+        relative_log_path = log_dir.relative_to(log_base_dir)
         slack_mrkdwn += f'''\
-Console output, configuration, and data uploaded to:
+HITL runner log including console output, configuration, and received data from device uploaded to:
 <{get_artifact_url(log_base_dir, log_dir)}>
 
-See attachments in reply for more details.
+This log isn't processed by ES. To avoid doing a full S3 search you can do:
+`catalog.py log {relative_log_path} download`
+
 '''
+        device_log_list_path = log_dir / UPLOADED_DEVICE_LOGS_LIST_FILE
+        if device_log_list_path.exists():
+            for line in open(device_log_list_path).readlines():
+                slack_mrkdwn += f'''\
+Log directly captured from device. This log may be needed to reproduce issues in playback or for comparing with data captured by HITL host:
+`catalog.py log {line.strip()} download`
+
+'''
+
+        slack_mrkdwn += 'See attachments in reply for more details.\n'
         files_to_check = [
             FileEntry(log_dir / FAILURE_REPORT, "Description of failed metrics"),
             FileEntry(log_dir / CONSOLE_FILE, "HITL Runner Console"),
             FileEntry(log_dir / EVENT_NOTIFICATION_FILE, "Log of event notifications received."),
             FileEntry(log_dir / FULL_REPORT, "Full report with metric configurations and results"),
             FileEntry(
-                log_dir / UPLOADED_LOG_LIST_FILE,
+                log_dir / UPLOADED_DEVICE_LOGS_LIST_FILE,
                 "Additional uploaded device logs collected during run"),
             FileEntry(log_dir / ENV_DUMP_FILE, "The environment arguments for the run"),
             FileEntry(log_dir / BUILD_INFO_FILE, "Metadata for the build loaded on the device"),]

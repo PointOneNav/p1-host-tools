@@ -6,12 +6,19 @@ export HITL_NAUTILUS_PATH=$REPO_ROOT
 # CONFIGURATION, SANITY, ROOF_15_MIN, QUICK_TESTS, RESET_TESTS, ROOF_NO_CORRECTIONS_15_MIN
 export HITL_TEST_TYPE="SANITY"
 export HITL_NAME="run_local"
-export HITL_BUILD_TYPE="ATLAS"
+export JENKINS_ANTENNA_LOCATION='37.84729032,-122.27868986,-7.96772104'
+
 # export HITL_DUT_VERSION=9340f6e481e0bcacf4502370717b5fdb87b0c5f4
 export HITL_DUT_VERSION=origin/st-develop
-export JENKINS_LAN_IP=192.168.1.176
-export JENKINS_ATLAS_BALENA_UUID=c646a700525b361b1648fe1fd7f7b997
-export JENKINS_ANTENNA_LOCATION='37.84729032,-122.27868986,-7.96772104'
+
+# export HITL_BUILD_TYPE="ATLAS"
+# export JENKINS_LAN_IP=192.168.1.176
+# export JENKINS_ATLAS_BALENA_UUID=c646a700525b361b1648fe1fd7f7b997
+# export JENKINS_COARSE_ORIENTATION='FORWARD,UP'
+
+export HITL_BUILD_TYPE="P1_LG69T_GNSS"
+export HITL_SSH_USERNAME="jdiamond"
+export JENKINS_LAN_IP=192.168.1.197
 export JENKINS_COARSE_ORIENTATION='FORWARD,UP'
 
 # export JENKINS_UART1='/dev/ttyUSB0'
@@ -28,8 +35,8 @@ export PATH="/home/jdiamond/src/usb-relay-hid/commandline/makemake:$PATH"
 
 # python p1_hitl/hitl_runner.py -v --log-metric-values
 # python -u p1_hitl/hitl_wrapper.py -v --log-metric-values --skip-reset
-# python -u p1_hitl/hitl_wrapper.py -v
-python -u p1_hitl/hitl_runner.py -v
+python -u p1_hitl/hitl_wrapper.py -v
+# python -u p1_hitl/hitl_runner.py -v
 
 
 #python p1_hitl/hitl_runner.py -v --log-metric-values -e /logs/2024-10-18/run_local/596a841118f9497bb40a616a0bbf7c6f/env.json -p /logs/2024-10-18/run_local/596a841118f9497bb40a616a0bbf7c6f/input.raw
