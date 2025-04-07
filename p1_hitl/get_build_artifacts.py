@@ -26,6 +26,8 @@ def get_s3_path(version_str: str, build_type: DeviceType) -> str:
         return f'nautilus/bmw-moto-mic/{version_str[13:]}'
     elif build_type is DeviceType.ZIPLINE:
         return f'nautilus/zipline/{version_str[8:]}'
+    elif build_type is DeviceType.P1_LG69T_GNSS:
+        return f'nautilus/p1-lg69t-gnss/{version_str[14:]}'
     else:
         raise RuntimeError(f'Remote path not known for specified device type ({build_type.name}).')
 

@@ -1,4 +1,5 @@
 import csv
+import logging
 import os
 import socket
 import subprocess
@@ -6,14 +7,12 @@ import sys
 import time
 from time import gmtime, strftime
 
-import logging
 import numpy as np
 import paramiko
-
-from relay_controller import RelayController
-
 from fusion_engine_client.messages import *
-from fusion_engine_client.parsers import FusionEngineDecoder, FusionEngineEncoder
+from fusion_engine_client.parsers import (FusionEngineDecoder,
+                                          FusionEngineEncoder)
+from relay_controller import RelayController
 
 # Add the parent directory to the search path to enable p1_runner package imports when not installed in Python.
 repo_root = os.path.normpath(os.path.join(os.path.dirname(__file__), '..'))
@@ -34,14 +33,15 @@ SSH_KEY_PATH = "/home/pointone/.ssh/id_rsa"
 CSV_FILENAME = "/home/pointone/ttff.csv"
 NUM_TESTS = 700
 
-cmd_binary_path="/home/pointone/hidusb-relay-cmd"
+cmd_binary_path = "/home/pointone/hidusb-relay-cmd"
 rf_relay_number = 1
 pi_relay_number = 2
 # Associated with powering the AJ board, NOT the Pi connected to the AJ board.
 power_relay_number = 3
 hostname = "192.168.1.134"
 
-logging.basicConfig(filename='ttff.log', level=logging.INFO, filemode='w', format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(filename='ttff.log', level=logging.INFO, filemode='w',
+                    format='%(asctime)s - %(levelname)s - %(message)s')
 
 logger = logging.getLogger('ttff_test')
 
@@ -53,10 +53,12 @@ class PoseMessageReader():
     def on_pose_message(self, header: MessageHeader, pose: PoseMessage, raw_bytes: bytes):
         self.solution_valid = pose.solution_type != SolutionType.Invalid and pose.solution_type != SolutionType.Integrate
 
+
 def power_on_device(power_rc):
     power_rc.send_cmd(on_state=True)
     time.sleep(1)
     power_rc.send_cmd(on_state=False)
+
 
 def power_cycle_device(pi_rc):
     pi_rc.send_cmd(on_state=True)
@@ -65,12 +67,14 @@ def power_cycle_device(pi_rc):
     time.sleep(1)
     power_on_device(pi_rc)
 
+
 def is_network_available():
     try:
-        subprocess.check_output(["ping", "-c", "1", "192.168.1.134"]) # Using ping as a simple check
+        subprocess.check_output(["ping", "-c", "1", "192.168.1.134"])  # Using ping as a simple check
         return True
     except subprocess.CalledProcessError:
         return False
+
 
 def run_tests():
     test_start_time = time.time()
@@ -80,9 +84,8 @@ def run_tests():
     for i in range(NUM_TESTS):
         print("---------------------------------------")
 
-        logger.info(f"%s: Starting test %d" % (strftime("%a, %d %b %Y %X +0000", gmtime()), i+1))
-        print("STARTING TEST", i+1)
-
+        logger.info(f"%s: Starting test %d" % (strftime("%a, %d %b %Y %X +0000", gmtime()), i + 1))
+        print("STARTING TEST", i + 1)
 
         offset %= 30
         rf_rc = RelayController(rf_relay_number, cmd_binary_path=cmd_binary_path)
@@ -94,7 +97,6 @@ def run_tests():
             time_to_wait = 5
             print(f"Cannot ping device. Will try again in %d seconds." % time_to_wait)
             time.sleep(time_to_wait)
-
 
         # Set up SSH automation tool.
         pkey = paramiko.RSAKey.from_private_key_file(SSH_KEY_PATH)
@@ -161,7 +163,8 @@ def run_tests():
 
         #### 3. WAIT FOR TESEO RECEIVER TO APPLY COLD START ####
         reader = PoseMessageReader()
-        decoder = FusionEngineDecoder(max_payload_len_bytes=PoseMessage.calcsize(), warn_on_unrecognized=False, return_bytes=True)
+        decoder = FusionEngineDecoder(max_payload_len_bytes=PoseMessage.calcsize(),
+                                      warn_on_unrecognized=False, return_bytes=True)
         decoder.add_callback(PoseMessage.MESSAGE_TYPE, reader.on_pose_message)
         sock.send(encoded_data)
         print("Cold start command sent")
@@ -197,12 +200,12 @@ def run_tests():
         time.sleep(5)
         # Remove cache files.
         print("Removing cache files")
-        _stdin, _stdout, _stderr = ssh_client.exec_command(f"rm -rf /home/pointone/p1_fusion_engine/cache/fusion_engine")
+        _stdin, _stdout, _stderr = ssh_client.exec_command(
+            f"rm -rf /home/pointone/p1_fusion_engine/cache/fusion_engine")
         exit_status = _stdout.channel.recv_exit_status()
 
         logger.info("%s: Powering off reciever board." % strftime("%a, %d %b %Y %X +0000", gmtime()))
         power_rc.send_cmd(on_state=False)
-
 
         ######## 5. WAIT FOR DISCHARGE ########
         time_to_wait_after_poweroff = 10
@@ -217,7 +220,8 @@ def run_tests():
         ######## 7. RECONNECT POWER AND START TIMER ########
         # Insert sleep command in between OFF and ON command to relay to simulate power button.
         print("Sending power on signal to device after offset of %d seconds." % offset)
-        logger.info("%s: Sending power on signal to device after offset of %d seconds" % (strftime("%a, %d %b %Y %X +0000", gmtime()), offset))
+        logger.info("%s: Sending power on signal to device after offset of %d seconds" %
+                    (strftime("%a, %d %b %Y %X +0000", gmtime()), offset))
         time.sleep(offset)
         offset += 1
 
@@ -260,7 +264,7 @@ def run_tests():
 
         # Get current log ID from device.
         stdin, stdout, stderr = ssh_client.exec_command(
-                    "echo $(basename $(ls -l /logs/current_log | awk -F'-> ' '{print $2}'))")
+            "echo $(basename $(ls -l /logs/current_log | awk -F'-> ' '{print $2}'))")
         log_id = stdout.read().decode()
         logger.info("%s: Current log ID: %s" % (strftime("%a, %d %b %Y %X +0000", gmtime()), log_id))
 
@@ -272,7 +276,11 @@ def run_tests():
                 decoder.on_data(data)
 
                 if reader.solution_valid:
-                    logger.info("%s: Received first valid solution. System successfully navigating." % strftime("%a, %d %b %Y %X +0000", gmtime()))
+                    logger.info(
+                        "%s: Received first valid solution. System successfully navigating." %
+                        strftime(
+                            "%a, %d %b %Y %X +0000",
+                            gmtime()))
                     break
 
             except Exception:
@@ -292,7 +300,6 @@ def run_tests():
         with open(CSV_FILENAME, 'a') as f:
             csv_writer = csv.writer(f)
             csv_writer.writerow([round(total_time_elapsed, 4)])
-
 
     print("TIMES (SECONDS):")
     print(times)

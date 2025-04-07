@@ -1,5 +1,6 @@
 import io
 import logging
+import os
 import time
 from argparse import Namespace
 from pathlib import Path
@@ -10,10 +11,9 @@ from scp import SCPClient
 
 from bin.check_cds import config_to_key
 from bin.config_tool import request_shutdown
-from p1_hitl.defs import UPLOADED_LOG_LIST_FILE, HitlEnvArgs
+from p1_hitl.defs import UPLOADED_DEVICE_LOGS_LIST_FILE, HitlEnvArgs
 from p1_hitl.get_build_artifacts import download_file
 from p1_runner.device_interface import DeviceInterface
-from p1_runner.device_type import DeviceType
 from p1_test_automation.devices_config import DeviceConfig, open_data_source
 
 from .base_interfaces import HitlDeviceInterfaceBase
@@ -24,20 +24,16 @@ PROCESS_STOP_TIMEOUT_SEC = 10
 OUTPUT_PORT = 30200
 DIAGNOSTIC_PORT = 30202
 
-SSH_USERNAME = "pointone"
-SSH_KEY_PATH = "/home/pointone/.ssh/id_ed25519"
+SSH_KEY_PATH = os.environ.get('HITL_SSH_KEY_PATH', str(Path.home() / '.ssh/id_ed25519'))
+SSH_USERNAME = os.environ.get('HITL_SSH_USERNAME', 'pointone')
 
-GNSS_CONFIG_PATCH_PATH = '/home/pointone/p1_fusion_engine/gnss_config_patch.json'
+GNSS_CONFIG_PATCH_PATH = f'/home/{SSH_USERNAME}/p1_fusion_engine/gnss_config_patch.json'
 
 
 class HitlBigEngineInterface(HitlDeviceInterfaceBase):
     LOGGER = logging.getLogger('point_one.hitl.hitl_interface')
-    DEVICE_NAME = ""
-    VERSION_PREFIX = ""
-    TAR_FILENAME_PREFIX = ""
-    TAR_FILENAME_SUFFIX = ""
     LOG_DIR = Path('/logs')
-    RUNNER_CMD = ""
+    RUNNER_CMD = './p1_fusion_engine/run_fusion_engine.sh --params-path ./fusion_engine_parameters.sh'
     # NOTE: This assumes the process binary is named `fusion_engine`. This may need to be child class specific
     # if this can't be assumed.
     STOP_CMD = 'pkill -SIGTERM -e fusion_engine'
@@ -143,7 +139,7 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
         #     "aws_path": "s3://pointone-build-artifacts/nautilus/quectel/v2.1.0-917-g7e74d1b235/"
         # }
 
-        self.LOGGER.info(f'Initializing {self.DEVICE_NAME}.')
+        self.LOGGER.info(f'Initializing {self.env_args.HITL_BUILD_TYPE.name}.')
 
         if self.config.tcp_address is None:
             raise KeyError('Config missing TCP address.')
@@ -179,20 +175,18 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
 
         # Download release from S3.
         aws_path = build_info["aws_path"]
-        version_str = build_info["version"]
-        tar_filename = "%s%s%s" % (self.TAR_FILENAME_PREFIX,
-                                   version_str[len(self.VERSION_PREFIX):],
-                                   self.TAR_FILENAME_SUFFIX)
+        tar_pattern = r'.+\.tar\.gz'
+        tar_filename = 'p1_fusion_engine.tar.gz'
 
         fd = io.BytesIO()
 
-        if not download_file(fd, aws_path, tar_filename):
-            self.LOGGER.error("Failed to download file %s from %s" % (tar_filename, aws_path))
+        if not download_file(fd, aws_path, tar_pattern):
+            self.LOGGER.error("Failed to download file %s from %s" % (tar_pattern, aws_path))
             return None
 
         fd.seek(0)
         scp = SCPClient(transport)
-        scp.putfo(fd, f'/home/pointone/{tar_filename}')
+        scp.putfo(fd, f'/home/{SSH_USERNAME}/{tar_filename}')
 
         # Unzip the tar file.
         _stdin, _stdout, _stderr = ssh_client.exec_command(f"tar -xzf {tar_filename}")
@@ -268,43 +262,50 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
             exit_succeeded &= request_shutdown(self.device_interface, namespace_args)
             self.device_interface.data_source.stop()
 
-        # Upload new device log after failure.
-        if not tests_passed and self.ssh_client is not None:
+        if self.ssh_client is not None:
+            # Find log results on the DUT
             transport = self.ssh_client.get_transport()
+            log_path = None
             if transport is not None:
                 # Extract latest Log ID from remote device by extracting the target of the symbolic link
-                # /logs/current_log and then parsing out the log ID.
-                log_path = str(self.LOG_DIR / 'current_log')
-
-                stdin, stdout, stderr = self.ssh_client.exec_command(
-                    "echo $(basename $(ls -l %s | awk -F'-> ' '{print $2}'))" % log_path)
+                # /logs/current_log.
+                link_path = self.LOG_DIR / 'current_log'
+                _, stdout, stderr = self.ssh_client.exec_command(f'realpath {link_path}')
                 error = stderr.read().decode()
                 if error:
                     self.LOGGER.error(f"Error extracting log data on device: {error}")
-
                 else:
-                    log_id = stdout.read().decode()
+                    log_path = stdout.read().decode().strip()
+                    self.LOGGER.info(f"Big engine generated log {log_path}.")
+
+                # Upload new device log after failure.
+                if not tests_passed and log_path is not None:
                     scp = SCPClient(transport)
-                    self.LOGGER.info("Adding log %s from device to log upload list." % log_id)
                     scp.get(log_path, '/logs', recursive=True)
 
                     # Add log ID to log list.
-                    with open(output_dir / UPLOADED_LOG_LIST_FILE, 'w') as fd:
+                    relative_path = Path(log_path).relative_to(self.LOG_DIR)
+                    self.LOGGER.info(f"Adding log {relative_path} from device to log upload list.")
+                    with open(output_dir / UPLOADED_DEVICE_LOGS_LIST_FILE, 'w') as fd:
                         # Write to file.
-                        fd.write(log_id)
+                        fd.write(str(relative_path) + '\n')
 
-        # Stop the process.
-        if self.ssh_client is not None and self.ssh_channel is not None:
-            self.LOGGER.info('Stopping process.')
-            self.ssh_client.exec_command(self.STOP_CMD)
-            start_time = time.monotonic()
-            while time.monotonic() - start_time < PROCESS_STOP_TIMEOUT_SEC:
-                time.sleep(0.1)
-                if self.ssh_channel.exit_status_ready():
-                    self.LOGGER.info(f'Process exited after {time.monotonic() - start_time:0.1f}s.')
-                    break
+            # Stop the process.
+            if self.ssh_channel is not None:
+                self.LOGGER.info('Stopping process.')
+                self.ssh_client.exec_command(self.STOP_CMD)
+                start_time = time.monotonic()
+                while time.monotonic() - start_time < PROCESS_STOP_TIMEOUT_SEC:
+                    time.sleep(0.1)
+                    if self.ssh_channel.exit_status_ready():
+                        self.LOGGER.info(f'Process exited after {time.monotonic() - start_time:0.1f}s.')
+                        break
 
-            exit_succeeded &= self._check_process_exit()
-            self.ssh_client.close()
+                exit_succeeded &= self._check_process_exit()
+                self.ssh_client.close()
 
-        return exit_succeeded
+                return exit_succeeded
+
+        # self.ssh_client is None or self.ssh_channel is None
+        self.LOGGER.info("SSH client closed before shutdown.")
+        return False

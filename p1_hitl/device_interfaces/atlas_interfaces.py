@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from bin.config_tool import request_shutdown
-from p1_hitl.defs import UPLOADED_LOG_LIST_FILE, HitlEnvArgs
+from p1_hitl.defs import UPLOADED_DEVICE_LOGS_LIST_FILE, HitlEnvArgs
 from p1_runner.device_interface import DeviceInterface
 from p1_test_automation.atlas_device_ctrl import (AtlasBalenaController,
                                                   CrashLogAction,
@@ -199,7 +199,7 @@ class HitlAtlasInterface(HitlDeviceInterfaceBase):
             if log_status is None:
                 logger.error('Error querying logs.')
                 return False
-            with open(output_dir / UPLOADED_LOG_LIST_FILE, 'w') as fd:
+            with open(output_dir / UPLOADED_DEVICE_LOGS_LIST_FILE, 'w') as fd:
                 for log in log_status['logs']:
                     if log['guid'] not in self.old_log_guids:
                         upload_log(self.config.tcp_address, log['guid'])

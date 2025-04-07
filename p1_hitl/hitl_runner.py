@@ -17,7 +17,7 @@ from p1_hitl.defs import (BUILD_INFO_FILE, CONSOLE_FILE, ENV_DUMP_FILE,
                           FULL_REPORT, LOG_FILES, PLAYBACK_DIR, DeviceType,
                           HitlEnvArgs, TestType, get_args)
 from p1_hitl.device_interfaces import (HitlAmazonInterface, HitlAtlasInterface,
-                                       HitlBMWMotoInterface,
+                                       HitlBigEngineInterface,
                                        HitlLG69TInterface,
                                        HitlZiplineInterface)
 from p1_hitl.get_build_artifacts import get_build_info
@@ -150,16 +150,18 @@ def main():
             json.dump(build_info, fd)
 
     ################# Setup device under test #################
-        if env_args.HITL_BUILD_TYPE == DeviceType.AMAZON_FLEETEDGE_V1:
-            hitl_device_interface_cls = HitlAmazonInterface
-        elif env_args.HITL_BUILD_TYPE == DeviceType.ATLAS:
+        if env_args.HITL_BUILD_TYPE == DeviceType.ATLAS:
             hitl_device_interface_cls = HitlAtlasInterface
-        elif env_args.HITL_BUILD_TYPE == DeviceType.BMW_MOTO_MIC:
-            hitl_device_interface_cls = HitlBMWMotoInterface
         elif env_args.HITL_BUILD_TYPE.is_lg69t():
             hitl_device_interface_cls = HitlLG69TInterface
+        # Big engine children
+        if env_args.HITL_BUILD_TYPE == DeviceType.AMAZON_FLEETEDGE_V1:
+            hitl_device_interface_cls = HitlAmazonInterface
         elif env_args.HITL_BUILD_TYPE == DeviceType.ZIPLINE:
             hitl_device_interface_cls = HitlZiplineInterface
+        # Big engine defaults
+        elif env_args.HITL_BUILD_TYPE in (DeviceType.BMW_MOTO_MIC, DeviceType.P1_LG69T_GNSS):
+            hitl_device_interface_cls = HitlBigEngineInterface
         else:
             raise NotImplementedError('Need to handle other build types.')
 
