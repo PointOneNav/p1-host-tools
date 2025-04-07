@@ -37,9 +37,19 @@ def configure_metrics(env_args: HitlEnvArgs):
             metric.is_disabled = True
     else:
         # 100 Hz IMU devices.
-        if env_args.HITL_BUILD_TYPE in [DeviceType.ATLAS, DeviceType.BMW_MOTO_MIC, DeviceType.AMAZON_FLEETEDGE_V1]:
+        if env_args.HITL_BUILD_TYPE in [DeviceType.ATLAS, DeviceType.AMAZON_FLEETEDGE_V1]:
             nominal_period_sec = 0.01
             max_tolerance_sec = 0.005
+            percentile_50_tolerance_sec = 0.001
+        # BMW Moto MIC (LG69T-AJ) has a 100 Hz IMU.
+        #
+        # The jitter on the AJ IMU in steady state is nominally pretty good (<1% mean, 2% max). However, we have seen
+        # cases just after power-on where the jitter can be extremely large for a little while, as much as 70+%. It's
+        # not clear what causes that, something in the Teseo that we do not control. We increase the max tolerance here
+        # to account for those periods.
+        elif env_args.HITL_BUILD_TYPE == DeviceType.BMW_MOTO_MIC:
+            nominal_period_sec = 0.01
+            max_tolerance_sec = 0.01
             percentile_50_tolerance_sec = 0.001
         # LG69T-[AM,AP,AH] devices have 26 Hz IMU rate.
         elif env_args.HITL_BUILD_TYPE.is_lg69t():
