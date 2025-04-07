@@ -155,7 +155,7 @@ def main():
         elif env_args.HITL_BUILD_TYPE.is_lg69t():
             hitl_device_interface_cls = HitlLG69TInterface
         # Big engine children
-        if env_args.HITL_BUILD_TYPE == DeviceType.AMAZON_FLEETEDGE_V1:
+        elif env_args.HITL_BUILD_TYPE == DeviceType.AMAZON_FLEETEDGE_V1:
             hitl_device_interface_cls = HitlAmazonInterface
         elif env_args.HITL_BUILD_TYPE == DeviceType.ZIPLINE:
             hitl_device_interface_cls = HitlZiplineInterface
