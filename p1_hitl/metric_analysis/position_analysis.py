@@ -24,7 +24,8 @@ metric_fix_rate = PercentTrueMetric(
 
 metric_position_valid = AlwaysTrueMetric(
     'position_valid',
-    'All positions should be valid.',
+    'All positions should be valid after the navigation engine initializes (i.e., the navigation engine should not '
+    'reset once operating).',
     is_required=True,
 )
 
@@ -127,7 +128,7 @@ metric_3d_pos_error = StatsMetric(
 
 metric_non_nan_position = AlwaysTrueMetric(
     'non_nan_position',
-    'All positions should be non-nan values.',
+    'All positions should be non-nan values when the solution type is valid.',
     is_required=True,
 )
 
@@ -160,25 +161,25 @@ metric_vel_std_mps = MaxArrayValueMetric(
 
 metric_non_nan_pos_std_enu = AlwaysTrueMetric(
     'non_nan_pos_std_enu',
-    'ENU position standard deviations should be non-nan values.',
+    'ENU position standard deviations should be non-nan values when the solution type is valid.',
     is_required=True,
 )
 
 metric_non_nan_ypr_std_deg = AlwaysTrueMetric(
     'non_nan_ypr_std_deg',
-    'YPR standard deviations should be non-nan values.',
+    'YPR standard deviations should be non-nan values when the solution type is valid.',
     is_required=True,
 )
 
 metric_non_nan_vel_std_mps = AlwaysTrueMetric(
     'non_nan_vel_std_mps',
-    'Velocity standard deviations should be non-nan values.',
+    'Velocity standard deviations should be non-nan values when the solution type is valid.',
     is_required=True,
 )
 
 metric_non_nan_undulation = AlwaysTrueMetric(
     'non_nan_undulation',
-    'Undulation should be non-nan value.',
+    'Undulation should be non-nan value when the solution type is valid.',
     is_required=True,
 )
 
@@ -274,8 +275,19 @@ class PositionAnalyzer(AnalyzerBase):
                     metric_pose_p1_time_elapsed.check(float(payload.p1_time) - float(self.last_pose_p1_time))
                 self.last_pose_p1_time = payload.p1_time
             metric_pose_host_time_elapsed.check()
+
             is_fixed = payload.solution_type == SolutionType.RTKFixed
             is_valid = payload.solution_type != SolutionType.Invalid
+
+            # Currently, fallback PVT solutions are reported with a std dev of 500 m on each ENU axis.
+            #
+            # Fallback PVT comes from the native GNSS receiver, which we have no control over. We do not consider them
+            # for any of the position validity/performance checks below since those are intended to sanity check our own
+            # navigation engine. It's entirely possible for the fallback position error to be quite large, or for the
+            # fallback position to become valid and then return to invalid.
+            is_fallback = payload.position_std_enu_m[0] > 490.0
+            if is_fallback:
+                is_valid = False
 
             # Don't factor invalid solutions at startup into other checks.
             if not self.got_first_valid and not is_valid:

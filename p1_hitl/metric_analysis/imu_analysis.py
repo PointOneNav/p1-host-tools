@@ -36,18 +36,32 @@ def configure_metrics(env_args: HitlEnvArgs):
         for metric in imu_metrics:
             metric.is_disabled = True
     else:
-        # 100Hz IMU devices.
-        if env_args.HITL_BUILD_TYPE in [DeviceType.ATLAS, DeviceType.BMW_MOTO_MIC, DeviceType.AMAZON_FLEETEDGE_V1]:
-            nominal_period = 0.01
-        # LG69T devices have 26Hz IMU rate.
+        # 100 Hz IMU devices.
+        if env_args.HITL_BUILD_TYPE in [DeviceType.ATLAS, DeviceType.AMAZON_FLEETEDGE_V1]:
+            nominal_period_sec = 0.01
+            max_tolerance_sec = 0.005
+            percentile_50_tolerance_sec = 0.001
+        # BMW Moto MIC (LG69T-AJ) has a 100 Hz IMU.
+        #
+        # The jitter on the AJ IMU in steady state is nominally pretty good (<1% mean, 2% max). However, we have seen
+        # cases just after power-on where the jitter can be extremely large for a little while, as much as 70+%. It's
+        # not clear what causes that, something in the Teseo that we do not control. We increase the max tolerance here
+        # to account for those periods.
+        elif env_args.HITL_BUILD_TYPE == DeviceType.BMW_MOTO_MIC:
+            nominal_period_sec = 0.01
+            max_tolerance_sec = 0.01
+            percentile_50_tolerance_sec = 0.001
+        # LG69T-[AM,AP,AH] devices have 26 Hz IMU rate.
         elif env_args.HITL_BUILD_TYPE.is_lg69t():
-            nominal_period = 1.0 / 26.0
+            nominal_period_sec = 1.0 / 26.0
+            max_tolerance_sec = 0.005
+            percentile_50_tolerance_sec = 0.001
         else:
             raise NotImplementedError(f'IMU rate not configured for {env_args.HITL_BUILD_TYPE.name}.')
-        metric_imu_msg_period.max_threshold = nominal_period + 0.005
-        metric_imu_msg_period.min_threshold = nominal_period - 0.005
-        metric_imu_msg_period.max_cdf_thresholds = [CdfThreshold(50, nominal_period + 0.001)]
-        metric_imu_msg_period.min_cdf_thresholds = [CdfThreshold(50, nominal_period - 0.001)]
+        metric_imu_msg_period.max_threshold = nominal_period_sec + max_tolerance_sec
+        metric_imu_msg_period.min_threshold = nominal_period_sec - max_tolerance_sec
+        metric_imu_msg_period.max_cdf_thresholds = [CdfThreshold(50, nominal_period_sec + percentile_50_tolerance_sec)]
+        metric_imu_msg_period.min_cdf_thresholds = [CdfThreshold(50, nominal_period_sec - percentile_50_tolerance_sec)]
 
 
 MetricController.register_environment_config_customizations(configure_metrics)
