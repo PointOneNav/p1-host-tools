@@ -51,6 +51,7 @@ def run_build(git_commitish: str, build_type: DeviceType) -> bool:
 
     try:
         # Sometimes see spurious error: 403 Client Error
+        jenkins = None
         for _ in range(CONNECTION_ATTEMPTS):
             try:
                 jenkins = Jenkins(JENKINS_BASE_URL, username=JENKINS_API_USERNAME, password=JENKINS_API_TOKEN)
@@ -58,6 +59,9 @@ def run_build(git_commitish: str, build_type: DeviceType) -> bool:
             except requests.exceptions.HTTPError as e:
                 logger.error(f'Problem connecting to Jenkins: {e}')
                 time.sleep(RETRY_DELAY_SEC)
+
+        if jenkins is None:
+            return False
 
         job_name = BUILD_JOB_MAP[build_type]
         params = _get_build_params(git_commitish, build_type)
