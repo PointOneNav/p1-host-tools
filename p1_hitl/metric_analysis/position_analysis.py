@@ -46,19 +46,14 @@ metric_pose_host_time_elapsed = MaxTimeBetweenChecks(
     'pose_host_time_elapsed',
     'Max host time between pose messages.',
     TimeSource.HOST,
-    # Ideally, this should be specified for each device. I'm going to set this
-    # conservatively initially, and bring down once we have better testing
-    # integration and can make sure it doesn't generate false positives.
+    # This is coarse since the host timestamping can be very inaccurate due to host latency.
     max_time_between_checks_sec=0.5,
 )
 
 metric_pose_p1_time_elapsed = MaxValueMetric(
     'pose_time_elapsed',
-    'Max P1 time between pose messages.',
-    # Ideally, this should be specified for each device. I'm going to set this
-    # conservatively initially, and bring down once we have better testing
-    # integration and can make sure it doesn't generate false positives.
-    threshold=0.4,
+    'Max P1 time between pose messages after output is valid.',
+    threshold=0.11,
 )
 
 metric_gps_time_valid = AlwaysTrueMetric(
@@ -270,10 +265,6 @@ class PositionAnalyzer(AnalyzerBase):
         _, payload, _ = msg
         if isinstance(payload, PoseMessage):
             metric_p1_time_valid.check(bool(payload.p1_time))
-            if payload.p1_time:
-                if self.last_pose_p1_time is not None:
-                    metric_pose_p1_time_elapsed.check(float(payload.p1_time) - float(self.last_pose_p1_time))
-                self.last_pose_p1_time = payload.p1_time
             metric_pose_host_time_elapsed.check()
 
             is_fixed = payload.solution_type == SolutionType.RTKFixed
@@ -299,6 +290,10 @@ class PositionAnalyzer(AnalyzerBase):
             metric_position_valid.check(is_valid)
 
             if is_valid:
+                if self.last_pose_p1_time is not None:
+                    metric_pose_p1_time_elapsed.check(float(payload.p1_time) - float(self.last_pose_p1_time))
+                self.last_pose_p1_time = payload.p1_time
+
                 position_is_non_nan = not np.any(np.isnan(payload.lla_deg))
                 metric_non_nan_position.check(position_is_non_nan)
 
@@ -331,3 +326,5 @@ class PositionAnalyzer(AnalyzerBase):
                 metric_vel_std_mps.check(payload.velocity_std_body_mps)
 
                 metric_non_nan_undulation.check(not np.isnan(payload.undulation_m))
+            else:
+                self.last_pose_p1_time = None
