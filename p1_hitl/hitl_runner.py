@@ -18,6 +18,7 @@ from p1_hitl.defs import (BUILD_INFO_FILE, CONSOLE_FILE, ENV_DUMP_FILE,
                           HitlEnvArgs, TestType, get_args)
 from p1_hitl.device_interfaces import (HitlAmazonInterface, HitlAtlasInterface,
                                        HitlBigEngineInterface,
+                                       HitlBMWMotoInterface,
                                        HitlLG69TInterface,
                                        HitlZiplineInterface)
 from p1_hitl.get_build_artifacts import get_build_info
@@ -68,7 +69,7 @@ def main():
                 log_base_dir=cli_args.logs_base_dir,
                 candidate_files=[
                     'input.raw',
-                    'input.p1bin']))
+                    'input.p1bin'])) # type: ignore
         except FileNotFoundError as e:
             logger.error(f'Playback log {cli_args.playback_log} found.')
             sys.exit(1)
@@ -159,8 +160,10 @@ def main():
             hitl_device_interface_cls = HitlAmazonInterface
         elif env_args.HITL_BUILD_TYPE == DeviceType.ZIPLINE:
             hitl_device_interface_cls = HitlZiplineInterface
+        elif env_args.HITL_BUILD_TYPE == DeviceType.BMW_MOTO_MIC:
+            hitl_device_interface_cls = HitlBMWMotoInterface
         # Big engine defaults
-        elif env_args.HITL_BUILD_TYPE in (DeviceType.BMW_MOTO_MIC, DeviceType.P1_LG69T_GNSS):
+        elif env_args.HITL_BUILD_TYPE == DeviceType.P1_LG69T_GNSS:
             hitl_device_interface_cls = HitlBigEngineInterface
         else:
             raise NotImplementedError('Need to handle other build types.')
