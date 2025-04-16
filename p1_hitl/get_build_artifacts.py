@@ -28,6 +28,8 @@ def get_s3_path(version_str: str, build_type: DeviceType) -> str:
         return f'nautilus/zipline/{version_str[8:]}'
     elif build_type is DeviceType.P1_LG69T_GNSS:
         return f'nautilus/p1-lg69t-gnss/{version_str[14:]}'
+    elif build_type is DeviceType.ST_TESEO_HEADING_PRIMARY:
+        return f'nautilus/teseo-heading/{version_str[14:]}'
     else:
         raise RuntimeError(f'Remote path not known for specified device type ({build_type.name}).')
 

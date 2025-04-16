@@ -71,6 +71,9 @@ def should_failure_be_ignored(env_args: HitlEnvArgs, failure: dict[str, Any]) ->
             'fixed_max_velocity',
             'gps_time_valid',
         ]
+    # Ignore all failures from ST_TESEO_HEADING_PRIMARY during development/
+    elif env_args.HITL_BUILD_TYPE is DeviceType.ST_TESEO_HEADING_PRIMARY:
+        ignore_failure = True
 
     if ignore_failure:
         logger.warning('Slack ignores whitelisted failure: ' + failure['name'])

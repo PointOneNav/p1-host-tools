@@ -19,7 +19,7 @@ from p1_hitl.defs import (BUILD_INFO_FILE, CONSOLE_FILE, ENV_DUMP_FILE,
 from p1_hitl.device_interfaces import (HitlAmazonInterface, HitlAtlasInterface,
                                        HitlBigEngineInterface,
                                        HitlBMWMotoInterface,
-                                       HitlLG69TInterface,
+                                       HitlLG69TInterface, HitlTeseoHeadingInterface,
                                        HitlZiplineInterface)
 from p1_hitl.get_build_artifacts import get_build_info
 from p1_hitl.git_cmds import GitWrapper
@@ -162,6 +162,8 @@ def main():
             hitl_device_interface_cls = HitlZiplineInterface
         elif env_args.HITL_BUILD_TYPE == DeviceType.BMW_MOTO_MIC:
             hitl_device_interface_cls = HitlBMWMotoInterface
+        elif env_args.HITL_BUILD_TYPE == DeviceType.ST_TESEO_HEADING_PRIMARY:
+            hitl_device_interface_cls = HitlTeseoHeadingInterface
         # Big engine defaults
         elif env_args.HITL_BUILD_TYPE == DeviceType.P1_LG69T_GNSS:
             hitl_device_interface_cls = HitlBigEngineInterface

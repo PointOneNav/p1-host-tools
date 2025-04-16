@@ -866,7 +866,9 @@ def run_tests(env_args: HitlEnvArgs, device_config: DeviceConfig, logger_manager
             DeviceType.ATLAS: 'tcp3',
             DeviceType.BMW_MOTO_MIC: 'tcp3',
             DeviceType.P1_LG69T_GNSS: 'tcp3',
-            DeviceType.ZIPLINE: 'tcp3'}.get(
+            DeviceType.ZIPLINE: 'tcp3',
+            DeviceType.ST_TESEO_HEADING_PRIMARY: 'tcp3',
+        }.get(
             env_args.HITL_BUILD_TYPE)
         test_set = ["fe_version", "interface_ids", "expected_storage", "msg_rates", "set_config",
                     "set_config_exhaustive", "import_config", "save_config"]

@@ -21,6 +21,7 @@ BUILD_JOB_MAP = {
     DeviceType.LG69T_AM: "quectel-build",
     DeviceType.LG69T_AP: "quectel-build",
     DeviceType.ZIPLINE: "zipline-build",
+    DeviceType.ST_TESEO_HEADING_PRIMARY: "teseo-heading-build",
 }
 
 # NOTE: Specifying "ins", or "gnss" doesn't appear to work correctly for the LG69T release job.
