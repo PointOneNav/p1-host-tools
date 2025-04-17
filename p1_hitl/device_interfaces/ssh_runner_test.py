@@ -7,10 +7,11 @@ import paramiko
 
 SSH_KEY_PATH = os.environ.get('HITL_SSH_KEY_PATH', str(Path.home() / '.ssh/id_ed25519'))
 SSH_USERNAME = os.environ.get('HITL_SSH_USERNAME', 'pointone')
-#SSH_ADDRESS = '192.168.8.172'
+# SSH_ADDRESS = '192.168.8.172'
 SSH_ADDRESS = 'jenkins-hitl1'
 
 RUNNER_CMD = "ls /bin"
+
 
 def _check_process_exit(ssh_client, ssh_channel) -> bool:
     if ssh_client is not None and ssh_channel is not None:
@@ -88,7 +89,7 @@ print('Starting engine.')
 # interpret this command. To get around this, we explicitly run the command in bash.
 BUFFER_OUTPUT_AND_EXIT_CODE = r' 2>&1 | tail -n 100; echo Exit Code:${PIPESTATUS[0]}'
 channel.set_combine_stderr(True)
-full_bash_cmd =  RUNNER_CMD + BUFFER_OUTPUT_AND_EXIT_CODE
+full_bash_cmd = RUNNER_CMD + BUFFER_OUTPUT_AND_EXIT_CODE
 full_run_cmd = f"bash -c '{full_bash_cmd}'"
 print(full_run_cmd.replace('\n', '\\n'))
 channel.exec_command(full_run_cmd)

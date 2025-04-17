@@ -157,7 +157,11 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
         ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         self.LOGGER.info(f'Attempting to connect to TCP address {self.config.tcp_address}')
         try:
-            ssh_client.connect(self.config.tcp_address, username=SSH_USERNAME, pkey=pkey, timeout=CONNECTION_TIMEOUT_SEC)
+            ssh_client.connect(
+                self.config.tcp_address,
+                username=SSH_USERNAME,
+                pkey=pkey,
+                timeout=CONNECTION_TIMEOUT_SEC)
         except Exception as e:
             self.LOGGER.error("Failed to connect to TCP address %s: %s" % (self.config.tcp_address, str(e)))
             return None

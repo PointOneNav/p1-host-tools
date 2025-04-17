@@ -40,6 +40,9 @@ class DeviceType(Enum):
         return self in (DeviceType.LG69T_AM, DeviceType.ZIPLINE,
                         DeviceType.P1_LG69T_GNSS, DeviceType.ST_TESEO_HEADING_PRIMARY)
 
+    def has_attitude(self) -> bool:
+        return self in (DeviceType.ST_TESEO_HEADING_PRIMARY,)
+
     @classmethod
     def mapping_device_to_regex(cls) -> Dict['DeviceType', str]:
         return {

@@ -23,6 +23,7 @@ from p1_runner.device_interface import (MAX_FE_MSG_SIZE, DeviceInterface,
 from p1_runner.exception_utils import exception_to_str
 
 from .base_analysis import AnalyzerBase
+from .heading_analysis import HeadingAnalyzer
 from .imu_analysis import IMUAnalyzer
 from .msg_rate_analysis import MessageRateAnalyzer
 from .position_analysis import PositionAnalyzer
@@ -100,7 +101,14 @@ REALTIME_POLL_INTERVAL = 0.05
 
 
 def _setup_analysis(env_args: HitlEnvArgs, is_playback) -> List[AnalyzerBase]:
-    analyzers = [c(env_args) for c in [IMUAnalyzer, PositionAnalyzer, ResetTTFFAnalyzer, SanityAnalyzer, SVAnalyzer]]
+    analyzers = [
+        c(env_args) for c in [
+            HeadingAnalyzer,
+            IMUAnalyzer,
+            PositionAnalyzer,
+            ResetTTFFAnalyzer,
+            SanityAnalyzer,
+            SVAnalyzer]]
     if not is_playback:
         analyzers.append(MessageRateAnalyzer(env_args))
     return analyzers

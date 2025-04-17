@@ -19,7 +19,8 @@ from p1_hitl.defs import (BUILD_INFO_FILE, CONSOLE_FILE, ENV_DUMP_FILE,
 from p1_hitl.device_interfaces import (HitlAmazonInterface, HitlAtlasInterface,
                                        HitlBigEngineInterface,
                                        HitlBMWMotoInterface,
-                                       HitlLG69TInterface, HitlTeseoHeadingInterface,
+                                       HitlLG69TInterface,
+                                       HitlTeseoHeadingInterface,
                                        HitlZiplineInterface)
 from p1_hitl.get_build_artifacts import get_build_info
 from p1_hitl.git_cmds import GitWrapper
@@ -69,7 +70,7 @@ def main():
                 log_base_dir=cli_args.logs_base_dir,
                 candidate_files=[
                     'input.raw',
-                    'input.p1bin'])) # type: ignore
+                    'input.p1bin']))  # type: ignore
         except FileNotFoundError as e:
             logger.error(f'Playback log {cli_args.playback_log} found.')
             sys.exit(1)
