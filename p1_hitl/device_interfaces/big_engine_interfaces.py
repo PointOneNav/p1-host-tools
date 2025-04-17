@@ -1,6 +1,7 @@
 import io
 import logging
 import os
+import re
 import time
 from argparse import Namespace
 from pathlib import Path
@@ -21,6 +22,7 @@ from .interface_utils import enable_imu_output
 
 RESTART_WAIT_TIME_SEC = 10
 PROCESS_STOP_TIMEOUT_SEC = 10
+CONNECTION_TIMEOUT_SEC = 5
 OUTPUT_PORT = 30200
 DIAGNOSTIC_PORT = 30202
 
@@ -155,7 +157,7 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
         ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         self.LOGGER.info(f'Attempting to connect to TCP address {self.config.tcp_address}')
         try:
-            ssh_client.connect(self.config.tcp_address, username=SSH_USERNAME, pkey=pkey)
+            ssh_client.connect(self.config.tcp_address, username=SSH_USERNAME, pkey=pkey, timeout=CONNECTION_TIMEOUT_SEC)
         except Exception as e:
             self.LOGGER.error("Failed to connect to TCP address %s: %s" % (self.config.tcp_address, str(e)))
             return None
@@ -276,14 +278,32 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
             if transport is not None:
                 # Extract latest Log ID from remote device by extracting the target of the symbolic link
                 # /logs/current_log.
-                link_path = self.LOG_DIR / 'current_log'
-                _, stdout, stderr = self.ssh_client.exec_command(f'realpath {link_path}')
-                error = stderr.read().decode()
-                if error:
-                    self.LOGGER.error(f"Error extracting log data on device: {error}")
-                else:
-                    log_path = stdout.read().decode().strip()
+                _, stdout, _ = self.ssh_client.exec_command(f'ls {self.LOG_DIR}/*/*')
+                ls_output = stdout.read().decode()
+                scp = SCPClient(transport)
+                logs_found = False
+                # Find `ls` results that look like:
+                # ```
+                # /logs/2025-04-17/heading-secondary:
+                # d65b89970f9342a4af6c20d96c3efc86
+                # ```
+                for match in re.finditer(r'(/logs/[\d-]+/.+):\n([a-z0-9]+)', ls_output):
+                    logs_found = True
+                    log_path = f'{match.group(1)}/{match.group(2)}'
                     self.LOGGER.info(f"Big engine generated log {log_path}.")
+                    # Upload new device log after failure.
+                    if not tests_passed:
+                        scp.get(log_path, '/logs', recursive=True)
+
+                        # Add log ID to log list.
+                        relative_path = Path(log_path).relative_to(self.LOG_DIR)
+                        self.LOGGER.info(f"Adding log {relative_path} from device to log upload list.")
+                        with open(output_dir / UPLOADED_DEVICE_LOGS_LIST_FILE, 'w') as fd:
+                            # Write to file.
+                            fd.write(str(relative_path) + '\n')
+
+                if not logs_found:
+                    self.LOGGER.error(f"Error extracting log data on device. `ls` output: {ls_output}")
 
                 # Upload new device log after failure.
                 if not tests_passed and log_path is not None:
