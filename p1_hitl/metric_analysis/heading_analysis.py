@@ -35,6 +35,27 @@ metric_attitude_non_nan = AlwaysTrueMetric(
     'ypr_deg and baseline_distance_m should be non-nan if the output is marked valid.',
 )
 
+metric_yaw_attitude_error = StatsMetric(
+    'yaw_attitude_error',
+    'yaw attitude error (deg) stats.',
+    max_threshold=10,
+    max_cdf_thresholds=[
+        CdfThreshold(50, 1),
+    ],
+    is_logged=True,
+)
+
+metric_baseline_attitude_error = StatsMetric(
+    'baseline_attitude_error',
+    'baseline position error (m) stats.',
+    max_threshold=1.0,
+    max_cdf_thresholds=[
+        CdfThreshold(90, .1),
+        CdfThreshold(50, .08),
+    ],
+    is_logged=True,
+)
+
 
 def configure_metrics(env_args: HitlEnvArgs):
     params = env_args.get_selected_test_type().get_test_params()
@@ -55,7 +76,8 @@ def configure_metrics(env_args: HitlEnvArgs):
             CdfThreshold(50, nominal_period_sec - percentile_50_tolerance_sec)]
 
         if not params.check_position:
-            pass
+            metric_yaw_attitude_error.is_disabled = True
+            metric_baseline_attitude_error.is_disabled = True
 
         # Disable some checks if the test is sending reset commands.
         if params.has_resets:
@@ -68,6 +90,15 @@ MetricController.register_environment_config_customizations(configure_metrics)
 class HeadingAnalyzer(AnalyzerBase):
     def __init__(self, env_args: HitlEnvArgs):
         super().__init__(env_args)
+        if env_args.JENKINS_DUEL_ANTENNA_ATTITUDE is None:
+            if self.env_args.HITL_BUILD_TYPE.has_attitude() and self.params.check_position:
+                raise KeyError('JENKINS_DUEL_ANTENNA_ATTITUDE must be specified to test heading metrics.')
+            self.true_yaw_deg = None
+            self.true_baseline_m = None
+        else:
+            self.true_yaw_deg = env_args.JENKINS_DUEL_ANTENNA_ATTITUDE[0]
+            self.true_baseline_m = env_args.JENKINS_DUEL_ANTENNA_ATTITUDE[1]
+
         self.last_p1_time: Optional[Timestamp] = None
         self.is_valid = False
 
@@ -100,3 +131,16 @@ class HeadingAnalyzer(AnalyzerBase):
             elif math.isnan(payload.baseline_distance_m):
                 failure_context = 'baseline distance had a NaN value.'
             metric_attitude_non_nan.check(len(failure_context) == 0, failure_context)
+
+            if self.true_yaw_deg is not None:
+                # Normalize angles to be between 0 and 360 degrees
+                yaw1_deg = payload.ypr_deg[0] % 360.0
+                yaw2_deg = self.true_yaw_deg % 360.0
+                yaw_error_deg = abs(yaw1_deg - yaw2_deg)
+                # Choose the smaller error clockwise vs. counter-clockwise.
+                yaw_error_deg = min(yaw_error_deg, 360.0 - yaw_error_deg)
+                metric_yaw_attitude_error.check(yaw_error_deg)
+
+            if self.true_baseline_m is not None:
+                baseline_error_m = abs(payload.baseline_distance_m - self.true_baseline_m)
+                metric_yaw_attitude_error.check(baseline_error_m)

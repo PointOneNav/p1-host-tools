@@ -180,6 +180,12 @@ class HitlEnvArgs(NamedTuple):
                             env_dict[arg] = tuple(float(v) for v in parts)
                         else:
                             raise ValueError()
+                    elif arg == 'JENKINS_DUEL_ANTENNA_ATTITUDE':
+                        parts = env_in_dict[arg].split(',')
+                        if len(parts) == 2:
+                            env_dict[arg] = tuple(float(v) for v in parts)
+                        else:
+                            raise ValueError()
                     elif arg == 'JENKINS_RESET_RELAY':
                         parts = env_in_dict[arg].split(':')
                         if len(parts) == 2:
