@@ -779,7 +779,7 @@ class StatsMetric(MetricBase):
     min_values_for_cdf_check: int = 100
 
     # For each threshold count to number of times the value was below the threshold.
-    __below_threshold_counts = {}  # Can't have annotation due to dataclass limitation on private members.
+    __below_threshold_counts: dict[float, int] = field(init=False, repr=False, default_factory=dict)
     # Count of total number of times this metric was checked.
     __total_times_checked = 0
 

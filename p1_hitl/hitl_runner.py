@@ -219,9 +219,10 @@ def main():
             report = MetricController.generate_report()
             tests_passed = not report['has_failures']
     finally:
-        shutdown_succeeded = hitl_device_interface.shutdown_device(tests_passed, output_dir)
-        if log_manager is not None:
-            log_manager.stop()
+        if not cli_args.playback_log:
+            shutdown_succeeded = hitl_device_interface.shutdown_device(tests_passed, output_dir)
+            if log_manager is not None:
+                log_manager.stop()
 
     if not tests_completed or not shutdown_succeeded:
         sys.exit(1)

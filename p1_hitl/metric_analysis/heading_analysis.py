@@ -72,7 +72,7 @@ class HeadingAnalyzer(AnalyzerBase):
         self.is_valid = False
 
     def update(self, msg: MessageWithBytesTuple):
-        if self.env_args.HITL_BUILD_TYPE.is_gnss_only():
+        if not self.env_args.HITL_BUILD_TYPE.has_attitude():
             return
 
         _, payload, _ = msg
@@ -93,13 +93,10 @@ class HeadingAnalyzer(AnalyzerBase):
                 return
             metric_attitude_valid.check(True)
 
-            any_nan = False
             failure_context = ''
             # Note that gyro_std_rps and accel_std_mps2 are allowed to be NaN.
-            fields = ('ypr_deg', 'baseline_distance_m ')
-            for field in fields:
-                any_nan = any(math.isnan(v) for v in vars(payload)[field])
-                if any_nan:
-                    failure_context = f'{field} had a NaN value.'
-                    break
-            metric_attitude_non_nan.check(not any_nan, failure_context)
+            if math.isnan(payload.ypr_deg[0]):
+                failure_context = 'yaw had a NaN value.'
+            elif math.isnan(payload.baseline_distance_m):
+                failure_context = 'baseline distance had a NaN value.'
+            metric_attitude_non_nan.check(len(failure_context) == 0, failure_context)
