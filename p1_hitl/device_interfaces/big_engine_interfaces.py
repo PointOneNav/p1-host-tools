@@ -257,6 +257,8 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
         data_source = open_data_source(self.config)
         if data_source is None:
             self.LOGGER.error('Failed to open data source.')
+            # Shutdown process to log console output. Use dummy path and don't upload logs.
+            self.shutdown_device(False, Path('/tmp'))
             return None
 
         self.device_interface = DeviceInterface(data_source)
@@ -265,8 +267,6 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
 
     def shutdown_device(self, tests_passed: bool, output_dir: Path) -> bool:
         exit_succeeded = True
-        if self.config.tcp_address is None or self.device_interface is None:
-            return True
 
         # Stop the current log.
         if self.device_interface is not None:

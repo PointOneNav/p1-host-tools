@@ -131,6 +131,8 @@ class HitlEnvArgs(NamedTuple):
     # geodetic latitude, longitude, and altitude (in degrees/degrees/meters),
     # expressed using the WGS-84 reference ellipsoid.
     JENKINS_ANTENNA_LOCATION: Optional[tuple[float, float, float]] = None
+    # For duel heading systems, specify the yaw in degrees, an baseline distance in meters as: yaw,baseline.
+    JENKINS_DUEL_ANTENNA_ATTITUDE: Optional[tuple[float, float]] = None
     # The coarse orientation for the device IMU given as the string values: x_direction,z_direction . (e.x.
     # `FORWARD,UP`). See DeviceCourseOrientationConfig in fusion_engine_client/messages/configuration.py and
     # bin/check_cds.py.
