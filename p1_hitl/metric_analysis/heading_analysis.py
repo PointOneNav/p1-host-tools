@@ -27,7 +27,7 @@ metric_gnss_attitude_period = StatsMetric(
 
 metric_gnss_attitude_fixed = AlwaysTrueMetric(
     'gnss_attitude_fixed',
-    'All attitudes should be RTK fixed after initialization. (i.e., the attitude should not lose fix or reset). If '
+    'All attitudes should be RTK fixed after initialization (i.e., the attitude should not lose fix or reset). If '
     'this check is skipped, either no attitude messages were received or none were RTK fixed.',
     is_required=True,
 )
@@ -92,14 +92,14 @@ MetricController.register_environment_config_customizations(configure_metrics)
 class HeadingAnalyzer(AnalyzerBase):
     def __init__(self, env_args: HitlEnvArgs):
         super().__init__(env_args)
-        if env_args.JENKINS_DUEL_ANTENNA_ATTITUDE is None:
+        if env_args.JENKINS_DUAL_ANTENNA_ATTITUDE is None:
             if self.env_args.HITL_BUILD_TYPE.has_attitude() and self.params.check_position:
-                raise KeyError('JENKINS_DUEL_ANTENNA_ATTITUDE must be specified to test heading metrics.')
+                raise KeyError('JENKINS_DUAL_ANTENNA_ATTITUDE must be specified to test heading metrics.')
             self.true_yaw_deg = None
             self.true_baseline_m = None
         else:
-            self.true_yaw_deg = env_args.JENKINS_DUEL_ANTENNA_ATTITUDE[0]
-            self.true_baseline_m = env_args.JENKINS_DUEL_ANTENNA_ATTITUDE[1]
+            self.true_yaw_deg = env_args.JENKINS_DUAL_ANTENNA_ATTITUDE[0]
+            self.true_baseline_m = env_args.JENKINS_DUAL_ANTENNA_ATTITUDE[1]
 
         self.last_p1_time: Optional[Timestamp] = None
         self.is_valid = False
