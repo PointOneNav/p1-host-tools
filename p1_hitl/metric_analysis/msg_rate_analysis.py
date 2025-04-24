@@ -72,6 +72,10 @@ FE_DEFAULT_RATES = FE_GNSS_ONLY_DEFAULT_RATES | {
         MessageType.CALIBRATION_STATUS,
         MessageRate.INTERVAL_10_S)}
 FE_DEFAULT_RATES_WITH_IMU = FE_DEFAULT_RATES | {ExpectedMessageRate(MessageType.IMU_OUTPUT, MessageRate.ON_CHANGE)}
+FE_DEFAULT_RATES_WITH_HEADING = FE_DEFAULT_RATES | {
+    ExpectedMessageRate(
+        MessageType.GNSS_ATTITUDE_OUTPUT,
+        MessageRate.INTERVAL_100_MS)}
 
 
 def get_device_defaults(env_args: HitlEnvArgs) -> list[DataChannelDefaultsCheck]:
@@ -101,6 +105,21 @@ def get_device_defaults(env_args: HitlEnvArgs) -> list[DataChannelDefaultsCheck]
                 name='tcp1',
                 device_config=DeviceConfig(name='tcp1', tcp_address=env_args.JENKINS_LAN_IP, port=30200),
                 expected_msg_rates=FE_DEFAULT_RATES
+            ),
+            # TCP2 (NMEA)
+            DataChannelDefaultsCheck(
+                name='tcp2',
+                device_config=DeviceConfig(name='tcp2', tcp_address=env_args.JENKINS_LAN_IP, port=30201),
+                expected_msg_rates=NMEA_DEFAULT_RATES
+            )
+        ]
+    elif build_type is DeviceType.ST_TESEO_HEADING_PRIMARY:
+        return [
+            # TCP1 (FE)
+            DataChannelDefaultsCheck(
+                name='tcp1',
+                device_config=DeviceConfig(name='tcp1', tcp_address=env_args.JENKINS_LAN_IP, port=30200),
+                expected_msg_rates=FE_DEFAULT_RATES_WITH_HEADING
             ),
             # TCP2 (NMEA)
             DataChannelDefaultsCheck(

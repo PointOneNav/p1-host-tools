@@ -16,6 +16,11 @@ class DeviceType(Enum):
     ZIPLINE = auto()
     P1_LG69T_GNSS = auto()
 
+    # NOTE: For now HITL will use ST_TESEO_HEADING_PRIMARY to refer to a complete heading DUT comprised of both a
+    # primary and secondary device.
+    ST_TESEO_HEADING_PRIMARY = auto()
+    ST_TESEO_HEADING_SECONDARY = auto()
+
     BEAM2K = auto()
     DJI_MAVIC = auto()
 
@@ -32,7 +37,11 @@ class DeviceType(Enum):
         return self.is_lg69t() or self is DeviceType.LC29H
 
     def is_gnss_only(self) -> bool:
-        return self in (DeviceType.LG69T_AM, DeviceType.ZIPLINE, DeviceType.P1_LG69T_GNSS)
+        return self in (DeviceType.LG69T_AM, DeviceType.ZIPLINE,
+                        DeviceType.P1_LG69T_GNSS, DeviceType.ST_TESEO_HEADING_PRIMARY)
+
+    def has_attitude(self) -> bool:
+        return self in (DeviceType.ST_TESEO_HEADING_PRIMARY,)
 
     @classmethod
     def mapping_device_to_regex(cls) -> Dict['DeviceType', str]:
@@ -44,6 +53,7 @@ class DeviceType(Enum):
             DeviceType.AMAZON_FLEETEDGE_V1: 'amazon-fleetedge-1-v[0-9]*.*',
             DeviceType.BMW_MOTO_MIC: 'bmw-moto-mic-v[0-9]*.*',
             DeviceType.P1_LG69T_GNSS: 'p1-lg69t-gnss-v[0-9]*.*',
+            DeviceType.ST_TESEO_HEADING_PRIMARY: 'teseo-heading-v[0-9]*.*',
         }
 
     @classmethod

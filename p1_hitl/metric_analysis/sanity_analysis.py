@@ -99,6 +99,10 @@ def configure_metrics(env_args: HitlEnvArgs):
         metric_cpu_usage.max_cdf_thresholds = [CdfThreshold(50, 80)]
         # Assumes total RAM is 64KB, so remaining should be > 9KB.
         metric_mem_usage.threshold = 55 * 1024
+    # Set processor resource usage for ST_TESEO_HEADING_PRIMARY (the STM32-MP1 CPU).
+    if env_args.HITL_BUILD_TYPE == DeviceType.ST_TESEO_HEADING_PRIMARY:
+        metric_cpu_usage.max_threshold = 95
+        metric_cpu_usage.max_cdf_thresholds = [CdfThreshold(50, 80)]
 
 
 MetricController.register_environment_config_customizations(configure_metrics)

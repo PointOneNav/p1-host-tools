@@ -20,6 +20,7 @@ from p1_hitl.device_interfaces import (HitlAmazonInterface, HitlAtlasInterface,
                                        HitlBigEngineInterface,
                                        HitlBMWMotoInterface,
                                        HitlLG69TInterface,
+                                       HitlTeseoHeadingInterface,
                                        HitlZiplineInterface)
 from p1_hitl.get_build_artifacts import get_build_info
 from p1_hitl.git_cmds import GitWrapper
@@ -69,7 +70,7 @@ def main():
                 log_base_dir=cli_args.logs_base_dir,
                 candidate_files=[
                     'input.raw',
-                    'input.p1bin'])) # type: ignore
+                    'input.p1bin']))  # type: ignore
         except FileNotFoundError as e:
             logger.error(f'Playback log {cli_args.playback_log} found.')
             sys.exit(1)
@@ -162,6 +163,8 @@ def main():
             hitl_device_interface_cls = HitlZiplineInterface
         elif env_args.HITL_BUILD_TYPE == DeviceType.BMW_MOTO_MIC:
             hitl_device_interface_cls = HitlBMWMotoInterface
+        elif env_args.HITL_BUILD_TYPE == DeviceType.ST_TESEO_HEADING_PRIMARY:
+            hitl_device_interface_cls = HitlTeseoHeadingInterface
         # Big engine defaults
         elif env_args.HITL_BUILD_TYPE == DeviceType.P1_LG69T_GNSS:
             hitl_device_interface_cls = HitlBigEngineInterface
@@ -216,9 +219,10 @@ def main():
             report = MetricController.generate_report()
             tests_passed = not report['has_failures']
     finally:
-        shutdown_succeeded = hitl_device_interface.shutdown_device(tests_passed, output_dir)
-        if log_manager is not None:
-            log_manager.stop()
+        if not cli_args.playback_log:
+            shutdown_succeeded = hitl_device_interface.shutdown_device(tests_passed, output_dir)
+            if log_manager is not None:
+                log_manager.stop()
 
     if not tests_completed or not shutdown_succeeded:
         sys.exit(1)

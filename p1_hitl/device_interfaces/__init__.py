@@ -6,4 +6,6 @@ from p1_hitl.device_interfaces.big_engine_interfaces import \
     HitlBigEngineInterface
 from p1_hitl.device_interfaces.bmw_moto_interfaces import HitlBMWMotoInterface
 from p1_hitl.device_interfaces.lg69t_interfaces import HitlLG69TInterface
+from p1_hitl.device_interfaces.st_heading_interfaces import \
+    HitlTeseoHeadingInterface
 from p1_hitl.device_interfaces.zipline_interfaces import HitlZiplineInterface

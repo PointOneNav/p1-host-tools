@@ -43,8 +43,9 @@ class TestParams(NamedTuple):
     '''
     # How long should the test run for.
     duration_sec: float
-    # Should the position output be analyzed.
-    check_position: bool
+    # Will this test have sufficient GNSS data to expect nominal PVT performance (e.x. Is the antenna connected and the
+    # test is long enough to get ephemeris.).
+    has_gnss_signals: bool
     # Will the device be expected to generate corrected solutions.
     has_corrections: bool
     # Will the device be stationary.
@@ -91,19 +92,19 @@ class TestType(Enum):
         if self == TestType.CONFIGURATION:
             # This test doesn't have a fixed duration. The duration is determined by
             # how long the device takes to respond to commands.
-            return TestParams(duration_sec=0, check_position=False,
+            return TestParams(duration_sec=0, has_gnss_signals=False,
                               has_corrections=False, is_stationary=True, has_resets=False)
         elif self == TestType.SANITY:
-            return TestParams(duration_sec=5 * 60, check_position=False,
+            return TestParams(duration_sec=5 * 60, has_gnss_signals=False,
                               has_corrections=False, is_stationary=True, has_resets=False)
         elif self == TestType.RESET_TESTS:
-            return TestParams(duration_sec=8 * 60, check_position=True,
+            return TestParams(duration_sec=8 * 60, has_gnss_signals=True,
                               has_corrections=True, is_stationary=True, has_resets=True)
         elif self == TestType.ROOF_15_MIN:
-            return TestParams(duration_sec=15 * 60, check_position=True,
+            return TestParams(duration_sec=15 * 60, has_gnss_signals=True,
                               has_corrections=True, is_stationary=True, has_resets=False)
         elif self == TestType.ROOF_NO_CORRECTIONS_15_MIN:
-            return TestParams(duration_sec=15 * 60, check_position=True,
+            return TestParams(duration_sec=15 * 60, has_gnss_signals=True,
                               has_corrections=False, is_stationary=True, has_resets=False)
         else:
             raise NotImplementedError(f'Metric configuration for {self.name} is not implemented.')
@@ -131,6 +132,8 @@ class HitlEnvArgs(NamedTuple):
     # geodetic latitude, longitude, and altitude (in degrees/degrees/meters),
     # expressed using the WGS-84 reference ellipsoid.
     JENKINS_ANTENNA_LOCATION: Optional[tuple[float, float, float]] = None
+    # For dual heading systems, specify the yaw in degrees and baseline distance in meters as: yaw,baseline.
+    JENKINS_DUAL_ANTENNA_ATTITUDE: Optional[tuple[float, float]] = None
     # The coarse orientation for the device IMU given as the string values: x_direction,z_direction . (e.x.
     # `FORWARD,UP`). See DeviceCourseOrientationConfig in fusion_engine_client/messages/configuration.py and
     # bin/check_cds.py.
@@ -175,6 +178,12 @@ class HitlEnvArgs(NamedTuple):
                     elif arg == 'JENKINS_ANTENNA_LOCATION':
                         parts = env_in_dict[arg].split(',')
                         if len(parts) == 3:
+                            env_dict[arg] = tuple(float(v) for v in parts)
+                        else:
+                            raise ValueError()
+                    elif arg == 'JENKINS_DUAL_ANTENNA_ATTITUDE':
+                        parts = env_in_dict[arg].split(',')
+                        if len(parts) == 2:
                             env_dict[arg] = tuple(float(v) for v in parts)
                         else:
                             raise ValueError()
