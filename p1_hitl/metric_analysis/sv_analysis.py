@@ -44,8 +44,8 @@ TRACKED_METRIC_MAP = {
 def configure_metrics(env_args: HitlEnvArgs):
     params = env_args.get_selected_test_type().get_test_params()
     sv_metrics = MetricController.get_metrics_in_this_file()
-    # Only check SV info when positioning was expected.
-    if not params.check_position:
+    # Only check SV info when good GNSS signals are expected.
+    if not params.has_gnss_signals:
         for metric in sv_metrics:
             metric.is_disabled = True
     else:
@@ -61,7 +61,7 @@ MetricController.register_environment_config_customizations(configure_metrics)
 
 class SVAnalyzer(AnalyzerBase):
     def update(self, msg: MessageWithBytesTuple):
-        if not self.params.check_position:
+        if not self.params.has_gnss_signals:
             return
 
         _, payload, _ = msg

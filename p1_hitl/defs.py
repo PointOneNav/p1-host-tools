@@ -43,8 +43,9 @@ class TestParams(NamedTuple):
     '''
     # How long should the test run for.
     duration_sec: float
-    # Should the position output be analyzed.
-    check_position: bool
+    # Will this test have sufficient GNSS data to expect nominal PVT performance (e.x. Is the antenna connected and the
+    # test is long enough to get ephemeris.).
+    has_gnss_signals: bool
     # Will the device be expected to generate corrected solutions.
     has_corrections: bool
     # Will the device be stationary.
@@ -91,19 +92,19 @@ class TestType(Enum):
         if self == TestType.CONFIGURATION:
             # This test doesn't have a fixed duration. The duration is determined by
             # how long the device takes to respond to commands.
-            return TestParams(duration_sec=0, check_position=False,
+            return TestParams(duration_sec=0, has_gnss_signals=False,
                               has_corrections=False, is_stationary=True, has_resets=False)
         elif self == TestType.SANITY:
-            return TestParams(duration_sec=5 * 60, check_position=False,
+            return TestParams(duration_sec=5 * 60, has_gnss_signals=False,
                               has_corrections=False, is_stationary=True, has_resets=False)
         elif self == TestType.RESET_TESTS:
-            return TestParams(duration_sec=8 * 60, check_position=True,
+            return TestParams(duration_sec=8 * 60, has_gnss_signals=True,
                               has_corrections=True, is_stationary=True, has_resets=True)
         elif self == TestType.ROOF_15_MIN:
-            return TestParams(duration_sec=15 * 60, check_position=True,
+            return TestParams(duration_sec=15 * 60, has_gnss_signals=True,
                               has_corrections=True, is_stationary=True, has_resets=False)
         elif self == TestType.ROOF_NO_CORRECTIONS_15_MIN:
-            return TestParams(duration_sec=15 * 60, check_position=True,
+            return TestParams(duration_sec=15 * 60, has_gnss_signals=True,
                               has_corrections=False, is_stationary=True, has_resets=False)
         else:
             raise NotImplementedError(f'Metric configuration for {self.name} is not implemented.')

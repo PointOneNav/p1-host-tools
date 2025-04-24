@@ -182,7 +182,7 @@ metric_non_nan_undulation = AlwaysTrueMetric(
 def configure_metrics(env_args: HitlEnvArgs):
     params = env_args.get_selected_test_type().get_test_params()
     position_metrics = MetricController.get_metrics_in_this_file()
-    if not params.check_position:
+    if not params.has_gnss_signals:
         for metric in position_metrics:
             metric.is_disabled = True
     else:
@@ -250,7 +250,7 @@ def calculate_position_error(device_lla_deg, reference_lla_deg) -> tuple[float, 
 class PositionAnalyzer(AnalyzerBase):
     def __init__(self, env_args: HitlEnvArgs):
         super().__init__(env_args)
-        if self.params.check_position and env_args.JENKINS_ANTENNA_LOCATION is None:
+        if self.params.has_gnss_signals and env_args.JENKINS_ANTENNA_LOCATION is None:
             raise KeyError(
                 f'JENKINS_ANTENNA_LOCATION must be specified test {env_args.get_selected_test_type().name} with position checking.')
 
@@ -259,7 +259,7 @@ class PositionAnalyzer(AnalyzerBase):
         self.last_ypr = None
 
     def update(self, msg: MessageWithBytesTuple):
-        if self.params.check_position is False:
+        if self.params.has_gnss_signals is False:
             return
 
         _, payload, _ = msg

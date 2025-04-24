@@ -77,8 +77,8 @@ def configure_metrics(env_args: HitlEnvArgs):
         metric_gnss_attitude_period.min_cdf_thresholds = [
             CdfThreshold(50, nominal_period_sec - percentile_50_tolerance_sec)]
 
-        # Don't require fixing if positioning isn't expected.
-        if not params.check_position:
+        # Don't require fixing if the test is too short or the antenna isn't connected.
+        if not params.has_gnss_signals:
             metric_gnss_attitude_fixed.is_disabled = True
 
         # Disable some checks if the test is sending reset commands.
@@ -93,7 +93,7 @@ class HeadingAnalyzer(AnalyzerBase):
     def __init__(self, env_args: HitlEnvArgs):
         super().__init__(env_args)
         if env_args.JENKINS_DUAL_ANTENNA_ATTITUDE is None:
-            if self.env_args.HITL_BUILD_TYPE.has_attitude() and self.params.check_position:
+            if self.env_args.HITL_BUILD_TYPE.has_attitude() and self.params.has_gnss_signals:
                 raise KeyError('JENKINS_DUAL_ANTENNA_ATTITUDE must be specified to test heading metrics.')
             self.true_yaw_deg = None
             self.true_baseline_m = None
