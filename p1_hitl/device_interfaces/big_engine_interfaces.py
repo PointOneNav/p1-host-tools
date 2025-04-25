@@ -282,18 +282,17 @@ class HitlBigEngineInterface(HitlDeviceInterfaceBase):
             if transport is not None:
                 # Extract latest Log ID from remote device by extracting the target of the symbolic link
                 # /logs/current_log.
-                _, stdout, _ = self.ssh_client.exec_command(f'ls {self.LOG_DIR}/*/*')
+                _, stdout, _ = self.ssh_client.exec_command(f'ls -d {self.LOG_DIR}/*/*/*')
                 ls_output = stdout.read().decode()
                 scp = SCPClient(transport)
                 logs_found = False
                 # Find `ls` results that look like:
                 # ```
-                # /logs/2025-04-17/heading-secondary:
-                # d65b89970f9342a4af6c20d96c3efc86
+                # /logs/2025-04-24/heading-primary/2aebac53f6764af199bbae16f5b56268
                 # ```
-                for match in re.finditer(r'(/logs/[\d-]+/.+):\n([a-z0-9]+)', ls_output):
+                for match in re.finditer(str(self.LOG_DIR) + r'/[\d-]+/[^/]+/[a-z0-9]+', ls_output):
                     logs_found = True
-                    log_path = f'{match.group(1)}/{match.group(2)}'
+                    log_path = match.group()
                     self.LOGGER.info(f"Big engine generated log {log_path}.")
                     # Upload new device log after failure.
                     if not tests_passed:
