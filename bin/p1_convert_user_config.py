@@ -163,7 +163,8 @@ def main():
     logger.info(f'Loading UserConfig support for platform ID {platform_id} and version {version_str}.')
 
     sys.path.insert(0, str(user_config_dir))
-    module = importlib.import_module(f'user_config_loader.user_config_loader', 'user_config_loader')
+    #module = importlib.import_module(f'user_config_loader.user_config_loader', 'user_config_loader')
+    module = importlib.import_module(f'user_config_loader')
     logger.info(f'Loaded UserConfig support version {module.UserConfig.get_version()}.')
     UserConfig: Type[UserConfigTypingClass] = module.UserConfig
 

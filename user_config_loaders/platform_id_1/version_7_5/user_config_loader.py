@@ -7,11 +7,23 @@ from typing import Tuple
 
 from construct import *
 
-from .loader_utilities import (AutoEnum, DataClassAdapter, FrozenVectorAdapter,
-                               IntOrStrEnum, OptionalAdapter,
-                               prepare_dataclass_for_json,
-                               update_dataclass_contents)
 
+
+import importlib
+
+loader_utilities = importlib.import_module('loader_utilities', 'loader_utilities')
+
+# from .loader_utilities import (AutoEnum, DataClassAdapter, FrozenVectorAdapter,
+#                                IntOrStrEnum, OptionalAdapter,
+#                                prepare_dataclass_for_json,
+#                                update_dataclass_contents)
+AutoEnum = loader_utilities.AutoEnum
+DataClassAdapter = loader_utilities.DataClassAdapter
+FrozenVectorAdapter = loader_utilities.FrozenVectorAdapter
+IntOrStrEnum = loader_utilities.IntOrStrEnum
+OptionalAdapter = loader_utilities.OptionalAdapter
+prepare_dataclass_for_json = loader_utilities.prepare_dataclass_for_json
+update_dataclass_contents = loader_utilities.update_dataclass_contents
 
 @dataclass
 class ProfilingConfig:
