@@ -47,15 +47,6 @@ DEFAULT_TCP_PORT = 30200
 DEFAULT_SERIAL_BAUD = 460800
 
 
-_orientation_map = {
-    'forward': Direction.FORWARD,
-    'backward': Direction.BACKWARD,
-    'left': Direction.LEFT,
-    'right': Direction.RIGHT,
-    'up': Direction.UP,
-    'down': Direction.DOWN
-}
-
 _data_types_map = {
     'user_config': [DataType.USER_CONFIG],
     'filter_state': [DataType.FILTER_STATE],
@@ -64,90 +55,37 @@ _data_types_map = {
 }
 
 
+_orientation_map = {e.name.lower(): e for e in Direction if e != Direction.INVALID}
 def _str_to_direction(dir_str):
     return _orientation_map.get(dir_str, "")
 
 
-_vehicle_model_map = {
-    "unknown_vehicle": VehicleModel.UNKNOWN_VEHICLE,
-    "dataspeed_cd4": VehicleModel.DATASPEED_CD4,
-    "j1939": VehicleModel.J1939,
-    "lexus_ct200h": VehicleModel.LEXUS_CT200H,
-    "kia_sorento": VehicleModel.KIA_SORENTO,
-    "kia_sportage": VehicleModel.KIA_SPORTAGE,
-    "audi_q7": VehicleModel.AUDI_Q7,
-    "audi_a8l": VehicleModel.AUDI_A8L,
-    "tesla_model_x": VehicleModel.TESLA_MODEL_X,
-    "tesla_model_3": VehicleModel.TESLA_MODEL_3,
-    "hyundai_elantra": VehicleModel.HYUNDAI_ELANTRA,
-    "peugeot_206": VehicleModel.PEUGEOT_206,
-    "man_tgx": VehicleModel.MAN_TGX,
-    "faction": VehicleModel.FACTION,
-    "faction_v2": VehicleModel.FACTION_V2,
-    "lincoln_mkz": VehicleModel.LINCOLN_MKZ,
-    "bmw_7": VehicleModel.BMW_7
-}
-
-
+_vehicle_model_map = {e.name.lower(): e for e in VehicleModel if e != VehicleModel.UNKNOWN_VEHICLE}
 def _str_to_vehicle_model(vehicle_model_str):
     return _vehicle_model_map.get(vehicle_model_str, VehicleModel.UNKNOWN_VEHICLE)
 
 
-_wheel_sensor_type_map = {
-    "none": WheelSensorType.NONE,
-    "ticks": WheelSensorType.TICKS,
-    "wheel_speed": WheelSensorType.WHEEL_SPEED,
-    "vehicle_speed": WheelSensorType.VEHICLE_SPEED,
-    "vehicle_ticks": WheelSensorType.VEHICLE_TICKS
-}
-
-
+_wheel_sensor_type_map = {e.name.lower(): e for e in WheelSensorType}
 def _str_to_wheel_sensor_type(wheel_sensor_type_str):
     return _wheel_sensor_type_map.get(wheel_sensor_type_str, WheelSensorType.NONE)
 
 
-_applied_speed_type_map = {
-    "none": AppliedSpeedType.NONE,
-    "rear_wheels": AppliedSpeedType.REAR_WHEELS,
-    "front_wheels": AppliedSpeedType.FRONT_WHEELS,
-    "front_and_rear_wheels": AppliedSpeedType.FRONT_AND_REAR_WHEELS,
-    "vehicle_body": AppliedSpeedType.VEHICLE_BODY
-}
-
-
+_applied_speed_type_map = {e.name.lower(): e for e in AppliedSpeedType}
 def _str_to_applied_speed_type(applied_speed_type_str):
     return _applied_speed_type_map.get(applied_speed_type_str, AppliedSpeedType.NONE)
 
 
-_steering_type_map = {
-    "unknown": SteeringType.UNKNOWN,
-    "front": SteeringType.FRONT,
-    "front_and_rear": SteeringType.FRONT_AND_REAR
-}
-
-
+_steering_type_map = {e.name.lower(): e for e in SteeringType}
 def _str_to_steering_type(steering_type_str):
     return _steering_type_map.get(steering_type_str, SteeringType.UNKNOWN)
 
 
-_tick_mode_map = {
-    "off": TickMode.OFF,
-    "rising_edge": TickMode.RISING_EDGE,
-    "falling_edge": TickMode.FALLING_EDGE
-}
-
-
+_tick_mode_map = {e.name.lower(): e for e in TickMode}
 def _str_to_tick_mode(tick_mode_str):
     return _tick_mode_map.get(tick_mode_str, TickMode.OFF)
 
 
-_tick_direction_map = {
-    "off": TickDirection.OFF,
-    "forward_active_high": TickDirection.FORWARD_ACTIVE_HIGH,
-    "forward_active_low": TickDirection.FORWARD_ACTIVE_LOW
-}
-
-
+_tick_direction_map = {e.name.lower(): e for e in TickDirection}
 def _str_to_tick_direction(tick_direction_str):
     return _tick_direction_map.get(tick_direction_str, TickDirection.OFF)
 
@@ -174,25 +112,12 @@ def _args_to_profile_level(cls, args, config_interface):
     return ProfilingMask(mask_val)
 
 
-_iono_delay_model_map = {
-    "auto": IonoDelayModel.AUTO,
-    "off": IonoDelayModel.OFF,
-    "klobuchar": IonoDelayModel.KLOBUCHAR,
-    "sbas": IonoDelayModel.SBAS
-}
-
-
+_iono_delay_model_map = {e.name.lower(): e for e in IonoDelayModel}
 def _str_to_iono_delay_model(iono_delay_model_str):
     return _iono_delay_model_map.get(iono_delay_model_str, IonoDelayModel.AUTO)
 
 
-_tropo_delay_model_map = {
-    "auto": TropoDelayModel.AUTO,
-    "off": TropoDelayModel.OFF,
-    "saastamoinen": TropoDelayModel.SAASTAMOINEN
-}
-
-
+_tropo_delay_model_map = {e.name.lower(): e for e in TropoDelayModel}
 def _str_to_tropo_delay_model(tropo_delay_model_str):
     return _tropo_delay_model_map.get(tropo_delay_model_str, TropoDelayModel.AUTO)
 
