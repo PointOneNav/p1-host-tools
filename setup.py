@@ -10,7 +10,7 @@ requirements = [
     "colorama>=0.4.4",
     "construct~=2.10.67",
     "deepdiff>=8.0.1",
-    "fusion-engine-client==1.24.0rc3",
+    "fusion-engine-client==1.24.1",
     "psutil>=5.9.4",
     "pynmea2~=1.18.0",
     "pyserial~=3.5",
