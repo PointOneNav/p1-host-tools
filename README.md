@@ -1,5 +1,5 @@
 # Point One Host Tools <!-- omit from toc -->
-Tools for interfacing with Point One FusionEngine devices from a host computer.
+Tools for interfacing with Point One FusionEngine devices from a host computer. These tools are compatible with Windows, macOS, and Linux. 
 
 This set of Python applications provides command-line tools for control, configuration, and data collection from Point One devices.
 
