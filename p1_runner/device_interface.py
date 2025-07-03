@@ -38,6 +38,7 @@ class DeviceInterface:
         self.fe_decoder = FusionEngineDecoder(MAX_FE_MSG_SIZE, warn_on_unrecognized=False, return_bytes=True)
         self.fe_encoder = FusionEngineEncoder()
         self.nmea_framer = NMEAFramer()
+        self.buffer = bytes()
 
     def set_config(self, config_object, save=False, revert=False, interface: Optional[InterfaceID] = None):
         config_set_cmd = SetConfigMessage()
@@ -121,13 +122,13 @@ class DeviceInterface:
         self.data_source.flush_rx()
         logger.debug("Waiting for data to stop.")
         while not reboot_started and time.time() - start_time < data_stop_timeout:
-            data = self.data_source.read(1, REBOOT_MIN_TIME)
+            data = self.data_source.read(MAX_FE_MSG_SIZE, REBOOT_MIN_TIME, return_any=True)
             reboot_started = len(data) == 0
         if reboot_started:
             # Since device reset, expect sequence number to reset.
             self.fe_decoder._last_sequence_number = 0
             logger.debug("Waiting for data to resume.")
-            data = self.data_source.read(1, data_restart_timeout)
+            data = self.data_source.read(MAX_FE_MSG_SIZE, data_restart_timeout, return_any=True)
             reboot_finished = len(data) > 0
             if not reboot_finished:
                 logger.warning("Data didn't resume after reboot.")
@@ -136,16 +137,39 @@ class DeviceInterface:
 
         return reboot_started and reboot_finished
 
+    def _read_next_byte(self, timeout) -> Optional[int]:
+        if len(self.buffer) == 0:
+            self.buffer = self.data_source.read(MAX_FE_MSG_SIZE, timeout, return_any=True)
+
+        if len(self.buffer) == 0:
+            return None
+        else:
+            b = self.buffer[0]
+            self.buffer = self.buffer[1:]
+            return b
+
     def wait_for_any_fe_message(self, response_timeout=RESPONSE_TIMEOUT) -> List[MessageWithBytesTuple]:
-        start_time = time.time()
-        while time.time() - start_time < response_timeout:
-            msgs = self.fe_decoder.on_data(self.data_source.read(1, response_timeout))
-            if len(msgs) > 0:
-                return msgs  # type: ignore
+        start_time = time.monotonic()
+        elapsed = 0
+        while elapsed <= response_timeout:
+            time_remaining = response_timeout - elapsed
+            b = self._read_next_byte(time_remaining)
+            if b is not None:
+                msgs = self.fe_decoder.on_data(b)
+                if len(msgs) > 0:
+                    return msgs  # type: ignore
+            elapsed = time.monotonic() - start_time
         return []
 
-    def poll_messages(self, read_buffer_size=MAX_FE_MSG_SIZE, response_timeout=0.0) -> List[MessageWithBytesTuple]:
-        return self.fe_decoder.on_data(self.data_source.read(read_buffer_size, response_timeout))  # type: ignore
+    def poll_messages(self, read_buffer_size=MAX_FE_MSG_SIZE, response_timeout=0.0,
+                      return_any=True) -> List[MessageWithBytesTuple]:
+        if len(self.buffer) > 0:
+            msgs = self.fe_decoder.on_data(self.buffer)
+            self.buffer = bytes()
+            if len(msgs) > 0:
+                return msgs  # type: ignore
+        return self.fe_decoder.on_data(self.data_source.read(
+            read_buffer_size, response_timeout, return_any))  # type: ignore
 
     def wait_for_message(self, msg_type, response_timeout=RESPONSE_TIMEOUT):
         if isinstance(msg_type, MessageType):
@@ -154,28 +178,36 @@ class DeviceInterface:
             return self._wait_for_nmea_message(msg_type, response_timeout)
 
     def _wait_for_fe_message(self, msg_type, response_timeout):
-        start_time = time.time()
-        while True:
-            msgs = self.fe_decoder.on_data(self.data_source.read(1, response_timeout))
-            for msg in msgs:
-                if msg[0].message_type == msg_type:
-                    logger.debug('Response: %s', str(msg[1]))
-                    logger.debug(' '.join('%02x' % b for b in msg[2]))
-                    return msg[1]
-            if time.time() - start_time > response_timeout:
-                return None
+        start_time = time.monotonic()
+        elapsed = 0
+        while elapsed <= response_timeout:
+            time_remaining = response_timeout - elapsed
+            b = self._read_next_byte(time_remaining)
+            if b is not None:
+                msgs = self.fe_decoder.on_data(b)
+                for msg in msgs:
+                    if msg[0].message_type == msg_type:
+                        logger.debug('Response: %s', str(msg[1]))
+                        logger.debug(' '.join('%02x' % b for b in msg[2]))
+                        return msg[1]
+            elapsed = time.monotonic() - start_time
+        return None
 
     def _wait_for_nmea_message(self, msg_type, response_timeout):
         if msg_type[0] != '$':
             msg_type = '$' + msg_type
 
-        start_time = time.time()
-        while True:
-            msgs = self.nmea_framer.on_data(self.data_source.read(1))
-            for msg in msgs:
-                if msg.startswith(msg_type):
-                    msg = msg.rstrip()
-                    logger.debug('Response: %s', msg)
-                    return msg
-            if time.time() - start_time > response_timeout:
-                return None
+        start_time = time.monotonic()
+        elapsed = 0
+        while elapsed <= response_timeout:
+            time_remaining = response_timeout - elapsed
+            b = self._read_next_byte(time_remaining)
+            if b is not None:
+                msgs = self.nmea_framer.on_data(bytes([b]))
+                for msg in msgs:
+                    if msg.startswith(msg_type):
+                        msg = msg.rstrip()
+                        logger.debug('Response: %s', msg)
+                        return msg
+            elapsed = time.monotonic() - start_time
+        return None

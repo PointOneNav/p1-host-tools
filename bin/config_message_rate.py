@@ -50,10 +50,12 @@ MESSAGE_RATE_MAP = {
     '500ms': MessageRate.INTERVAL_500_MS,
     '200ms': MessageRate.INTERVAL_200_MS,
     '100ms': MessageRate.INTERVAL_100_MS,
+    '10ms': MessageRate.INTERVAL_10_MS,
     '1hz': MessageRate.INTERVAL_1_S,
     '2hz': MessageRate.INTERVAL_500_MS,
     '5hz': MessageRate.INTERVAL_200_MS,
     '10hz': MessageRate.INTERVAL_100_MS,
+    '100hz': MessageRate.INTERVAL_10_MS,
     'default': MessageRate.DEFAULT,
 }
 
