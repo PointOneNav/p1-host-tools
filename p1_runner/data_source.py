@@ -7,6 +7,8 @@ from threading import Event, Lock
 from typing import BinaryIO, Optional, Union
 
 import serial.threaded
+from fusion_engine_client.utils.socket_timestamping import (
+    enable_socket_timestamping, parse_timestamps_from_ancdata)
 from serial import Serial
 
 try:
@@ -34,6 +36,10 @@ class DataSource(ABC):
     This abstracts transport specific concerns and allows for logging of all received data.
     """
 
+    def __init__(self) -> None:
+        super().__init__()
+        self.last_rx_data_posix_timestamp_sec = 0.0
+
     @abstractmethod
     def write(self, data: bytes):
         """!
@@ -44,12 +50,13 @@ class DataSource(ABC):
         pass
 
     @abstractmethod
-    def read(self, size: int, timeout=RESPONSE_TIMEOUT) -> bytes:
+    def read(self, size: int, timeout=RESPONSE_TIMEOUT, return_any: bool = False) -> bytes:
         """!
         @brief Read data from the device.
 
         @param size The maximum amount of data to read.
         @param timeout The max time in seconds this function should take before returning with less than `size` bytes.
+        @param return_any Return as soon as any data is available even if it's less than size.
 
         @return The data read. If the read timed out, the length of the returned data will be less than `size`.
         """
@@ -93,9 +100,10 @@ class WebSocketDataSource(DataSource):
     def write(self, data: bytes):
         self.socket_out.send(data)
 
-    def read(self, size: int, timeout=RESPONSE_TIMEOUT) -> bytes:
+    def read(self, size: int, timeout=RESPONSE_TIMEOUT, return_any: bool = False) -> bytes:
         try:
             data = self.socket_in.recv(timeout)
+            self.last_rx_data_posix_timestamp_sec = time.time()
         except TimeoutError:
             data = b''
         if isinstance(data, str):
@@ -137,26 +145,40 @@ class SocketDataSource(DataSource):
             # The socket buffer can be made large enough that we don't need a reader thread.
             self.socket_in.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, MAX_DATA_BUFFER_SIZE)
             self.socket_in.setblocking(False)
+            enable_socket_timestamping(self.socket_in, enable_sw_timestamp=True,
+                                       enable_hw_timestamp=False)  # type: ignore
 
         self.rx_log = rx_log
 
     def write(self, data: bytes):
         self.socket_out.sendall(data)
 
-    def read(self, size: int, timeout=RESPONSE_TIMEOUT) -> bytes:
-        data = b''
+    def read(self, size: int, timeout=RESPONSE_TIMEOUT, return_any: bool = False) -> bytes:
+        all_data = b''
         start_time = time.time()
         remaining = timeout
-        while len(data) < size and remaining >= 0:
+        while len(all_data) < size and remaining >= 0:
             ready = select.select([self.socket_in], [], [], remaining)
             if ready[0]:
-                data += self.socket_in.recv(size - len(data))
+                data, ancdata, _, _ = self.socket_in.recvmsg(size - len(all_data), 1024)
+                kernel_ts, _, _ = parse_timestamps_from_ancdata(ancdata)
+                if kernel_ts:
+                    self.last_rx_data_posix_timestamp_sec = kernel_ts
+
+                if self.rx_log:
+                    if kernel_ts and isinstance(self.rx_log, LogManager):
+                        # Timestamps are only logged if enabled in the LogManager. Otherwise, they are ignored.
+                        self.rx_log.write_with_timestamp(data, kernel_ts)
+                    else:
+                        self.rx_log.write(data)
+                all_data += data
+                if return_any:
+                    break
             else:
                 break
             remaining = timeout - (time.time() - start_time)
-        if self.rx_log:
-            self.rx_log.write(data)
-        return data
+
+        return all_data
 
     def stop(self):
         self.flush_rx()
@@ -201,7 +223,7 @@ class SerialDataSource(DataSource, serial.threaded.Protocol):
         logger.debug(' '.join('%02x' % b for b in data))
         self.serial_out.write(data)
 
-    def read(self, size: int, timeout=RESPONSE_TIMEOUT) -> bytes:
+    def read(self, size: int, timeout=RESPONSE_TIMEOUT, return_any: bool = False) -> bytes:
         if self.rx_thread is None:
             raise RuntimeError('Reading DeviceInterface without calling "start_rx_thread".')
         data = b''
@@ -214,6 +236,8 @@ class SerialDataSource(DataSource, serial.threaded.Protocol):
                 now = time.monotonic()
                 continue
             self.data_lock.acquire()
+            # This timestamping would be more accurate if the time was capture in the data_received callback.
+            self.last_rx_data_posix_timestamp_sec = time.time()
 
             if len(self.data_buffer) <= size:
                 data += self.data_buffer
@@ -227,7 +251,12 @@ class SerialDataSource(DataSource, serial.threaded.Protocol):
 
             self.data_lock.release()
             now = time.monotonic()
+            if return_any:
+                break
+
         if self.rx_log:
+            # Log timestamping could be improved by using write_with_timestamp with timestamps generated on reception.
+            # Probably easier to do the logging in the reception thread when using a LogManager.
             self.rx_log.write(data)
         return data
 

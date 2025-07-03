@@ -5,6 +5,7 @@ import sys
 import threading
 
 from fusion_engine_client.utils.log import DEFAULT_LOG_BASE_DIR
+from fusion_engine_client.utils.socket_timestamping import TIMESTAMP_FILE_ENDING
 from urllib3.util import parse_url
 
 from . import trace as logging
@@ -234,7 +235,8 @@ Forward NMEA output from the receiver to an application on TCP port 1234:
 
     logging_group.add_argument(
         '--log-timestamps', action='store_true',
-        help="Generate an \"input.timestamps\" file with a mapping of the run time to a byte offsets in the data log.")
+        help=f'Generate an "input.raw{TIMESTAMP_FILE_ENDING}" file with a mapping of the run time to a byte offsets in '
+              'the data log.')
 
     ref_group = parser.add_argument_group('Reference FusionEngine Device')
     ref_group.add_argument(

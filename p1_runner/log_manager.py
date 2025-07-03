@@ -9,6 +9,9 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
+from fusion_engine_client.utils.socket_timestamping import (
+    TIMESTAMP_FILE_ENDING, log_timestamped_data_offset)
+
 from . import trace as logging
 from .log_manifest import DeviceType, LogManifest
 
@@ -39,7 +42,8 @@ class LogManager(threading.Thread):
         self.timestamp_path = None
         self.log_timestamps = log_timestamps
         self.start_time = time.time()
-        self.last_timestamp = time.time()
+        self.last_timestamp_ns = None
+        self.min_timestamp_gap_ns = 0.001 * 1e9
 
         if files is not None:
             self.files = list(files)
@@ -113,20 +117,23 @@ class LogManager(threading.Thread):
             self.data_queue.put(None)
 
     def write(self, data):
+        self.write_with_timestamp(data, time.time())
+
+    def write_with_timestamp(self, data, posix_timestamp_sec):
         if not self.is_alive():
             return
 
         if isinstance(data, str):
             data = data.encode('utf-8')
 
-        self.data_queue.put(data)
+        self.data_queue.put((data, int(posix_timestamp_sec * 1e9)))
 
     def run(self):
         path = os.path.join(self.log_dir, self.data_filename)
         self.logger.debug("Opening bin file '%s'." % path)
         timestamp_file = None
         if self.log_timestamps:
-            self.timestamp_path = os.path.join(self.log_dir, self.data_filename + '.timestamps')
+            self.timestamp_path = os.path.join(self.log_dir, self.data_filename + TIMESTAMP_FILE_ENDING)
             self.logger.debug("Opening timestamp file '%s'." % self.timestamp_path)
             timestamp_file = open(self.timestamp_path, 'wb')
         with open(path, 'wb') as bin_file:
@@ -138,22 +145,24 @@ class LogManager(threading.Thread):
                     self.logger.warning("Error running log created command: %s" % repr(e))
 
             while True:
-                data = self.data_queue.get()
-                if data is None:
+                item = self.data_queue.get()
+                if item is None:
+                    # Write final timestamp.
+                    if timestamp_file and self.last_timestamp_ns:
+                        log_timestamped_data_offset(timestamp_file, self.last_timestamp_ns, bin_file.tell())
                     break
-                else:
+                elif isinstance(item, tuple):
+                    data, timestamp_ns = item
                     size = len(data)
                     self.logger.trace('Writing %d bytes.' % size)
+                    if timestamp_file:
+                        if self.last_timestamp_ns is None:
+                            self.last_timestamp_ns = timestamp_ns
+                        elif timestamp_ns - self.last_timestamp_ns > self.min_timestamp_gap_ns:
+                            log_timestamped_data_offset(timestamp_file, self.last_timestamp_ns, bin_file.tell())
+                            self.last_timestamp_ns = timestamp_ns
+
                     bin_file.write(data)
-                    timestamp = time.time()
-                    if timestamp_file and timestamp - self.last_timestamp > 0.001:
-                        # This will rollover after about about 50 days.
-                        milliseconds = int(round((timestamp - self.start_time) * 1000.)) % 2**32
-                        # This will rollover after about about 26 hours of full rate 460800 baud data.
-                        offset = bin_file.tell() % 2**32
-                        data = struct.pack('II', milliseconds, offset)
-                        timestamp_file.write(data)
-                        self.last_timestamp = timestamp
 
         if timestamp_file is not None:
             timestamp_file.close()
