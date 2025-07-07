@@ -231,14 +231,19 @@ class SerialDataSource(DataSource, serial.threaded.Protocol):
         now = start_time
         while size > 0 and now - start_time <= timeout:
             logger.trace(f'Buffered {len(self.data_buffer)} B.')
-            if not self.data_event.wait(RX_BYTE_TIMEOUT):
-                logger.debug('Timed out waiting for byte to be added to buffer.')
-                now = time.monotonic()
-                continue
             self.data_lock.acquire()
+            if len(self.data_buffer) == 0:
+                self.data_lock.release()
+                if not self.data_event.wait(RX_BYTE_TIMEOUT):
+                    logger.debug('Timed out waiting for byte to be added to buffer.')
+                    now = time.monotonic()
+                    continue
+                self.data_lock.acquire()
+
             # This timestamping would be more accurate if the time was capture in the data_received callback.
             self.last_rx_data_posix_timestamp_sec = time.time()
 
+            logger.trace(f'Read got data. [size={len(self.data_buffer)} B]')
             if len(self.data_buffer) <= size:
                 data += self.data_buffer
                 size -= len(self.data_buffer)

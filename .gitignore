@@ -136,3 +136,6 @@ dmypy.json
 
 # Point One firmware files
 *.p1fw
+
+# Generated output files
+out/

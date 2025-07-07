@@ -125,8 +125,9 @@ class DeviceInterface:
             data = self.data_source.read(MAX_FE_MSG_SIZE, REBOOT_MIN_TIME, return_any=True)
             reboot_started = len(data) == 0
         if reboot_started:
-            # Since device reset, expect sequence number to reset.
-            self.fe_decoder._last_sequence_number = 0
+            # Clear buffers from previous boot
+            self.buffer = bytes()
+            self.fe_decoder = FusionEngineDecoder(MAX_FE_MSG_SIZE, warn_on_unrecognized=False, return_bytes=True)
             logger.debug("Waiting for data to resume.")
             data = self.data_source.read(MAX_FE_MSG_SIZE, data_restart_timeout, return_any=True)
             reboot_finished = len(data) > 0
