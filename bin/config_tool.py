@@ -397,7 +397,7 @@ INTERFACE_PARAM_DEFINITION = {
     'remote_address': {'format': InterfaceRemoteAddressConfig, 'arg_parse': _args_to_address},
     'enabled': {'format': InterfaceEnabledConfig, 'arg_parse': _args_to_bool},
     'direction': {'format': InterfaceDirectionConfig, 'arg_parse': _str_to_transport_direction},
-    'socket_type': {'format': InterfaceDirectionConfig, 'arg_parse': _str_to_socket_type},
+    'socket_type': {'format': InterfaceSocketTypeConfig, 'arg_parse': _str_to_socket_type},
     'diagnostics_enabled': {'format': InterfaceDiagnosticMessagesEnabled, 'arg_parse': _args_to_bool},
     'message_rate': {'format': list, 'arg_parse': message_rate_args_to_output_interface},
 }
@@ -1577,6 +1577,26 @@ NMEA message types:
             baud_rate_parser.add_argument('baud_rate', type=int,
                                           help='The desired baud rate (in bits/second).')
 
+        if interface_id.type in (TransportType.TCP, TransportType.UNIX, TransportType.CURRENT):
+            # config_tool.py apply INTERFACE_NAME direction
+            help = 'Configure the interface direction (client or server).'
+            read_interface_config_type_parsers.add_parser(
+                'direction', help=help, description=help)
+            baud_rate_parser = apply_interface_config_type_parsers.add_parser(
+                'direction', help=help, description=help)
+            baud_rate_parser.add_argument('direction', choices=_transport_direction_map.keys(),
+                                          help='The desired interface direction.')
+
+        if interface_id.type in (TransportType.UNIX, TransportType.CURRENT):
+            # config_tool.py apply INTERFACE_NAME socket_type
+            help = 'Configure the UNIX domain socket type.'
+            read_interface_config_type_parsers.add_parser(
+                'socket_type', help=help, description=help)
+            baud_rate_parser = apply_interface_config_type_parsers.add_parser(
+                'socket_type', help=help, description=help)
+            baud_rate_parser.add_argument('direction', choices=_socket_type_map.keys(),
+                                          help='The desired socket type.')
+
         if interface_id.type in (TransportType.UDP, TransportType.TCP, TransportType.WEBSOCKET, TransportType.CURRENT):
             # config_tool.py apply INTERFACE_NAME port
             help = 'Configure the network port.'
@@ -1589,7 +1609,7 @@ NMEA message types:
 
         if interface_id.type in (TransportType.UDP, TransportType.TCP, TransportType.UNIX, TransportType.CURRENT):
             # config_tool.py apply INTERFACE_NAME remote_address
-            help = 'Configure the remote hostname or IP address, or the socket file path for UNIX domain sockets.'
+            help = 'Configure the remote hostname or IP address (UDP or TCP client), or the socket file path for UNIX domain sockets.'
             read_interface_config_type_parsers.add_parser('remote_address', help=help, description=help)
             baud_rate_parser = apply_interface_config_type_parsers.add_parser('remote_address', help=help,
                                                                               description=help)
