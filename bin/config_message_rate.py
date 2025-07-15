@@ -23,9 +23,13 @@ INTERFACE_MAP = {
     'tcp1': InterfaceID(TransportType.TCP, 1),
     'tcp2': InterfaceID(TransportType.TCP, 2),
     'tcp3': InterfaceID(TransportType.TCP, 3),
-    'file': InterfaceID(TransportType.FILE, 1),
+    'tcp4': InterfaceID(TransportType.TCP, 4),
+    'tcp5': InterfaceID(TransportType.TCP, 5),
+    'file1': InterfaceID(TransportType.FILE, 1),
+    'file2': InterfaceID(TransportType.FILE, 2),
     'unix1': InterfaceID(TransportType.UNIX, 1),
     'unix2': InterfaceID(TransportType.UNIX, 2),
+    'ws1': InterfaceID(TransportType.WEBSOCKET, 1),
 }
 
 PROTOCOL_MAP = {
