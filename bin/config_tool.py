@@ -1577,7 +1577,7 @@ NMEA message types:
             baud_rate_parser.add_argument('baud_rate', type=int,
                                           help='The desired baud rate (in bits/second).')
 
-        if interface_id.type in (TransportType.UDP, TransportType.TCP, TransportType.CURRENT):
+        if interface_id.type in (TransportType.UDP, TransportType.TCP, TransportType.WEBSOCKET, TransportType.CURRENT):
             # config_tool.py apply INTERFACE_NAME port
             help = 'Configure the network port.'
             read_interface_config_type_parsers.add_parser(
@@ -1587,7 +1587,7 @@ NMEA message types:
             baud_rate_parser.add_argument('port', type=int,
                                           help='The desired network port.')
 
-        if interface_id.type in (TransportType.UDP, TransportType.UNIX, TransportType.CURRENT):
+        if interface_id.type in (TransportType.UDP, TransportType.TCP, TransportType.UNIX, TransportType.CURRENT):
             # config_tool.py apply INTERFACE_NAME remote_address
             help = 'Configure the remote hostname or IP address, or the socket file path for UNIX domain sockets.'
             read_interface_config_type_parsers.add_parser('remote_address', help=help, description=help)
