@@ -188,10 +188,15 @@ class DeviceInterface:
                 msgs = self.fe_decoder.on_data(b)
                 for msg in msgs:
                     if msg[0].message_type == msg_type:
-                        logger.debug('Response: %s', str(msg[1]))
-                        logger.debug(' '.join('%02x' % b for b in msg[2]))
-                        return msg[1]
+                        if isinstance(msg[1], MessagePayload):
+                            logger.debug('Response: %s', str(msg[1]))
+                            logger.debug(' '.join('%02x' % b for b in msg[2]))
+                            return msg[1]
+                        else:
+                            logger.error(f'Unexpected error decoding {msg_type} message.')
+                            return None
             elapsed = time.monotonic() - start_time
+        logger.error('Response timed out after %d seconds.' % response_timeout)
         return None
 
     def _wait_for_nmea_message(self, msg_type, response_timeout):
@@ -211,4 +216,5 @@ class DeviceInterface:
                         logger.debug('Response: %s', msg)
                         return msg
             elapsed = time.monotonic() - start_time
+        logger.error('Response timed out after %d seconds.' % response_timeout)
         return None
