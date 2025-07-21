@@ -767,10 +767,15 @@ def request_shutdown(config_interface: DeviceInterface, args):
 
 
 def request_startup(config_interface: DeviceInterface, args):
-    flags = {
+    flag_by_type = {
         'engine': StartupRequest.START_ENGINE,
         'log': StartupRequest.START_NEW_LOG,
-    }[args.type]
+    }
+
+    flags = flag_by_type[args.type]
+    if args.type == 'engine' and args.log_at_startup:
+        flags |= StartupRequest.START_NEW_LOG
+
     config_interface.send_message(StartupRequest(flags))
 
     resp = config_interface.wait_for_message(CommandResponseMessage.MESSAGE_TYPE)
@@ -1822,10 +1827,13 @@ The type of shutdown to be performed: {''.join([f'{newline}- {k} - {v}' for k, v
         help=help,
         description=help)
     choices = {
-        'engine': 'Startup the engine',
+        'engine': 'Start the navigation engine',
         'log': 'Start a new log',
     }
     newline = '\n'
+    startup_parser.add_argument(
+        '-l', '--log-at-startup', action=ExtendedBooleanAction,
+        help="If set, start logging when the navigation engine is started. Applies to `engine` only.")
     startup_parser.add_argument(
         'type', metavar='TYPE',
         choices=choices.keys(),
