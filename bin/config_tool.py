@@ -132,7 +132,7 @@ def _args_to_vehicle_details(cls, args, config_interface):
     resp = config_interface.wait_for_message(ConfigResponseMessage.MESSAGE_TYPE)
 
     if resp is None:
-        raise RuntimeError('Response timed out after %d seconds while querying current values.' % RESPONSE_TIMEOUT)
+        raise RuntimeError('Error querying current setting.')
 
     if args.vehicle_model is None:
         vehicle_model = resp.config_object.vehicle_model
@@ -155,7 +155,7 @@ def _args_to_wheel_config(cls, args, config_interface):
     resp = config_interface.wait_for_message(ConfigResponseMessage.MESSAGE_TYPE)
 
     if resp is None:
-        raise RuntimeError('Response timed out after %d seconds while querying current values.' % RESPONSE_TIMEOUT)
+        raise RuntimeError('Error querying current setting.')
 
     new_values = {}
 
@@ -199,7 +199,7 @@ def _args_to_hardware_tick_config(cls, args, config_interface):
     resp = config_interface.wait_for_message(ConfigResponseMessage.MESSAGE_TYPE)
 
     if resp is None:
-        raise RuntimeError('Response timed out after %d seconds while querying current values.' % RESPONSE_TIMEOUT)
+        raise RuntimeError('Error querying current setting.')
 
     if args.tick_mode is None:
         tick_mode = resp.config_object.tick_mode
@@ -233,7 +233,6 @@ def _args_to_enabled_gnss_systems(cls, args, config_interface):
         config_interface.get_config(ConfigurationSource.ACTIVE, ConfigType.ENABLED_GNSS_SYSTEMS)
         resp = config_interface.wait_for_message(ConfigResponseMessage.MESSAGE_TYPE)
         if resp is None:
-            logger.error('Read timed out after %d seconds.' % RESPONSE_TIMEOUT)
             return False
         elif resp.response != Response.OK:
             logger.error('Error querying GNSS systems: %s (%d)' % (str(resp.response), int(resp.response)))
@@ -283,7 +282,7 @@ def _args_to_ionosphere_config(cls, args, config_interface):
     resp = config_interface.wait_for_message(ConfigResponseMessage.MESSAGE_TYPE)
 
     if resp is None:
-        raise RuntimeError('Response timed out after %d seconds while querying current values.' % RESPONSE_TIMEOUT)
+        raise RuntimeError('Error querying current setting.')
 
     if args.iono_delay_model is None:
         iono_delay_model = resp.config_object.iono_delay_model
@@ -299,7 +298,7 @@ def _args_to_troposphere_config(cls, args, config_interface):
     resp = config_interface.wait_for_message(ConfigResponseMessage.MESSAGE_TYPE)
 
     if resp is None:
-        raise RuntimeError('Response timed out after %d seconds while querying current values.' % RESPONSE_TIMEOUT)
+        raise RuntimeError('Error querying current setting.')
 
     if args.tropo_delay_model is None:
         tropo_delay_model = resp.config_object.tropo_delay_model
@@ -398,7 +397,7 @@ INTERFACE_PARAM_DEFINITION = {
     'remote_address': {'format': InterfaceRemoteAddressConfig, 'arg_parse': _args_to_address},
     'enabled': {'format': InterfaceEnabledConfig, 'arg_parse': _args_to_bool},
     'direction': {'format': InterfaceDirectionConfig, 'arg_parse': _str_to_transport_direction},
-    'socket_type': {'format': InterfaceDirectionConfig, 'arg_parse': _str_to_socket_type},
+    'socket_type': {'format': InterfaceSocketTypeConfig, 'arg_parse': _str_to_socket_type},
     'diagnostics_enabled': {'format': InterfaceDiagnosticMessagesEnabled, 'arg_parse': _args_to_bool},
     'message_rate': {'format': list, 'arg_parse': message_rate_args_to_output_interface},
 }
@@ -471,7 +470,6 @@ def read_config(config_interface: DeviceInterface, args):
 
             # Check if the response timed out.
             if not isinstance(resp, ConfigResponseMessage):
-                logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
                 return None
 
             # Now print the response.
@@ -539,7 +537,6 @@ def revert_config(config_interface: DeviceInterface, args):
 
             # Check if the response timed out.
             if not isinstance(resp, CommandResponseMessage):
-                logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
                 return None
 
             # Now print the response.
@@ -580,7 +577,6 @@ def apply_config(config_interface: DeviceInterface, args):
         config_interface.set_config(config_object, save=args.save, interface=interface_id)
         resp = config_interface.wait_for_message(CommandResponseMessage.MESSAGE_TYPE)
         if not isinstance(resp, CommandResponseMessage):
-            logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
             return False
         elif resp.response != Response.OK:
             logger.error('Apply command rejected: %s (%d)' % (str(resp.response), int(resp.response)))
@@ -603,7 +599,6 @@ def save_config(config_interface: DeviceInterface, args):
 
     resp = config_interface.wait_for_message(CommandResponseMessage.MESSAGE_TYPE)
     if not isinstance(resp, CommandResponseMessage):
-        logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
         return False
     elif resp.response != Response.OK:
         logger.error('Saving command rejected: %s (%d)' % (str(resp.response), int(resp.response)))
@@ -630,9 +625,7 @@ def query_system_status(config_interface: DeviceInterface, args):
     config_interface.send_message(MessageRequest(MessageType.SYSTEM_STATUS))
 
     resp = config_interface.wait_for_message(MessageType.SYSTEM_STATUS)
-    if resp is None:
-        logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
-    else:
+    if resp is not None:
         logger.info(str(resp))
     return resp
 
@@ -642,9 +635,7 @@ def query_device_id(config_interface: DeviceInterface, args):
     config_interface.send_message(MessageRequest(MessageType.DEVICE_ID))
 
     resp = config_interface.wait_for_message(MessageType.DEVICE_ID)
-    if resp is None:
-        logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
-    else:
+    if resp is not None:
         logger.info(str(resp))
     return resp
 
@@ -665,7 +656,6 @@ def query_fe_version(config_interface: DeviceInterface, args) -> Optional[Versio
         logger.info(str(resp))
         return resp
     else:
-        logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
         return None
 
 
@@ -676,7 +666,6 @@ def query_nmea_versions(config_interface: DeviceInterface, args):
     config_interface.send_message('$PQTMVERNO')
     resp = config_interface.wait_for_message('$PQTMVERNO')
     if resp is None:
-        logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
         return None
     else:
         logger.info(resp)
@@ -685,7 +674,6 @@ def query_nmea_versions(config_interface: DeviceInterface, args):
     config_interface.send_message('$PQTMVERNO,SUB')
     resp = config_interface.wait_for_message('$PQTMVERNO,SUB')
     if resp is None:
-        logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
         return None
     else:
         logger.info(resp)
@@ -698,9 +686,7 @@ def query_interfaces(config_interface: DeviceInterface, args):
     config_interface.send_message(MessageRequest(MessageType.SUPPORTED_IO_INTERFACES))
 
     resp = config_interface.wait_for_message(MessageType.SUPPORTED_IO_INTERFACES)
-    if resp is None:
-        logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
-    else:
+    if resp is not None:
         logger.info(str(resp))
     return resp
 
@@ -753,7 +739,6 @@ def request_reset(config_interface: DeviceInterface, args):
 
     resp = config_interface.wait_for_message(CommandResponseMessage.MESSAGE_TYPE)
     if not isinstance(resp, CommandResponseMessage):
-        logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
         return False
     elif resp.response != Response.OK:
         logger.error('Reset command rejected: %s (%d)' % (str(resp.response), int(resp.response)))
@@ -772,7 +757,6 @@ def request_shutdown(config_interface: DeviceInterface, args):
 
     resp = config_interface.wait_for_message(CommandResponseMessage.MESSAGE_TYPE)
     if not isinstance(resp, CommandResponseMessage):
-        logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
         return False
     elif resp.response != Response.OK:
         logger.error('Shutdown command rejected: %s (%d)' % (str(resp.response), int(resp.response)))
@@ -783,15 +767,19 @@ def request_shutdown(config_interface: DeviceInterface, args):
 
 
 def request_startup(config_interface: DeviceInterface, args):
-    flags = {
+    flag_by_type = {
         'engine': StartupRequest.START_ENGINE,
         'log': StartupRequest.START_NEW_LOG,
-    }[args.type]
+    }
+
+    flags = flag_by_type[args.type]
+    if args.type == 'engine' and args.log_at_startup:
+        flags |= StartupRequest.START_NEW_LOG
+
     config_interface.send_message(StartupRequest(flags))
 
     resp = config_interface.wait_for_message(CommandResponseMessage.MESSAGE_TYPE)
     if not isinstance(resp, CommandResponseMessage):
-        logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
         return False
     elif resp.response != Response.OK:
         logger.error('Startup command rejected: %s (%d)' % (str(resp.response), int(resp.response)))
@@ -809,7 +797,6 @@ def request_export(config_interface: DeviceInterface, args):
     config_interface.send_message(MessageRequest(MessageType.VERSION_INFO))
     version_resp = config_interface.wait_for_message(VersionInfoMessage.MESSAGE_TYPE)
     if version_resp is None:
-        logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
         return None
     assert isinstance(version_resp, VersionInfoMessage)
 
@@ -961,7 +948,6 @@ def request_fault(config_interface: DeviceInterface, args):
     if expect_response:
         resp = config_interface.wait_for_message(CommandResponseMessage.MESSAGE_TYPE)
         if not isinstance(resp, CommandResponseMessage):
-            logger.error('Response timed out after %d seconds.' % RESPONSE_TIMEOUT)
             return False
         elif resp.response != Response.OK:
             logger.error('Fault command rejected: %s (%d)' % (str(resp.response), int(resp.response)))
@@ -1596,7 +1582,27 @@ NMEA message types:
             baud_rate_parser.add_argument('baud_rate', type=int,
                                           help='The desired baud rate (in bits/second).')
 
-        if interface_id.type in (TransportType.UDP, TransportType.TCP, TransportType.CURRENT):
+        if interface_id.type in (TransportType.TCP, TransportType.UNIX, TransportType.CURRENT):
+            # config_tool.py apply INTERFACE_NAME direction
+            help = 'Configure the interface direction (client or server).'
+            read_interface_config_type_parsers.add_parser(
+                'direction', help=help, description=help)
+            baud_rate_parser = apply_interface_config_type_parsers.add_parser(
+                'direction', help=help, description=help)
+            baud_rate_parser.add_argument('direction', choices=_transport_direction_map.keys(),
+                                          help='The desired interface direction.')
+
+        if interface_id.type in (TransportType.UNIX, TransportType.CURRENT):
+            # config_tool.py apply INTERFACE_NAME socket_type
+            help = 'Configure the UNIX domain socket type.'
+            read_interface_config_type_parsers.add_parser(
+                'socket_type', help=help, description=help)
+            baud_rate_parser = apply_interface_config_type_parsers.add_parser(
+                'socket_type', help=help, description=help)
+            baud_rate_parser.add_argument('direction', choices=_socket_type_map.keys(),
+                                          help='The desired socket type.')
+
+        if interface_id.type in (TransportType.UDP, TransportType.TCP, TransportType.WEBSOCKET, TransportType.CURRENT):
             # config_tool.py apply INTERFACE_NAME port
             help = 'Configure the network port.'
             read_interface_config_type_parsers.add_parser(
@@ -1606,9 +1612,9 @@ NMEA message types:
             baud_rate_parser.add_argument('port', type=int,
                                           help='The desired network port.')
 
-        if interface_id.type in (TransportType.UDP, TransportType.UNIX, TransportType.CURRENT):
+        if interface_id.type in (TransportType.UDP, TransportType.TCP, TransportType.UNIX, TransportType.CURRENT):
             # config_tool.py apply INTERFACE_NAME remote_address
-            help = 'Configure the remote hostname or IP address, or the socket file path for UNIX domain sockets.'
+            help = 'Configure the remote hostname or IP address (UDP or TCP client), or the socket file path for UNIX domain sockets.'
             read_interface_config_type_parsers.add_parser('remote_address', help=help, description=help)
             baud_rate_parser = apply_interface_config_type_parsers.add_parser('remote_address', help=help,
                                                                               description=help)
@@ -1821,10 +1827,13 @@ The type of shutdown to be performed: {''.join([f'{newline}- {k} - {v}' for k, v
         help=help,
         description=help)
     choices = {
-        'engine': 'Startup the engine',
+        'engine': 'Start the navigation engine',
         'log': 'Start a new log',
     }
     newline = '\n'
+    startup_parser.add_argument(
+        '-l', '--log-at-startup', action=ExtendedBooleanAction,
+        help="If set, start logging when the navigation engine is started. Applies to `engine` only.")
     startup_parser.add_argument(
         'type', metavar='TYPE',
         choices=choices.keys(),
