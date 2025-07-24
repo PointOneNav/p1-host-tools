@@ -330,6 +330,12 @@ def _args_to_address(cls, args, config_interface):
     return cls(args.remote_address)
 
 
+def _args_to_path(cls, args, config_interface):
+    if len(args.path) > 64:
+        raise RuntimeError('File path must have length less than or equal to 64 characters.')
+    return cls(args.path)
+
+
 def _args_to_float(cls, args, config_interface):
     return cls(float(args.x))
 
@@ -395,6 +401,7 @@ INTERFACE_PARAM_DEFINITION = {
     'baud_rate': {'format': InterfaceBaudRateConfig, 'arg_parse': _args_to_int_gen('baud_rate')},
     'port': {'format': InterfacePortConfig, 'arg_parse': _args_to_int_gen('port')},
     'remote_address': {'format': InterfaceRemoteAddressConfig, 'arg_parse': _args_to_address},
+    'path': {'format': InterfaceFilePathConfig, 'arg_parse': _args_to_path},
     'enabled': {'format': InterfaceEnabledConfig, 'arg_parse': _args_to_bool},
     'direction': {'format': InterfaceDirectionConfig, 'arg_parse': _str_to_transport_direction},
     'socket_type': {'format': InterfaceSocketTypeConfig, 'arg_parse': _str_to_socket_type},
@@ -1612,14 +1619,23 @@ NMEA message types:
             baud_rate_parser.add_argument('port', type=int,
                                           help='The desired network port.')
 
-        if interface_id.type in (TransportType.UDP, TransportType.TCP, TransportType.UNIX, TransportType.CURRENT):
+        if interface_id.type in (TransportType.UDP, TransportType.TCP, TransportType.CURRENT):
             # config_tool.py apply INTERFACE_NAME remote_address
-            help = 'Configure the remote hostname or IP address (UDP or TCP client), or the socket file path for UNIX domain sockets.'
+            help = 'Configure the remote hostname or IP address (UDP or TCP client).'
             read_interface_config_type_parsers.add_parser('remote_address', help=help, description=help)
             baud_rate_parser = apply_interface_config_type_parsers.add_parser('remote_address', help=help,
                                                                               description=help)
             baud_rate_parser.add_argument('remote_address', type=str,
-                                          help='The address to connect to.')
+                                          help='The IP address or hostname of the remote server.')
+
+        if interface_id.type in (TransportType.UNIX, TransportType.FILE, TransportType.CURRENT):
+            # config_tool.py apply INTERFACE_NAME file
+            help = 'Configure the local path for files or UNIX domain sockets.'
+            read_interface_config_type_parsers.add_parser('path', help=help, description=help)
+            baud_rate_parser = apply_interface_config_type_parsers.add_parser('path', help=help,
+                                                                              description=help)
+            baud_rate_parser.add_argument('path', type=str,
+                                          help='The local filename/path.')
 
     # config_tool.py copy_message_config
     help = 'Copy the output message configuration from one interface to another.'
