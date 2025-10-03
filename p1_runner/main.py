@@ -68,7 +68,7 @@ Connect to the Point One Polaris corrections service with an assigned password:
 Connect to an NTRIP corrections service:
 
   %(command)s \
-      --ntrip example-service.com:2101,CORRECTIONS,USERNAME,PASSWORD
+      --ntrip example-service.com:2101,MOUNTPOINT,USERNAME,PASSWORD
 
 Forward NMEA output from the receiver to an application on TCP port 1234:
 
