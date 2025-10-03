@@ -93,19 +93,25 @@ Forward NMEA output from the receiver to an application on TCP port 1234:
         '--device-port', '--port', default="auto",
         help="The serial port on which sensor data and solution output is being sent from the device to the host "
              "computer. If 'auto', the serial port will be located automatically by searching for a connected device.")
-
     device_group.add_argument(
         '--device-baud', '--baud', type=int, default=460800,
         help="The baud rate used by the device serial port (--device-port).")
+    device_group.add_argument(
+        '--device-options', default='',
+        help="A comma-separated list of options to control the device serial connection. Available options:\n"
+             "- rtscts - Enable hardware flow control")
 
     device_group.add_argument(
         '--corrections-port', default=None,
         help="The serial port to which RTK corrections data will be sent. By default corrections will be sent over the "
              "same serial port as '--device-port'.")
-
     device_group.add_argument(
         '--corrections-baud', type=int, default=460800,
         help="The baud rate used by the corrections serial port (--corrections-port).")
+    device_group.add_argument(
+        '--corrections-options', default='',
+        help="A comma-separated list of options to control the RTK corrections serial connection. Available options:\n"
+             "- rtscts - Enable hardware flow control")
 
     device_group.add_argument(
         '--reset-type', choices=('hot', 'warm', 'pvt', 'diag', 'cold', 'none'), default='none',
@@ -255,11 +261,14 @@ Forward NMEA output from the receiver to an application on TCP port 1234:
              "specified by --external-output-path and/or send it corrections if --external-corrections is "
              "specified."
     )
-
     external_serial_recorder.add_argument(
         '--external-baud', type=int, default=460800,
         help="The baud rate used by the external device serial port (--external-port)."
     )
+    external_serial_recorder.add_argument(
+        '--external-port-options', default='',
+        help="A comma-separated list of options to control the external device serial connection. Available options:\n"
+             "- rtscts - Enable hardware flow control")
 
     external_serial_recorder.add_argument(
         '--external-output-path', default=None,
@@ -372,8 +381,11 @@ Forward NMEA output from the receiver to an application on TCP port 1234:
     runner = P1Runner(device_id=device_id, device_type=options.device_type,
                       reset_type=options.reset_type, wait_for_reset=options.wait_for_reset,
                       device_port=options.device_port, device_baudrate=options.device_baud,
+                      device_options=options.device_options,
                       corrections_port=options.corrections_port, corrections_baudrate=options.corrections_baud,
+                      corrections_options=options.corrections_options,
                       external_port=options.external_port, external_baudrate=options.external_baud,
+                      external_port_options=options.external_port_options,
                       external_output_path=options.external_output_path,
                       external_corrections=options.external_corrections,
                       logs_base_dir=options.logs_base_dir, log_format=options.log_format,
