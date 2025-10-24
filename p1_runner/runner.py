@@ -38,6 +38,10 @@ class P1Runner(threading.Thread):
 
     DEFAULT_DEVICE_ID = 'p1-lg69t'
 
+    STATUS_PRINT_INTERVAL_SEC = 5.0
+    DATA_TIMEOUT_SEC = 5.0
+    RESET_RESPONSE_TIMEOUT_SEC = 5.0
+
     def __init__(self, device_id=None, device_type=None, reset_type='hot', wait_for_reset=True,
                  device_port='auto', device_baudrate=460800, device_options='',
                  corrections_port=None, corrections_baudrate=460800, corrections_options='',
@@ -361,7 +365,7 @@ class P1Runner(threading.Thread):
                 now = datetime.now()
                 if self.last_data_timeout_warning_time is None:
                     self.last_data_timeout_warning_time = now - timedelta(seconds=self.device_serial.timeout)
-                elif (now - self.last_data_timeout_warning_time).total_seconds() > 5.0:
+                elif (now - self.last_data_timeout_warning_time).total_seconds() > self.DATA_TIMEOUT_SEC:
                     self.logger.warning("Timed out waiting for data on %s." % self.device_serial.port)
                     self.last_data_timeout_warning_time = now
 
@@ -393,7 +397,8 @@ class P1Runner(threading.Thread):
             # If we are still waiting for a reset response, return and skip all data processing below.
             if not self.state == State.RESET_COMPLETE:
                 # Warn if we don't get the reset response quickly and send the request again.
-                if (datetime.now() - self.last_reset_timeout_warning_time).total_seconds() > 5.0:
+                if ((datetime.now() - self.last_reset_timeout_warning_time).total_seconds() >
+                    self.RESET_RESPONSE_TIMEOUT_SEC):
                     self.logger.warning("Reset response timed out. Resending reset request.")
                     self._send_reset()
                 return
@@ -480,7 +485,7 @@ Are you using the correct UART/COM port (--device-port)?
 
         # Print a data status update periodically.
         now = datetime.now()
-        if (now - self.last_status_time).total_seconds() > 5.0:
+        if (now - self.last_status_time).total_seconds() > self.STATUS_PRINT_INTERVAL_SEC:
             self.logger.info(
                 '%d bytes received. [# epochs=%d, elapsed=%.1f sec, fusion_engine=%d B, nmea=%d B, corrections=%d B]' %
                 (self.total_bytes_received['all'], self.fe_positions_received, (now - self.start_time).total_seconds(),
