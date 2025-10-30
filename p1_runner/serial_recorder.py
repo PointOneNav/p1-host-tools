@@ -10,7 +10,7 @@ from . import trace as logging
 class SerialRecorder(threading.Thread):
     logger = logging.getLogger('point_one.p1_runner.external_serial_recorder')
 
-    def __init__(self, device_port=None, device_baud_rate=460800,
+    def __init__(self, device_port=None, device_baud_rate=460800, options='',
                  output_path=None):
 
         super().__init__(name='external_device')
@@ -19,7 +19,9 @@ class SerialRecorder(threading.Thread):
         self.device_baud_rate = device_baud_rate
         self.output_path = output_path
 
-        self.device_serial = serial.Serial(baudrate=device_baud_rate, timeout=1.0)
+        options = options.split(',')
+        self.device_serial = serial.Serial(baudrate=device_baud_rate, timeout=1.0,
+                                           rtscts=('rtscts' in options or 'ctsrts' in options or 'fc' in options))
         self.device_serial.port = device_port
 
         self.output_file = None

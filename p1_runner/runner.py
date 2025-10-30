@@ -38,10 +38,15 @@ class P1Runner(threading.Thread):
 
     DEFAULT_DEVICE_ID = 'p1-lg69t'
 
+    STATUS_PRINT_INTERVAL_SEC = 5.0
+    DATA_TIMEOUT_SEC = 5.0
+    RESET_RESPONSE_TIMEOUT_SEC = 5.0
+
     def __init__(self, device_id=None, device_type=None, reset_type='hot', wait_for_reset=True,
-                 device_port='auto', device_baudrate=460800,
-                 corrections_port=None, corrections_baudrate=460800,
-                 external_port=None, external_baudrate=4608000, external_output_path=None, external_corrections=False,
+                 device_port='auto', device_baudrate=460800, device_options='',
+                 corrections_port=None, corrections_baudrate=460800, corrections_options='',
+                 external_port=None, external_baudrate=4608000, external_port_options='',
+                 external_output_path=None, external_corrections=False,
                  logs_base_dir=DEFAULT_LOG_BASE_DIR, log_format='raw', log_created_cmd=None, log_timestamps=False,
                  output_tcp_address=None, output_websocket_address=None, output_type='fusion_engine',
                  reference_tcp_address=None, reference_format='p1log',
@@ -80,6 +85,7 @@ class P1Runner(threading.Thread):
 
         self.external_port = external_port
         self.external_baudrate = external_baudrate
+        self.external_port_options = external_port_options
         self.external_output_path = external_output_path
 
         self.external_serial_recorder = None
@@ -95,14 +101,19 @@ class P1Runner(threading.Thread):
         # Note: We intentionally do not pass the 'port' argument to the constructor so the serial ports do not open
         # automatically. We'll open them in start() later.
         device_port = find_serial_device(port_name=device_port, port_type=PortType.STANDARD)
-        self.device_serial = serial.Serial(baudrate=device_baudrate, timeout=1.0)
+        options = device_options.split(',')
+        self.device_serial = serial.Serial(baudrate=device_baudrate, timeout=1.0,
+                                           rtscts=('rtscts' in options or 'ctsrts' in options or 'fc' in options))
         self.device_serial.port = device_port
 
         if corrections_port is None or corrections_port == device_port or corrections_port == 'auto':
             self.corrections_serial = self.device_serial
         else:
             corrections_port = find_serial_device(port_name=corrections_port, port_type=PortType.ENHANCED)
-            self.corrections_serial = serial.Serial(baudrate=corrections_baudrate, timeout=1.0)
+            options = corrections_options.split(',')
+            self.corrections_serial = serial.Serial(baudrate=corrections_baudrate, timeout=1.0,
+                                                    rtscts=('rtscts' in options or 'ctsrts' in options
+                                                            or 'fc' in options))
             self.corrections_serial.port = corrections_port
 
         self.ntrip_client = None
@@ -257,6 +268,7 @@ class P1Runner(threading.Thread):
 
             self.external_serial_recorder = SerialRecorder(device_port=self.external_port,
                                                            device_baud_rate=self.external_baudrate,
+                                                           options=self.external_port_options,
                                                            output_path=self.external_output_path)
             self.external_serial_recorder.start()
 
@@ -353,7 +365,7 @@ class P1Runner(threading.Thread):
                 now = datetime.now()
                 if self.last_data_timeout_warning_time is None:
                     self.last_data_timeout_warning_time = now - timedelta(seconds=self.device_serial.timeout)
-                elif (now - self.last_data_timeout_warning_time).total_seconds() > 5.0:
+                elif (now - self.last_data_timeout_warning_time).total_seconds() > self.DATA_TIMEOUT_SEC:
                     self.logger.warning("Timed out waiting for data on %s." % self.device_serial.port)
                     self.last_data_timeout_warning_time = now
 
@@ -385,7 +397,8 @@ class P1Runner(threading.Thread):
             # If we are still waiting for a reset response, return and skip all data processing below.
             if not self.state == State.RESET_COMPLETE:
                 # Warn if we don't get the reset response quickly and send the request again.
-                if (datetime.now() - self.last_reset_timeout_warning_time).total_seconds() > 5.0:
+                if ((datetime.now() - self.last_reset_timeout_warning_time).total_seconds() >
+                    self.RESET_RESPONSE_TIMEOUT_SEC):
                     self.logger.warning("Reset response timed out. Resending reset request.")
                     self._send_reset()
                 return
@@ -472,7 +485,7 @@ Are you using the correct UART/COM port (--device-port)?
 
         # Print a data status update periodically.
         now = datetime.now()
-        if (now - self.last_status_time).total_seconds() > 5.0:
+        if (now - self.last_status_time).total_seconds() > self.STATUS_PRINT_INTERVAL_SEC:
             self.logger.info(
                 '%d bytes received. [# epochs=%d, elapsed=%.1f sec, fusion_engine=%d B, nmea=%d B, corrections=%d B]' %
                 (self.total_bytes_received['all'], self.fe_positions_received, (now - self.start_time).total_seconds(),
