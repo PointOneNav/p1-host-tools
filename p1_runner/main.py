@@ -207,10 +207,7 @@ Forward NMEA output from the receiver to an application on TCP port 1234:
              "- all - Capture a console.txt file (log) and display output (print).\n"
              "- raw - A .raw is a binary file containing all data received from the device UART. Typically this "
              "includes interleaved RTCM, FusionEngine, and NMEA messages. .raw files can be used for analysis and for "
-             "post-processing and diagnostics. Use of .raw format is encouraged.\n"
-             "\n"
-             "Note that .p1log and .nmea formats do not contain measurement data, and cannot be used for diagnostics. "
-             "When contacting Point One support, you must provide a log in .raw format.")
+             "post-processing and diagnostics. Use of .raw format is encouraged.")
     logging_group.add_argument(
         '--rtt-port', metavar="PORT", type=int,
         help="Specify the telnet port to use when establishing a JLink RTT connection.")
