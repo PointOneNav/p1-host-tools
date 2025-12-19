@@ -223,6 +223,7 @@ class TCPClient(threading.Thread):
                     logger.debug(f'Connected to {self.hostname if addr == self.hostname else addr}.')
                     with self.connetion_mutex:
                         self.is_connected = True
+                        retry_timeout_sec = 0.0
 
                 data = self.socket.recv(1024)
                 if len(data) == 0:
