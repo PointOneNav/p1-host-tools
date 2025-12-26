@@ -4,8 +4,8 @@
 Interactive configuration wizard for Point One devices.
 
 This wizard guides users through configuring key device parameters:
-- IMU to body lever arm (X, Y, Z)
-- GPS to body lever arm (X, Y, Z)
+- Body to IMU lever arm (X, Y, Z)
+- Body to GPS lever arm (X, Y, Z)
 - Device orientation (Z axis direction, X axis direction)
 """
 
@@ -14,6 +14,7 @@ import socket
 import sys
 from urllib.parse import urlparse
 
+import serial
 from fusion_engine_client.messages import *
 
 # Add the parent directory to the search path to enable p1_runner imports.
@@ -22,12 +23,13 @@ sys.path.append(repo_root)
 sys.path.append(os.path.dirname(__file__))
 
 from p1_runner import trace as logging
-from p1_runner.data_source import SocketDataSource
+from p1_runner.data_source import SocketDataSource, SerialDataSource
 from p1_runner.device_interface import DeviceInterface
 
 logger = logging.getLogger('point_one.config_wizard')
 
 DEFAULT_TCP_PORT = 30200
+DEFAULT_SERIAL_BAUD = 460800
 
 # Direction options for orientation
 DIRECTION_OPTIONS = {
@@ -47,37 +49,116 @@ def get_direction_name(direction: Direction) -> str:
     return DIRECTION_NAMES.get(direction, str(direction))
 
 
-def connect_to_device(ip_address: str) -> tuple:
+def parse_serial_address(address: str) -> tuple:
     """
-    Connect to device via TCP.
+    Parse a serial port address with optional baud rate.
+
+    Supports formats:
+    - "COM3" or "/dev/ttyUSB0" (uses default baud)
+    - "COM3:115200" or "/dev/ttyUSB0:115200" (explicit baud)
+
+    Returns:
+        Tuple of (port, baud_rate)
+    """
+    # Check for baud rate suffix (e.g., COM3:115200 or /dev/ttyUSB0:115200)
+    # For /dev paths, only split on the last colon to handle the path correctly
+    if address.startswith('/dev/'):
+        # Linux/Mac path - baud rate comes after the device name
+        if ':' in address[5:]:  # Check for colon after /dev/
+            last_colon = address.rfind(':')
+            port = address[:last_colon]
+            try:
+                baud = int(address[last_colon + 1:])
+                return port, baud
+            except ValueError:
+                pass
+        return address, DEFAULT_SERIAL_BAUD
+    else:
+        # Windows COM port or other
+        if ':' in address:
+            port, baud_str = address.rsplit(':', 1)
+            try:
+                baud = int(baud_str)
+                return port, baud
+            except ValueError:
+                pass
+        return address, DEFAULT_SERIAL_BAUD
+
+
+def connect_to_device(address: str) -> tuple:
+    """
+    Connect to device via TCP or serial port.
+
+    Supports multiple formats:
+    - IP address: "192.168.0.1" or "tcp://192.168.0.1:30200"
+    - Serial port: "COM3", "COM3:115200", "/dev/ttyUSB0", "/dev/ttyUSB0:115200"
+    - Serial URL: "serial://COM3:115200" or "serial:///dev/ttyUSB0:115200"
+
+    IP connections are the default if no scheme is specified and the address looks like an IP.
 
     Returns:
         Tuple of (data_source, config_interface) or (None, None) on failure.
     """
     try:
-        # Parse the address
-        if '://' not in ip_address:
-            ip_address = f'tcp://{ip_address}'
+        # Determine connection type
+        is_serial = False
+        baud_rate = DEFAULT_SERIAL_BAUD
 
-        parts = urlparse(ip_address)
-        address = parts.hostname
-        port = parts.port if parts.port is not None else DEFAULT_TCP_PORT
+        if '://' in address:
+            parts = urlparse(address)
+            scheme = parts.scheme.lower()
 
-        if address is None:
-            print(f"Error: Invalid IP address format.")
-            return None, None
+            if scheme == 'serial':
+                is_serial = True
+                # Handle both serial://COM3 and serial:///dev/ttyUSB0
+                serial_addr = parts.path if parts.path else parts.netloc
+                serial_port, baud_rate = parse_serial_address(serial_addr)
+            elif scheme == 'tcp':
+                is_serial = False
+                host = parts.hostname
+                port = parts.port if parts.port is not None else DEFAULT_TCP_PORT
+            else:
+                print(f"Error: Unknown scheme '{scheme}'. Use 'tcp://' or 'serial://'")
+                return None, None
+        else:
+            # No scheme specified - determine based on the address format
+            # If it looks like a COM port or /dev path, treat as serial
+            if address.upper().startswith('COM') or address.startswith('/dev/'):
+                is_serial = True
+                serial_port, baud_rate = parse_serial_address(address)
+            else:
+                # Default to TCP for IP addresses
+                is_serial = False
+                host = address
+                port = DEFAULT_TCP_PORT
 
-        print(f"Connecting to {address}:{port}...")
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(5.0)
-        s.connect((address, port))
-        s.settimeout(None)
+        # Connect based on type
+        if is_serial:
+            print(f"Connecting to serial port {serial_port} at {baud_rate} baud...")
+            ser = serial.Serial(
+                port=serial_port,
+                baudrate=baud_rate,
+                timeout=1.0
+            )
 
-        data_source = SocketDataSource(s)
-        config_interface = DeviceInterface(data_source)
+            data_source = SerialDataSource(ser)
+            data_source.start_read_thread()
+            config_interface = DeviceInterface(data_source)
 
-        print("Connected successfully.")
-        return data_source, config_interface
+            print("Connected successfully.")
+            return data_source, config_interface
+        else:
+            print(f"Connecting to {host}:{port}...")
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(5.0)
+            s.connect((host, port))
+            s.settimeout(None)
+
+            data_source = SocketDataSource(s)
+            config_interface = DeviceInterface(data_source)
+
+            print("Connected successfully.")
+            return data_source, config_interface
 
     except Exception as e:
         print(f"Error connecting to device: {e}")
@@ -178,7 +259,7 @@ def print_section(title: str):
 
 def print_lever_arm(name: str, config):
     """Print lever arm values."""
-    print(f"  {name}: X={config.x:.3f}m, Y={config.y:.3f}m, Z={config.z:.3f}m")
+    print(f"  {name}: X={config.x:.3f} m, Y={config.y:.3f} m, Z={config.z:.3f} m")
 
 
 def print_orientation(config):
@@ -201,13 +282,16 @@ def main():
     print("=" * 60)
     print()
 
-    # Get device IP
-    ip_address = input("Enter device IP address [192.168.0.1]: ").strip()
-    if ip_address == '':
-        ip_address = "192.168.0.1"
+    # Get device address (IP or serial port)
+    print("Connect via IP address or serial port.")
+    print("  Examples: 192.168.0.1, COM3, /dev/ttyUSB0:115200")
+    print()
+    address = input("Enter device address/port [127.0.0.1]: ").strip()
+    if address == '':
+        address = "127.0.0.1"
 
     # Connect to device
-    data_source, config_interface = connect_to_device(ip_address)
+    data_source, config_interface = connect_to_device(address)
     if config_interface is None:
         sys.exit(1)
 
@@ -235,7 +319,8 @@ def main():
 
         # IMU Lever Arm
         print_section("IMU to Body Lever Arm (meters)")
-        print("Enter the offset from the vehicle body origin to the IMU.")
+        print("Enter the distance from the vehicle body origin to the IMU.")
+        print("The vehicle body origin is usually the center of the rear axle.")
         print("  +X = Forward, +Y = Left, +Z = Up")
         print()
 
@@ -250,8 +335,9 @@ def main():
             changes.append(('IMU Lever Arm', new_device_lever_arm))
 
         # GPS Lever Arm
-        print_section("GPS Antenna to Body Lever Arm (meters)")
-        print("Enter the offset from the vehicle body origin to the GPS antenna.")
+        print_section("Body to GPS Antenna Lever Arm (meters)")
+        print("Enter the distance from the vehicle body origin to the GPS antenna.")
+        print("The vehicle body origin is usually the center of the rear axle.")
         print("  +X = Forward, +Y = Left, +Z = Up")
         print()
 
@@ -299,7 +385,7 @@ def main():
                 z_name = get_direction_name(config.z_direction)
                 print(f"  {name}: X-axis={x_name}, Z-axis={z_name}")
             else:
-                print(f"  {name}: X={config.x:.3f}m, Y={config.y:.3f}m, Z={config.z:.3f}m")
+                print(f"  {name}: X={config.x:.3f} m, Y={config.y:.3f} m, Z={config.z:.3f} m")
 
         print()
         if not prompt_yes_no("Apply these changes?", default=True):
