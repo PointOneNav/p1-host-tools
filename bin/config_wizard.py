@@ -4,8 +4,8 @@
 Interactive configuration wizard for Point One devices.
 
 This wizard guides users through configuring key device parameters:
-- IMU lever arm (X, Y, Z)
-- GPS lever arm (X, Y, Z)
+- Body to IMU lever arm (X, Y, Z)
+- Body to GPS lever arm (X, Y, Z)
 - Device orientation (Z axis direction, X axis direction)
 """
 
@@ -280,7 +280,8 @@ def main():
 
         # IMU Lever Arm
         print_section("IMU to Body Lever Arm (meters)")
-        print("Enter the offset from the vehicle body origin to the IMU.")
+        print("Enter the distance from the vehicle body origin to the IMU.")
+        print("The vehicle body origin is usually the center of the rear axle.")
         print("  +X = Forward, +Y = Left, +Z = Up")
         print()
 
@@ -295,8 +296,9 @@ def main():
             changes.append(('IMU Lever Arm', new_device_lever_arm))
 
         # GPS Lever Arm
-        print_section("GPS Antenna to Body Lever Arm (meters)")
-        print("Enter the offset from the vehicle body origin to the GPS antenna.")
+        print_section("Body to GPS Antenna Lever Arm (meters)")
+        print("Enter the distance from the vehicle body origin to the GPS antenna.")
+        print("The vehicle body origin is usually the center of the rear axle.")
         print("  +X = Forward, +Y = Left, +Z = Up")
         print()
 
