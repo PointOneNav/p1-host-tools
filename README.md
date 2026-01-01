@@ -16,8 +16,10 @@ This application and additional documentation on Point One devices, protocols, a
   - [`p1_runner` - Log Data And Receive GNSS Corrections In Real Time](#p1_runner---log-data-and-receive-gnss-corrections-in-real-time)
     - [Basic Usage](#basic-usage)
     - [Sending GNSS Corrections](#sending-gnss-corrections)
-  - [`config_tool` - Read/Write Device Configuration](#config_tool---readwrite-device-configuration)
+  - [`config_wizard` - Simple Setup Wizard](#config_wizard---simple-setup-wizard)
     - [Basic Usage](#basic-usage-1)
+  - [`config_tool` - Read/Write Device Configuration](#config_tool---readwrite-device-configuration)
+    - [Basic Usage](#basic-usage-2)
     - [Saving Changes](#saving-changes)
   - [`device_bridge` - Connect Two Devices Through The Host Computer](#device_bridge---connect-two-devices-through-the-host-computer)
 
@@ -87,7 +89,7 @@ The following sections cover the most common use case. See `runner.py --help` fo
 
 ### Basic Usage
 
-1. Connect a USB cable from the Point One device to your host computer.
+1. Connect a USB cable from the Point One device to your host computer (if USB)
 2. If used, activate the Python virtual environment as described in [Setup / Installation](#setup--installation).
 3. Run p1_runner to connect the device.
 
@@ -123,6 +125,23 @@ To use another NTRIP service, use the `--ntrip` argument, specifying URL, mountp
 $ python3 bin/runner.py --ntrip http://corrections.com:2101,my_mountpoint,my_username,my_password
 ```
 
+## `config_wizard` - Simple Setup Wizard
+
+`config_wizard.py` is an easy to use tool to query and update basic settings and stored data of a Point One device.
+
+### Basic Usage
+
+1. Connect a USB cable from the Point One device to your host computer (if USB). For IP based devices, get your device's IP address.
+2. If used, activate the Python virtual environment as described in [Setup / Installation](#setup--installation).
+3. Run config_tool to connect the device.
+
+   Linux: `python3 bin/config_wizard.py ADDRESS`
+   
+   Windows: `python bin/config_wizard.py ADDRESS`
+
+   Where `ADDRESS` is something like 192.168.0.1, COM3, /dev/ttyUSB0, or serial://COM3.
+
+
 ## `config_tool` - Read/Write Device Configuration
 
 `config_tool.py` can be used to query and update the setting and stored data on a Point One device.
@@ -131,7 +150,7 @@ The following sections cover the most common use case. See `config_tool.py --hel
 
 ### Basic Usage
 
-1. Connect a USB cable from the Point One device to your host computer.
+1. Connect a USB cable from the Point One device to your host computer (if used). For IP based devices, get your device's IP address.
 2. If used, activate the Python virtual environment as described in [Setup / Installation](#setup--installation).
 3. Run config_tool to connect the device.
 
