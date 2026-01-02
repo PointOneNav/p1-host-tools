@@ -7,8 +7,7 @@ from threading import Event, Lock
 from typing import BinaryIO, Optional, Union
 
 import serial.threaded
-from fusion_engine_client.utils.socket_timestamping import (
-    enable_socket_timestamping, parse_timestamps_from_ancdata)
+from fusion_engine_client.utils.socket_timestamping import enable_socket_timestamping, recv as socket_recv
 from serial import Serial
 
 try:
@@ -160,8 +159,7 @@ class SocketDataSource(DataSource):
         while len(all_data) < size and remaining >= 0:
             ready = select.select([self.socket_in], [], [], remaining)
             if ready[0]:
-                data, ancdata, _, _ = self.socket_in.recvmsg(size - len(all_data), 1024)
-                kernel_ts, _, _ = parse_timestamps_from_ancdata(ancdata)
+                data, kernel_ts, _ = socket_recv(self.socket_in, size - len(all_data))
                 if kernel_ts:
                     self.last_rx_data_posix_timestamp_sec = kernel_ts
 
