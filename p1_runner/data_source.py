@@ -6,20 +6,17 @@ from socket import SocketType
 from threading import Event, Lock
 from typing import BinaryIO, Optional, Union
 
-import serial.threaded
 from fusion_engine_client.utils.socket_timestamping import (
     enable_socket_timestamping, parse_timestamps_from_ancdata)
 try:
-    from serial import Serial
+    import serial
+    import serial.threaded
+    Serial = serial.Serial
 except (ImportError, AttributeError) as exc:
-    import serial as _serial_module
-    if hasattr(_serial_module, "Serial"):
-        Serial = _serial_module.Serial
-    else:
-        raise ImportError(
-            "PySerial is required (pip install pyserial). "
-            "The 'serial' package on PyPI is not compatible."
-        ) from exc
+    raise ImportError(
+        "PySerial is required (pip install pyserial). "
+        "The 'serial' package on PyPI is not compatible."
+    ) from exc
 
 try:
     from websockets.sync.client import ClientConnection
