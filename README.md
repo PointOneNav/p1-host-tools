@@ -1,5 +1,5 @@
 # Point One Host Tools <!-- omit from toc -->
-Tools for interfacing with Point One FusionEngine devices from a host computer. These tools are compatible with Windows, macOS, and Linux. 
+Tools for interfacing with Point One FusionEngine devices from a host computer. These tools are compatible with Windows, macOS, and Linux.
 
 This set of Python applications provides command-line tools for control, configuration, and data collection from Point One devices.
 
@@ -20,6 +20,7 @@ This application and additional documentation on Point One devices, protocols, a
     - [Basic Usage](#basic-usage-1)
     - [Saving Changes](#saving-changes)
   - [`device_bridge` - Connect Two Devices Through The Host Computer](#device_bridge---connect-two-devices-through-the-host-computer)
+- [Firmware Tools](#firmware-tools)
 
 <!-- tocstop -->
 
@@ -136,7 +137,7 @@ The following sections cover the most common use case. See `config_tool.py --hel
 3. Run config_tool to connect the device.
 
    Linux: `python3 bin/config_tool.py COMMAND [OPTIONS...]`
-   
+
    Windows: `python bin/config_tool.py COMMAND [OPTIONS...]`
 
 
@@ -178,3 +179,10 @@ python3 bin/device_bridge.py /dev/ttyUSB0 /dev/ttyUSB3
 ```
 
 See `device_bridge.py --help` for more detailed usage information and examples.
+
+# Firmware Tools
+
+The `firwmare_tools/` directory contains tools for updating the firmware on certain Point One devices.
+
+Note that these tools are intended for use with specific devices. Separate firmware update tools are not necessary for
+most Point One products.

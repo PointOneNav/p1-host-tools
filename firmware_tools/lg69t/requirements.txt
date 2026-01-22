@@ -1,0 +1,2 @@
+fusion-engine-client>=1.24.0
+pyserial
