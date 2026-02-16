@@ -1801,7 +1801,7 @@ diagnostic log reset:
     # config_tool.py stop
     help = 'Send a stop command to either stop logging or stop the navigation engine.'
     shutdown_parser = command_subparsers.add_parser(
-        'stop', aliases=['shutdown'],
+        'stop',
         help=help,
         description=help)
     choices = {
@@ -1820,7 +1820,7 @@ The type of shutdown to be performed: {''.join([f'{newline}- {k} - {v}' for k, v
     # config_tool.py start
     help = 'Send a start command to either start logging or start the navigation engine.'
     startup_parser = command_subparsers.add_parser(
-        'start', aliases=['startup'],
+        'start',
         help=help,
         description=help)
     choices = {
