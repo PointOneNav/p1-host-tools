@@ -1409,7 +1409,6 @@ using their existing values.''')
         'device_id',
         help='Set the user device ID (max 32 characters).')
 
-    INTERFACES_WITH_EXPLICIT_ENUM = ['current', 'uart1', 'uart2']
     for interface_name, interface_id in sorted(INTERFACE_MAP.items()):
         supported_fe_messages = '\n'.join([
             f'  - {message_type_to_class[m].__name__} ({int(m)})'
@@ -1500,15 +1499,6 @@ Example usage:
   config_tool.py read {interface_name} message_rate fe 11000 # Read FusionEngine IMU rate
   config_tool.py read {interface_name} message_rate fe gnss* # Read all GNSS message rates'''
 
-        if interface_name in INTERFACES_WITH_EXPLICIT_ENUM:
-            # config_tool.py read uartN_message_rate
-            param_parser.add_parser(
-                f'{interface_name}_message_rate',
-                help=help,
-                parents=[read_output_rate_parser],
-                description=message_rate_description,
-                epilog=epilog)
-
         # config_tool.py read INTERFACE_NAME message_rate
         read_interface_config_type_parsers.add_parser(
             'message_rate', parents=[read_output_rate_parser],
@@ -1551,15 +1541,6 @@ FusionEngine message types:
 
 NMEA message types:
 {supported_nmea_messages}'''
-
-        if interface_name in INTERFACES_WITH_EXPLICIT_ENUM:
-            # config_tool.py apply uartN_message_rate
-            apply_param_parser.add_parser(
-                f'{interface_name}_message_rate',
-                parents=[apply_output_rate_parser],
-                help=help,
-                description=message_rate_description,
-                epilog=epilog)
 
         # config_tool.py apply INTERFACE_NAME message_rate
         apply_interface_config_type_parsers.add_parser(
@@ -1818,9 +1799,9 @@ diagnostic log reset:
         help="The file containing the exported data.")
 
     # config_tool.py stop
-    help = 'Issue a navigation engine shutdown request.'
+    help = 'Send a stop command to either stop logging or stop the navigation engine.'
     shutdown_parser = command_subparsers.add_parser(
-        'stop', aliases=['shutdown'],
+        'stop',
         help=help,
         description=help)
     choices = {
@@ -1837,9 +1818,9 @@ diagnostic log reset:
 The type of shutdown to be performed: {''.join([f'{newline}- {k} - {v}' for k, v in choices.items()])}""")
 
     # config_tool.py start
-    help = 'Issue a navigation engine startup request.'
+    help = 'Send a start command to either start logging or start the navigation engine.'
     startup_parser = command_subparsers.add_parser(
-        'start', aliases=['startup'],
+        'start',
         help=help,
         description=help)
     choices = {

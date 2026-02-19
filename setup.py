@@ -14,6 +14,7 @@ requirements = [
     "psutil>=5.9.4",
     "pynmea2~=1.18.0",
     "pyserial~=3.5",
+    "pyvirtualserialports~=2.0.0",
     "urllib3>=1.21.1",
     # Note: Using the P1 fork of ntripstreams until fixes are mainlined.
     "ntripstreams @ https://github.com/PointOneNav/ntripstreams/archive/d2c8b8e55ae64e440e58bccf290e4d14095aa6e4.zip#egg=ntripstreams",

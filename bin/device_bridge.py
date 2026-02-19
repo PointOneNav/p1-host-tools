@@ -10,6 +10,7 @@ from datetime import datetime
 
 import serial
 import serial.threaded
+from virtualserialports import VirtualSerialPorts
 
 # Add the parent directory to the search path to enable p1_runner package imports when not installed in Python.
 repo_root = os.path.normpath(os.path.join(os.path.dirname(__file__), '..'))
@@ -54,10 +55,35 @@ class SerialDataHandler(DataHandler, serial.threaded.Protocol):
 
 class SerialConnection:
     def __init__(self, port, baudrate=460800):
-        self.serial = serial.Serial(port=port, baudrate=baudrate)
-        self.name = self.serial.name
+        if port == 'virtual':
+            # Virtual ports work as a pair:
+            # - ports[0] is used internally by the application to send to/receive from ports[1]
+            # - ports[1] is what the user actually connects to
+            #
+            # Note that baud rate doesn't matter for virtual serial ports, but is required by PySerial. The user can
+            # connect to ports[1] with any baud rate and it'll work.
+            self.virtual_serial = VirtualSerialPorts(2)
+            self.virtual_serial.open()
+            self.virtual_serial.start()
+            self.serial = serial.Serial(port=self.virtual_serial.ports[0], baudrate=baudrate)
+            self.name = f'tty://{self.virtual_serial.ports[1]}'
+        else:
+            self.virtual_serial = None
+            self.serial = serial.Serial(port=port, baudrate=baudrate)
+            self.name = f'tty://{self.serial.name}:{baudrate}'
         self.handler = None
         self.read_thread = None
+
+    def __del__(self):
+        self.serial.close()
+        self.serial = None
+
+        if self.virtual_serial is not None:
+            self.virtual_serial.stop()
+            self.virtual_serial.close()
+            self.virtual_serial = None
+
+        super().__del__()
 
     def start(self, other_device):
         if other_device is not None:
@@ -349,7 +375,7 @@ clients and serial device /dev/ttyUSB0:
                          device_a.get_bytes_sent(), device_b.name))
 
         logger.info('Connecting device A (%s) %s device B (%s).' %
-                    (options.device_a, direction_str, options.device_b))
+                    (device_a.name, direction_str, device_b.name))
 
         logger.debug('Starting device A thread.')
         if options.direction == 'both' or options.direction == 'a-b':
