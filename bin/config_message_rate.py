@@ -156,7 +156,10 @@ def _get_message_ids(protocol: ProtocolType, query: str) -> List[int]:
         nmea_type_by_name = {str(t): t for t in NmeaMessageType}
         message_ids = _search_message_ids(nmea_type_by_name, query)
     elif protocol == ProtocolType.FUSION_ENGINE:
+        # Map "PoseMessage" -> MessageType.POSE_MESSAGE
         types = {k: v for k, v in message_type_by_name.items() if not k.endswith('Input')}
+        # Also allow "POSE_MESSAGE" -> MessageType.POSE_MESSAGE
+        types.update({v.name: v for v in types.values()})
         message_ids = _search_message_ids(types, query)
     else:
         message_ids = [int(s.strip()) for s in query.split(',')]
