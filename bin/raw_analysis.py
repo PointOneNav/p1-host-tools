@@ -37,7 +37,8 @@ EOF_FORMAT = 'eof'
 
 
 def is_rtcm_with_station_id(msg_id):
-    return msg_id == 1005 or msg_id == 1006 or (msg_id >= 1071 and msg_id <= 1227)
+    return (msg_id == 1005 or msg_id == 1006 or
+            (msg_id >= 1071 and msg_id <= 1227 and (msg_id % 10) not in (0, 8, 9)))
 
 
 def get_output_file_path(input_path: str, postfix: str, output_dir: Optional[str] = None,
