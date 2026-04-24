@@ -121,11 +121,10 @@ def index_messages(input_path, options):
                             (total_bytes_read, bytes_to_process, 100.0 * float(total_bytes_read) / bytes_to_process,
                                 elapsed_sec, total_bytes_read / elapsed_sec / 1e6))
 
-            if total_bytes_read > bytes_to_process:
+            if total_bytes_read >= bytes_to_process:
                 break
 
             data = in_fd.read(READ_SIZE)
-
             if len(data) == 0:
                 break
 
