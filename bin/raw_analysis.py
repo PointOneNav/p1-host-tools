@@ -54,10 +54,8 @@ def get_fd(input_path: str, options):
 
 def index_messages(input_path, options):
     rtcm_framer = RTCMFramer() if 'rtcm' in options.format else None
-    fe_framer = FusionEngineDecoder(
-        max_payload_len_bytes=4096, return_offset=True) if 'fe' in options.format else None
-    nmea_framer = NMEAFramer(
-        return_offset=True) if 'nmea' in options.format else None
+    fe_framer = FusionEngineDecoder(max_payload_len_bytes=16536, return_offset=True) if 'fe' in options.format else None
+    nmea_framer = NMEAFramer(return_offset=True) if 'nmea' in options.format else None
 
     in_fd = get_fd(input_path, options)
     skip_bytes = options.skip_bytes
