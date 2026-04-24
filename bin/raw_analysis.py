@@ -64,10 +64,11 @@ def _create_framers(options, return_bytes=False):
 
 def _get_index_path(input_path, options):
     if len(options.format) < len(FORMAT_STRS):
-        postfix = '_' + '_'.join(sorted(options.format)) + '_index.csv'
+        postfix = '.index.' + '_'.join(sorted(options.format)) + '.csv'
     else:
-        postfix = '_index.csv'
-    return get_output_file_path(input_path, postfix, output_dir=options.output_dir, prefix=options.prefix)
+        postfix = '.index.csv'
+    return get_output_file_path(input_path, postfix, output_dir=options.output_dir,
+                                prefix=None if options.prefix == '-' else options.prefix)
 
 
 def _open_output_files(input_path, options, text_nmea=False):
@@ -80,11 +81,6 @@ def _open_output_files(input_path, options, text_nmea=False):
     output_map = {}
 
     if write_to_stdout:
-        # Only one format may be written to stdout - error if multiple are requested.
-        if len(options.format) > 1:
-            _logger.error('Only one data type may be written to stdout.')
-            sys.exit(1)
-
         # Map the single requested format to stdout. NMEA is text when the framer produces strings, RTCM and FE are
         # always binary.
         for fmt in ('nmea', 'rtcm', 'fe'):
@@ -265,7 +261,7 @@ def index_messages(input_path, options):
         bytes_to_process = options.bytes_to_process
 
     # Determine the path to the index file. If the file exists already, read it and return. If not, generate it.
-    index_file_full = get_output_file_path(input_path, '_index.csv', output_dir=options.output_dir,
+    index_file_full = get_output_file_path(input_path, '.index.csv', output_dir=options.output_dir,
                                            prefix=options.prefix)
     index_file = _get_index_path(input_path, options)
 
@@ -385,8 +381,8 @@ def separate_and_index(input_path, options):
     # Open output files for extraction if requested.
     output_map = _open_output_files(input_path, options, text_nmea=True) if options.extract else None
 
-    # Open an index CSV only when writing output to disk, skip it when streaming to stdout.
-    index_path = None if write_to_stdout else _get_index_path(input_path, options)
+    # Open an index CSV only when reading from to disk, skip it when reading from stdin.
+    index_path = None if read_from_stdin else _get_index_path(input_path, options)
 
     rtcm_framer, fe_framer, nmea_framer = _create_framers(options, return_bytes=options.extract)
 
@@ -524,6 +520,11 @@ def raw_analysis(options):
     else:
         options.format = FORMAT_STRS
     logger.info(f"Processing {options.format}.")
+
+    # Only one format may be written to stdout - error if multiple are requested.
+    if write_to_stdout and len(options.format) > 1:
+        _logger.error('Only one data type may be written to stdout.')
+        sys.exit(1)
 
     # Use the EXTERNAL_UNFRAMED_GNSS unless the user explicitly specified different P1BinType.
     if options.p1bin_type is not None:
