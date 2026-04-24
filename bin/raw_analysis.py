@@ -44,7 +44,9 @@ def get_output_file_path(input_path, postfix, output_dir=None, prefix=None):
 
 
 def get_fd(input_path: str, options):
-    if input_path.endswith('.p1bin'):
+    if input_path == '-':
+        return sys.stdin.buffer
+    elif input_path.endswith('.p1bin'):
         _logger.info(f"Reading raw data from p1bin {options.p1bin_type}.")
         return P1BinFileStream(input_path, options.p1bin_type, ignore_index=options.ignore_index,
                                show_read_progress=True)
@@ -225,6 +227,203 @@ def generate_separated_logs(input_path, indexes, options):
             output_map[index[0]].write(data)
 
 
+def separate_and_index(input_path, options):
+    # Setup.
+    rtcm_framer = RTCMFramer() if 'rtcm' in options.format else None
+    fe_framer = FusionEngineDecoder(max_payload_len_bytes=16536, return_bytes=True, return_offset=True) \
+        if 'fe' in options.format else None
+    nmea_framer = NMEAFramer(return_offset=True) if 'nmea' in options.format else None
+
+    index = []
+    total_bytes_read = 0
+
+    # Open the file and skip the first N bytes if requested.
+    in_fd = get_fd(input_path, options)
+    read_from_stdin = in_fd is sys.stdin.buffer
+    write_to_stdout = options.prefix == '-'
+
+    skip_bytes = options.skip_bytes
+    if read_from_stdin:
+        file_size = 0
+        if options.bytes_to_process is None:
+            bytes_to_process = sys.maxsize
+        else:
+            bytes_to_process = options.bytes_to_process
+
+        try:
+            in_fd.read(skip_bytes)
+        except (BrokenPipeError, KeyboardInterrupt):
+            # User hit Ctrl-C -- done processing.
+            return index, total_bytes_read
+    else:
+        in_fd.seek(0, io.SEEK_END)
+        file_size = in_fd.tell()
+        in_fd.seek(skip_bytes, 0)
+
+        bytes_to_process = file_size - skip_bytes
+        if options.bytes_to_process is not None and options.bytes_to_process < bytes_to_process:
+            bytes_to_process = options.bytes_to_process
+
+    # Open output files if extracting data.
+    output_map = {}
+    current_base_id = -1
+    rtcm_file_idx = 0
+    if options.extract:
+        if write_to_stdout:
+            if len(options.format) > 1:
+                _logger.error('Only one data type may be written to stdout.')
+                sys.exit(1)
+            elif 'nmea' in options.format:
+                output_map['nmea'] = sys.stdout
+            elif 'rtcm' in options.format:
+                output_map['rtcm'] = sys.stdout.buffer
+            elif 'fe' in options.format:
+                output_map['fe'] = sys.stdout.buffer
+        else:
+            if 'nmea' in options.format:
+                # Note need the write binary to avoid needing to decode the ascii in the for loop.
+                output_map['nmea'] = open(get_output_file_path(input_path, '.nmea',
+                                                               output_dir=options.output_dir, prefix=options.prefix),
+                                          'wt')
+            if 'rtcm' in options.format:
+                suffix = '_0.rtcm3' if options.split_rtcm_base_id else '.rtcm3'
+                output_map['rtcm'] = open(get_output_file_path(input_path, suffix,
+                                                               output_dir=options.output_dir, prefix=options.prefix),
+                                          'wb')
+            if 'fe' in options.format:
+                output_map['fe'] = open(get_output_file_path(input_path, '.p1log',
+                                                             output_dir=options.output_dir, prefix=options.prefix),
+                                        'wb')
+
+    # Open an index file only if writing to disk.
+    if write_to_stdout:
+        index_path = None
+    elif read_from_stdin:
+        if len(options.format) < len(FORMAT_STRS):
+            index_file = get_output_file_path(
+                input_path=None if read_from_stdin else input_path,
+                postfix='_' + '_'.join(options.format) + '_index.csv',
+                output_dir=options.output_dir,
+                prefix=options.prefix)
+        else:
+            index_file = get_output_file_path(
+                input_path=None if read_from_stdin else input_path,
+                postfix='_index.csv',
+                output_dir=options.output_dir,
+                prefix=options.prefix)
+    else:
+        index_path = get_output_file_path(input_path, '_index.csv', output_dir=options.output_dir)
+
+    if index_path is None:
+        timestamp_fd = None
+    else:
+        timestamp_fd = open(index_path, 'wt')
+        timestamp_fd.write(
+            'Protocol, ID, Offset (Bytes), Length (Bytes), P1 Time\n')
+
+    # Status printout helper.
+    def _print_status(elapsed_sec):
+        if file_size == 0:
+            _logger.log(logging.INFO,
+                        'Processed %d bytes. [elapsed=%.1f sec, rate=%.1f MB/s]' %
+                        (total_bytes_read, elapsed_sec, total_bytes_read / elapsed_sec / 1e6))
+        else:
+            _logger.log(logging.INFO,
+                        'Processed %d/%d bytes (%.1f%%). [elapsed=%.1f sec, rate=%.1f MB/s]' %
+                        (total_bytes_read, bytes_to_process, 100.0 * float(total_bytes_read) / bytes_to_process,
+                            elapsed_sec, total_bytes_read / elapsed_sec / 1e6))
+
+    # Now read from the file.
+    start_time = datetime.now()
+    next_update_time = 0
+    try:
+        while True:
+            # Update status.
+            elapsed_sec = (datetime.now() - start_time).total_seconds()
+            if elapsed_sec > next_update_time:
+                _print_status(elapsed_sec)
+                next_update_time = elapsed_sec + 5
+
+            # If we've hit the limit, we're done.
+            if total_bytes_read >= bytes_to_process:
+                break
+
+            # Otherwise, read more data. If reading from stdin, this will block unless interrupted.
+            data = in_fd.read(READ_SIZE)
+            if len(data) == 0:
+                break
+
+            total_bytes_read += len(data)
+
+            # Index the data:
+            #   Protocol, Message ID, Stream/File Offset, Size, P1 Time (if applicable)
+            current_block_entries = []
+            if rtcm_framer is not None:
+                for msg in rtcm_framer.on_data(data, return_size=True, return_offset=True,
+                                               return_bytes=options.extract):
+                    message_id = msg["message"].message_id
+                    current_block_entries.append(
+                        ('rtcm', message_id, skip_bytes + msg["offset"], msg["size"], ''))
+                    if options.extract:
+                        raw_bytes = msg['bytes']
+
+                        # If requested, open a new file if the base station changes.
+                        if options.split_rtcm_base_id and is_msm_id(message_id):
+                            # offset 36 bits, length 12 bits.
+                            base_id = ((raw_bytes[4] & 0xF) << 8) + raw_bytes[5]
+                            if base_id != current_base_id:
+                                if current_base_id != -1:
+                                    output_map['rtcm'].close()
+                                    rtcm_file_idx += 1
+                                    path = get_output_file_path(input_path, f'_{rtcm_file_idx}.rtcm3',
+                                                               output_dir=options.output_dir, prefix=options.prefix)
+                                    output_map['rtcm'] = open(path, 'wb')
+                                _logger.info(f"Writing for base station id: {base_id}")
+                                current_base_id = base_id
+
+                        output_map['rtcm'].write(raw_bytes)
+            if fe_framer is not None:
+                for header, payload, raw_data, offset_bytes in fe_framer.on_data(data):
+                    p1_time = payload.get_p1_time() if isinstance(payload, MessagePayload) else None
+                    current_block_entries.append(
+                        ('fe', int(header.message_type), skip_bytes + offset_bytes,
+                         header.get_message_size(),
+                         '%.3f' % float(p1_time) if p1_time is not None else ''))
+                    if options.extract:
+                        output_map['fe'].write(raw_data)
+            if nmea_framer is not None:
+                for msg in nmea_framer.on_data(data):
+                    current_block_entries.append(
+                        ('nmea', msg[0].split(',')[0][1:], skip_bytes + msg[1], len(msg[0]), ''))
+                    if options.extract:
+                        output_map['nmea'].write(msg[0])
+
+            # The returned index omits P1 time.
+            index.extend(current_block_entries[:4])
+
+            if timestamp_fd is not None:
+                for entry in sorted(current_block_entries, key=lambda e: e[2]):
+                    timestamp_fd.write(
+                        f'{",".join([str(elem) for elem in entry])}\n')
+    except (BrokenPipeError, KeyboardInterrupt):
+        # User hit Ctrl-C -- done processing.
+        pass
+
+    # Write index file EOF.
+    if timestamp_fd is not None:
+        timestamp_fd.write(f'{EOF_FORMAT},0,{bytes_to_process},0,\n')
+
+    # Sort the data.
+    index = sorted(index, key=lambda e: e[2])
+
+    # Print status one last time.
+    elapsed_sec = (datetime.now() - start_time).total_seconds()
+    _print_status(elapsed_sec)
+
+    return index, total_bytes_read
+
+
+
 parser = ArgumentParser(description="""\
 Analyze contents of a input.raw or input.p1bin and create csv with offset and
 length of each NMEA, RTCM, and FE message. Print out locations of data gaps.
@@ -242,10 +441,12 @@ parser.add_argument('-i', '--ignore-index', action='store_true',
                     help="If set, re-run index generation.")
 parser.add_argument('-o', '--output-dir', type=str, metavar='DIR',
                     help="The directory where output will be stored. Defaults to the parent directory of the input"
-                    "file, or to the log directory if reading from a log.")
+                    "file, or to the log directory if reading from a log. When reading from stdin, defaults to the "
+                    "current working directory.")
 parser.add_argument('-p', '--prefix', type=str,
-                    help="Use the specified prefix for the output file: `<prefix>.p1log`. Otherwise, use the "
-                    "filename of the input data file.")
+                    help="Use the specified prefix for the output file: <prefix>.p1log, <prefix>.nmea, etc. Otherwise, "
+                         "use the filename of the input data file. Set to '-' to write to stdout. If not specified and "
+                         "reading from stdin, output will be written to stdout.")
 parser.add_argument(
     '-t', '--p1bin-type', type=str, action='append',
     help="An optional list message types to analyse from a p1bin file. Defaults to 'EXTERNAL_UNFRAMED_GNSS'. Only used "
@@ -271,41 +472,69 @@ parser.add_argument('--split-rtcm-base-id', action=ExtendedBooleanAction,
 parser.add_argument('--check-gaps', action=ExtendedBooleanAction, default=True,
                     help="If set, search for unframed bytes that do not belong to a complete message from any "
                          "protocol, indicating the existence of a gap in the data stream.")
-parser.add_argument('log',
+parser.add_argument('log', nargs='?', default='-',
                     help="The log to be read. May be one of:\n"
                     "- The path to a binary log file\n"
                     "- The path to a FusionEngine log directory\n"
                     "- A pattern matching a FusionEngine log directory under the specified base directory "
-                    "(see find_fusion_engine_log() and --log-base-dir)")
+                    "(see find_fusion_engine_log() and --log-base-dir)\n"
+                    "- '-' or omit to read from stdin")
 
 
 def raw_analysis(options):
+    # If we're reading from stdin, we have some different behaviors below:
+    # - If the user does not specify --prefix so we cannot set an output filename, we will write output to stdout
+    # - If the user does specify --prefix but doesn't set --output-dir, we'll write to CWD
+    # - When writing to stdout, we'll redirect logger prints to stderr
+    read_from_stdin = options.log == '-'
+    if read_from_stdin:
+        if options.prefix is None:
+            options.prefix = '-'
+
+        if options.output_dir is None:
+            options.output_dir = os.getcwd()
+
+    write_to_stdout = options.prefix == '-'
+
+    # When writing to stdout, we cannot split RTCM data into multiple files (there is only one stdout).
+    if write_to_stdout:
+        options.split_rtcm_base_id = False
+
     # Configure logging.
+    if write_to_stdout:
+        logging_stream = sys.stderr
+    else:
+        logging_stream = sys.stdout
+
     logger = logging.getLogger('point_one')
     if options.verbose >= 1:
         logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(name)s:%(lineno)d - %(message)s',
-                            stream=sys.stdout)
+                            stream=logging_stream)
         if options.verbose == 1:
             logger.setLevel(logging.DEBUG)
     else:
-        logging.basicConfig(level=logging.INFO,
-                            format='%(message)s', stream=sys.stdout)
+        logging.basicConfig(level=logging.INFO, format='%(message)s', stream=logging_stream)
 
     # Locate the input file and set the output directory.
-    try:
-        input_path, output_dir, log_id = find_log_file(options.log, candidate_files=['input.raw', 'input.p1bin'],
-                                                       return_output_dir=True, return_log_id=True,
-                                                       log_base_dir=options.log_base_dir)
+    if read_from_stdin:
+        input_path = options.log
+        output_dir = options.output_dir
+        log_id = None
+    else:
+        try:
+            input_path, output_dir, log_id = find_log_file(options.log, candidate_files=['input.raw', 'input.p1bin'],
+                                                           return_output_dir=True, return_log_id=True,
+                                                           log_base_dir=options.log_base_dir)
 
-        if log_id is None:
-            logger.info('Loading %s.' % os.path.basename(input_path))
-        else:
-            logger.info('Loading %s from log %s.' %
-                        (os.path.basename(input_path), log_id))
+            if log_id is None:
+                logger.info('Loading %s.' % os.path.basename(input_path))
+            else:
+                logger.info('Loading %s from log %s.' %
+                            (os.path.basename(input_path), log_id))
 
-    except FileNotFoundError as e:
-        logger.error(str(e))
-        sys.exit(1)
+        except FileNotFoundError as e:
+            logger.error(str(e))
+            sys.exit(1)
 
     if options.format is not None:
         # If the user specified a set of formats, lookup their type values. Below, we will limit the processing to only
@@ -316,9 +545,7 @@ def raw_analysis(options):
                 logger.error(f'Invalid format "{f}".')
                 sys.exit(1)
         options.format = format
-        format_str = '_' + '_'.join(format)
     else:
-        format_str = ''
         options.format = FORMAT_STRS
     logger.info(f"Processing {options.format}.")
 
@@ -341,14 +568,23 @@ def raw_analysis(options):
     else:
         options.p1bin_type = [P1BinType.EXTERNAL_UNFRAMED_GNSS]
 
-    logger.info(f"Output index stored in '{output_dir}'.")
-    index, file_size_bytes = index_messages(input_path, options)
+    # If reading from stdin, we can't preemptively index the data. Build the index as we go.
+    if read_from_stdin:
+        if options.extract:
+            logger.info(f"Output stored in '{output_dir}'.")
+        index, file_size_bytes = separate_and_index(input_path, options)
+        if options.check_gaps:
+            find_gaps(index)
+    # If reading from a file, index the file and then perform the requested operation.
+    else:
+        logger.info(f"Output stored in '{output_dir}'.")
+        index, file_size_bytes = index_messages(input_path, options)
 
-    if options.check_gaps:
-        find_gaps(index)
+        if options.check_gaps:
+            find_gaps(index)
 
-    if options.extract:
-        generate_separated_logs(input_path, index, options)
+        if options.extract:
+            generate_separated_logs(input_path, index, options)
 
     _logger.info("")
     format_string = '| {:<10} | {:>10} | {:>10} |'
