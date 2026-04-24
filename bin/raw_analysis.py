@@ -36,7 +36,7 @@ FORMAT_STRS = set(('fe', 'nmea', 'rtcm'))
 EOF_FORMAT = 'eof'
 
 
-def is_msm_id(msg_id):
+def is_rtcm_with_station_id(msg_id):
     return msg_id == 1005 or msg_id == 1006 or (msg_id >= 1071 and msg_id <= 1227)
 
 
@@ -120,7 +120,7 @@ def _check_rtcm_base_station(input_path: str,
                              current_base_id: int,
                              rtcm_file_idx: int) -> Tuple[int, int]:
     # If splitting by base station ID, open a new output file each time the base changes.
-    if options.split_rtcm_base_id and is_msm_id(message_id):
+    if options.split_rtcm_base_id and is_rtcm_with_station_id(message_id):
         # Base station ID is encoded at bit offset 36, length 12 bits.
         base_id = ((raw_data[4] & 0xF) << 8) + raw_data[5]
         if base_id != current_base_id:
