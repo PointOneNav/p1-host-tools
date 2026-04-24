@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import BinaryIO, Dict, List, Optional, Tuple
 
 import argparse
+import math
 import io
 import os
 import sys
@@ -178,7 +179,8 @@ def _stream_and_index(input_path: str,
             _logger.info('Processed %d/%d bytes (%.1f%%). [elapsed=%.1f sec, rate=%.1f MB/s]' %
                          (total_bytes_read, bytes_to_process,
                           100.0 * float(total_bytes_read) / bytes_to_process,
-                          elapsed_sec, total_bytes_read / elapsed_sec / 1e6))
+                          elapsed_sec,
+                          math.nan if elapsed_sec == 0.0 else total_bytes_read / elapsed_sec / 1e6))
 
     # Read all incoming data until EOF or Ctrl-C.
     try:
