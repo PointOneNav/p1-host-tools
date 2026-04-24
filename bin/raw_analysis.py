@@ -54,14 +54,208 @@ def get_fd(input_path: str, options):
         return open(input_path, 'rb')
 
 
-def index_messages(input_path, options):
-    rtcm_framer = RTCMFramer() if 'rtcm' in options.format else None
-    fe_framer = FusionEngineDecoder(max_payload_len_bytes=16536, return_offset=True) if 'fe' in options.format else None
-    nmea_framer = NMEAFramer(return_offset=True) if 'nmea' in options.format else None
+def _create_framers(options, return_bytes=False):
+    rtcm = RTCMFramer() if 'rtcm' in options.format else None
+    fe = FusionEngineDecoder(max_payload_len_bytes=16536, return_offset=True,
+                             return_bytes=return_bytes) if 'fe' in options.format else None
+    nmea = NMEAFramer(return_offset=True) if 'nmea' in options.format else None
+    return rtcm, fe, nmea
 
+
+def _get_index_path(input_path, options):
+    if len(options.format) < len(FORMAT_STRS):
+        postfix = '_' + '_'.join(sorted(options.format)) + '_index.csv'
+    else:
+        postfix = '_index.csv'
+    return get_output_file_path(input_path, postfix, output_dir=options.output_dir, prefix=options.prefix)
+
+
+def _open_output_files(input_path, options, text_nmea=False):
+    """!
+    @brief Open output files for extraction.
+
+    @return An `output_map` dict keyed by protocol name.
+    """
+    write_to_stdout = options.prefix == '-'
+    output_map = {}
+
+    if write_to_stdout:
+        # Only one format may be written to stdout - error if multiple are requested.
+        if len(options.format) > 1:
+            _logger.error('Only one data type may be written to stdout.')
+            sys.exit(1)
+
+        # Map the single requested format to stdout. NMEA is text when the framer produces strings, RTCM and FE are
+        # always binary.
+        for fmt in ('nmea', 'rtcm', 'fe'):
+            if fmt in options.format:
+                output_map[fmt] = sys.stdout if (fmt == 'nmea' and text_nmea) else sys.stdout.buffer
+                break
+    else:
+        # Open a dedicated output file for each requested protocol.
+        if 'nmea' in options.format:
+            output_map['nmea'] = open(
+                get_output_file_path(input_path, '.nmea', output_dir=options.output_dir, prefix=options.prefix),
+                'wt' if text_nmea else 'wb')
+        if 'rtcm' in options.format:
+            # When splitting by base station, start with file index 0. New files are opened as the base ID changes.
+            suffix = '_0.rtcm3' if options.split_rtcm_base_id else '.rtcm3'
+            output_map['rtcm'] = open(
+                get_output_file_path(input_path, suffix, output_dir=options.output_dir, prefix=options.prefix), 'wb')
+        if 'fe' in options.format:
+            output_map['fe'] = open(
+                get_output_file_path(input_path, '.p1log', output_dir=options.output_dir, prefix=options.prefix), 'wb')
+
+    return output_map
+
+
+def _stream_and_index(input_path, in_fd, options,
+                      rtcm_framer, fe_framer, nmea_framer,
+                      skip_bytes, bytes_to_process, file_size,
+                      output_map, index_path):
+    """
+    @brief Core read loop: parse messages, write index CSV, and optionally extract to output files.
+
+    Pass `output_map=None` for index-only (no extraction). `file_size=0` means stdin (progress shown as raw bytes).
+
+    @return Returns a tuple: `(index, total_bytes_read)`.
+    """
+    extract = output_map is not None
+    index = []
+    total_bytes_read = 0
+    current_base_id = -1
+    rtcm_file_idx = 0
+
+    # Open the index file if requested.
+    timestamp_fd = None
+    if index_path is not None:
+        timestamp_fd = open(index_path, 'wt')
+        timestamp_fd.write('Protocol, ID, Offset (Bytes), Length (Bytes), P1 Time\n')
+
+    start_time = datetime.now()
+    next_update_time = 0
+
+    # Status print helper function.
+    def _print_status(elapsed_sec):
+        if file_size == 0:
+            _logger.info('Processed %d bytes. [elapsed=%.1f sec, rate=%.1f MB/s]' %
+                         (total_bytes_read, elapsed_sec, total_bytes_read / elapsed_sec / 1e6))
+        else:
+            _logger.info('Processed %d/%d bytes (%.1f%%). [elapsed=%.1f sec, rate=%.1f MB/s]' %
+                         (total_bytes_read, bytes_to_process,
+                          100.0 * float(total_bytes_read) / bytes_to_process,
+                          elapsed_sec, total_bytes_read / elapsed_sec / 1e6))
+
+    # Read all incoming data until EOF or Ctrl-C.
+    try:
+        while True:
+            # Print a progress update every 5 seconds.
+            elapsed_sec = (datetime.now() - start_time).total_seconds()
+            if elapsed_sec > next_update_time:
+                _print_status(elapsed_sec)
+                next_update_time = elapsed_sec + 5
+
+            if total_bytes_read >= bytes_to_process:
+                break
+
+            data = in_fd.read(READ_SIZE)
+            if not data:
+                break
+
+            total_bytes_read += len(data)
+
+            # Parse all three protocols from the current chunk. Each entry is a
+            # (protocol, id, stream_offset, size, p1_time) tuple.
+            #
+            # Note that we pass the entire chunk to each framer in sequence, not one byte at a time, so the framers may
+            # output messages out of order.
+            entries = []
+            if rtcm_framer is not None:
+                for msg in rtcm_framer.on_data(data, return_size=True, return_offset=True, return_bytes=extract):
+                    message_id = msg["message"].message_id
+                    offset_bytes = msg["offset"]
+                    size_bytes = msg["size"]
+                    entries.append(('rtcm', message_id, skip_bytes + offset_bytes, size_bytes, ''))
+
+                    if extract:
+                        raw_data = msg['bytes']
+
+                        # If splitting by base station ID, open a new output file each time the base changes.
+                        if options.split_rtcm_base_id and is_msm_id(message_id):
+                            # Base station ID is encoded at bit offset 36, length 12 bits.
+                            base_id = ((raw_data[4] & 0xF) << 8) + raw_data[5]
+                            if base_id != current_base_id:
+                                if current_base_id != -1:
+                                    output_map['rtcm'].close()
+                                    rtcm_file_idx += 1
+                                    output_map['rtcm'] = open(get_output_file_path(
+                                        input_path, f'_{rtcm_file_idx}.rtcm3',
+                                        output_dir=options.output_dir, prefix=options.prefix), 'wb')
+                                _logger.info(f"Writing for base station id: {base_id}")
+                                current_base_id = base_id
+
+                        output_map['rtcm'].write(raw_data)
+
+            if fe_framer is not None:
+                for result in fe_framer.on_data(data):
+                    # The framer returns raw bytes as a third element only when constructed with return_bytes=True.
+                    if extract:
+                        header, payload, raw_data, offset_bytes = result
+                    else:
+                        header, payload, offset_bytes = result
+                        raw_data = None
+
+                    message_id = int(header.message_type)
+                    size_bytes = header.get_message_size()
+                    p1_time = payload.get_p1_time() if isinstance(payload, MessagePayload) else None
+                    entries.append(('fe', message_id, skip_bytes + offset_bytes, size_bytes,
+                                    '%.3f' % float(p1_time) if p1_time is not None else ''))
+
+                    if extract:
+                        output_map['fe'].write(raw_data)
+
+            if nmea_framer is not None:
+                for msg in nmea_framer.on_data(data):
+                    # Note: NMEA messages are strings, not binary.
+                    raw_data = msg[0]
+                    message_id = raw_data.split(',')[0][1:]
+                    offset_bytes = msg[1]
+                    size_bytes = len(raw_data)
+                    entries.append(('nmea', message_id, skip_bytes + offset_bytes, size_bytes, ''))
+
+                    if extract:
+                        output_map['nmea'].write(raw_data)
+
+            # Accumulate index entries, dropping the P1 time field which is only written to the CSV.
+            index.extend(e[:4] for e in entries)
+
+            # Write entries to the index CSV sorted by byte offset within this chunk.
+            if timestamp_fd is not None:
+                for entry in sorted(entries, key=lambda e: e[2]):
+                    timestamp_fd.write(f'{",".join([str(elem) for elem in entry])}\n')
+    except (BrokenPipeError, KeyboardInterrupt):
+        # User hit Ctrl-C - done processing.
+        pass
+
+    # Close the index file.
+    if timestamp_fd is not None:
+        # Write the EOF sentinel so future loads can verify the index covers the full byte range.
+        timestamp_fd.write(f'{EOF_FORMAT},0,{bytes_to_process},0,\n')
+        timestamp_fd.close()
+
+    # Print final status after the loop exits.
+    elapsed_sec = (datetime.now() - start_time).total_seconds()
+    if elapsed_sec > 0:
+        _print_status(elapsed_sec)
+
+    return sorted(index, key=lambda e: e[2]), total_bytes_read
+
+
+def index_messages(input_path, options):
     in_fd = get_fd(input_path, options)
     skip_bytes = options.skip_bytes
 
+    # Determine the range of bytes to process.
     in_fd.seek(0, io.SEEK_END)
     file_size = in_fd.tell()
     in_fd.seek(skip_bytes, 0)
@@ -70,107 +264,51 @@ def index_messages(input_path, options):
     if options.bytes_to_process is not None and options.bytes_to_process < bytes_to_process:
         bytes_to_process = options.bytes_to_process
 
-    # File without prefix indicates all parsers used.
-    index_file_full = get_output_file_path(
-        input_path, '_index.csv', output_dir=options.output_dir, prefix=options.prefix)
-
-    if len(options.format) < len(FORMAT_STRS):
-        index_file = get_output_file_path(
-            input_path, '_' + '_'.join(options.format) + '_index.csv', output_dir=options.output_dir,
-            prefix=options.prefix)
-    else:
-        index_file = index_file_full
+    # Determine the path to the index file. If the file exists already, read it and return. If not, generate it.
+    index_file_full = get_output_file_path(input_path, '_index.csv', output_dir=options.output_dir,
+                                           prefix=options.prefix)
+    index_file = _get_index_path(input_path, options)
 
     if not options.ignore_index:
-        # Try using the full index when processing a subset of formats.
-        index_files_to_load = set([index_file, index_file_full])
-        for index_file_to_load in index_files_to_load:
+        # Try to reuse a previously generated index if one exists and covers the same byte range.
+        # When processing a subset of formats, also try the full-format index as a fallback.
+        for index_file_to_load in {index_file, index_file_full}:
             if os.path.exists(index_file_to_load):
                 index = load_index(index_file_to_load)
 
-                # Check if index was generated for same datafile.
-                #
-                # The index file should always have an EOF marker. If it does not, we might have run into an error while
-                # generating it.
-                eof_index = index[-1] if len(index) > 0 else None
+                # The index file should always end with an EOF marker. A missing marker means the file
+                # was incomplete, likely due to an error during a previous indexing run.
+                eof_index = index[-1] if index else None
                 if eof_index is None or eof_index[0] != EOF_FORMAT:
-                    _logger.warning(
-                        f'Index file "{index_file_to_load}" missing EOF entry, skipping load.')
+                    _logger.warning(f'Index file "{index_file_to_load}" missing EOF entry, skipping load.')
+                elif eof_index[2] != bytes_to_process:
+                    _logger.info(
+                        f'Index file "{index_file_to_load}" was generated for different input data, skipping load.')
                 else:
-                    if eof_index[2] != bytes_to_process:
-                        _logger.info(
-                            f'Index file "{index_file_to_load}" was generated for different input data, skipping load.')
-                    else:
-                        _logger.info(
-                            f'Using existing index "{index_file_to_load}".')
-                        return index, file_size
+                    _logger.info(f'Using existing index "{index_file_to_load}".')
+                    return index, file_size
 
-    _logger.info(f"Indexing raw input.")
+    # No usable existing index found; generate a new one by parsing the input file.
+    _logger.info(f"Generating index file {index_file}.")
+    rtcm_framer, fe_framer, nmea_framer = _create_framers(options)
 
-    start_time = datetime.now()
-    next_update_time = 0
-
-    with open(index_file, 'w') as timestamp_fd:
-        timestamp_fd.write(
-            'Protocol, ID, Offset (Bytes), Length (Bytes), P1 Time\n')
-        while True:
-            total_bytes_read = in_fd.tell() - skip_bytes
-            elapsed_sec = (datetime.now() - start_time).total_seconds()
-            if elapsed_sec > next_update_time:
-                next_update_time = elapsed_sec + 5
-                _logger.log(logging.INFO,
-                            'Processed %d/%d bytes (%.1f%%). [elapsed=%.1f sec, rate=%.1f MB/s]' %
-                            (total_bytes_read, bytes_to_process, 100.0 * float(total_bytes_read) / bytes_to_process,
-                                elapsed_sec, total_bytes_read / elapsed_sec / 1e6))
-
-            if total_bytes_read >= bytes_to_process:
-                break
-
-            data = in_fd.read(READ_SIZE)
-            if len(data) == 0:
-                break
-
-            entries = []
-            if rtcm_framer is not None:
-                for msg in rtcm_framer.on_data(data, return_size=True, return_offset=True):
-                    entries.append(
-                        ('rtcm', msg["message"].message_id, skip_bytes + msg["offset"], msg["size"], ''))
-            if fe_framer is not None:
-                for header, payload, offset_bytes in fe_framer.on_data(data):
-                    p1_time = payload.get_p1_time() if isinstance(payload, MessagePayload) else None
-                    entries.append(('fe', int(header.message_type), skip_bytes + offset_bytes,
-                                    header.get_message_size(),
-                                    '%.3f' % float(p1_time) if p1_time is not None else ''))
-            if nmea_framer is not None:
-                for msg in nmea_framer.on_data(data):
-                    entries.append(('nmea', msg[0].split(
-                        ',')[0][1:], skip_bytes + msg[1], len(msg[0]), ''))
-
-            for entry in sorted(entries, key=lambda e: e[2]):
-                timestamp_fd.write(
-                    f'{",".join([str(elem) for elem in entry])}\n')
-
-        timestamp_fd.write(f'{EOF_FORMAT},0,{bytes_to_process},0,\n')
-
-    total_bytes_read = bytes_to_process
-    _logger.log(logging.INFO,
-                'Processed %d/%d bytes (%.1f%%). [elapsed=%.1f sec, rate=%.1f MB/s]' %
-                (total_bytes_read, bytes_to_process, 100.0 * float(total_bytes_read) / bytes_to_process,
-                    elapsed_sec, total_bytes_read / elapsed_sec / 1e6))
-
-    return load_index(index_file), file_size
+    return _stream_and_index(input_path=input_path, in_fd=in_fd, options=options,
+                             rtcm_framer=rtcm_framer, fe_framer=fe_framer, nmea_framer=nmea_framer,
+                             skip_bytes=skip_bytes, bytes_to_process=bytes_to_process, file_size=file_size,
+                             output_map=None, index_path=index_file)
 
 
 def load_index(index_file):
     indexes = []
     with open(index_file, 'r') as index_fd:
+        # Skip the header line.
         index_fd.readline()
         for line in index_fd.readlines():
             fields = line.split(',')
             indexes.append(
                 (fields[0], fields[1], int(fields[2]), int(fields[3])))
 
-    # If the data has dropouts, the messages might not be in order due to how long the framers take to detect the error.
+    # Sort by offset to handle any out-of-order entries caused by framer latency during data dropouts.
     indexes = sorted(indexes, key=lambda x: x[2])
     return indexes
 
@@ -191,42 +329,21 @@ def find_gaps(indexes):
 
 
 def generate_separated_logs(input_path, indexes, options):
-    write_to_stdout = options.prefix == '-'
-    output_map = {}
+    # Open output files for each requested protocol.
+    output_map = _open_output_files(input_path, options, text_nmea=False)
     current_base_id = -1
     rtcm_file_idx = 0
-    if write_to_stdout:
-        if len(options.format) > 1:
-            _logger.error('Only one data type may be written to stdout.')
-            sys.exit(1)
-        elif 'nmea' in options.format:
-            output_map['nmea'] = sys.stdout.buffer
-        elif 'rtcm' in options.format:
-            output_map['rtcm'] = sys.stdout.buffer
-        elif 'fe' in options.format:
-            output_map['fe'] = sys.stdout.buffer
-    else:
-        if 'nmea' in options.format:
-            # Note need the write binary to avoid needing to decode the ascii in the for loop.
-            output_map['nmea'] = open(get_output_file_path(input_path, '.nmea',
-                                      output_dir=options.output_dir, prefix=options.prefix), 'wb')
-        if 'rtcm' in options.format:
-            suffix = '_0.rtcm3' if options.split_rtcm_base_id else '.rtcm3'
-            output_map['rtcm'] = open(get_output_file_path(input_path, suffix,
-                                      output_dir=options.output_dir, prefix=options.prefix), 'wb')
-        if 'fe' in options.format:
-            output_map['fe'] = open(get_output_file_path(input_path, '.p1log',
-                                    output_dir=options.output_dir, prefix=options.prefix), 'wb')
 
+    # Seek to each message's offset and copy its bytes to the appropriate output file.
     in_fd = get_fd(input_path, options)
     for index in indexes:
         if index[0] in output_map:
             in_fd.seek(index[2], io.SEEK_SET)
             data = in_fd.read(index[3])
 
-            # If requested, open a new file if the base station changes.
+            # If splitting by base station, open a new file each time the base station ID changes.
             if options.split_rtcm_base_id and index[0] == 'rtcm' and is_msm_id(int(index[1])):
-                # offset 36 bits, length 12 bits.
+                # Base station ID is encoded at bit offset 36, length 12 bits.
                 base_id = ((data[4] & 0xF) << 8) + data[5]
                 if base_id != current_base_id:
                     if current_base_id != -1:
@@ -242,200 +359,45 @@ def generate_separated_logs(input_path, indexes, options):
 
 
 def separate_and_index(input_path, options):
-    # Setup.
-    rtcm_framer = RTCMFramer() if 'rtcm' in options.format else None
-    fe_framer = FusionEngineDecoder(max_payload_len_bytes=16536, return_bytes=True, return_offset=True) \
-        if 'fe' in options.format else None
-    nmea_framer = NMEAFramer(return_offset=True) if 'nmea' in options.format else None
-
-    index = []
-    total_bytes_read = 0
-
-    # Open the file and skip the first N bytes if requested.
+    # Open the input file (or stdin).
     in_fd = get_fd(input_path, options)
     read_from_stdin = in_fd is sys.stdin.buffer
     write_to_stdout = options.prefix == '-'
 
+    # Determine byte range to process. For stdin the file size is unknown, so process all incoming data unless the user
+    # specifies --bytes-to-process.
     skip_bytes = options.skip_bytes
     if read_from_stdin:
         file_size = 0
-        if options.bytes_to_process is None:
-            bytes_to_process = sys.maxsize
-        else:
-            bytes_to_process = options.bytes_to_process
-
+        bytes_to_process = options.bytes_to_process if options.bytes_to_process is not None else sys.maxsize
         try:
             in_fd.read(skip_bytes)
         except (BrokenPipeError, KeyboardInterrupt):
-            # User hit Ctrl-C -- done processing.
-            return index, total_bytes_read
+            return [], 0
     else:
         in_fd.seek(0, io.SEEK_END)
         file_size = in_fd.tell()
         in_fd.seek(skip_bytes, 0)
-
         bytes_to_process = file_size - skip_bytes
         if options.bytes_to_process is not None and options.bytes_to_process < bytes_to_process:
             bytes_to_process = options.bytes_to_process
 
-    # Open output files if extracting data.
-    output_map = {}
-    current_base_id = -1
-    rtcm_file_idx = 0
-    if options.extract:
-        if write_to_stdout:
-            if len(options.format) > 1:
-                _logger.error('Only one data type may be written to stdout.')
-                sys.exit(1)
-            elif 'nmea' in options.format:
-                output_map['nmea'] = sys.stdout
-            elif 'rtcm' in options.format:
-                output_map['rtcm'] = sys.stdout.buffer
-            elif 'fe' in options.format:
-                output_map['fe'] = sys.stdout.buffer
-        else:
-            if 'nmea' in options.format:
-                # Note need the write binary to avoid needing to decode the ascii in the for loop.
-                output_map['nmea'] = open(get_output_file_path(input_path, '.nmea',
-                                                               output_dir=options.output_dir, prefix=options.prefix),
-                                          'wt')
-            if 'rtcm' in options.format:
-                suffix = '_0.rtcm3' if options.split_rtcm_base_id else '.rtcm3'
-                output_map['rtcm'] = open(get_output_file_path(input_path, suffix,
-                                                               output_dir=options.output_dir, prefix=options.prefix),
-                                          'wb')
-            if 'fe' in options.format:
-                output_map['fe'] = open(get_output_file_path(input_path, '.p1log',
-                                                             output_dir=options.output_dir, prefix=options.prefix),
-                                        'wb')
+    # Open output files for extraction if requested.
+    output_map = _open_output_files(input_path, options, text_nmea=True) if options.extract else None
 
-    # Open an index file only if writing to disk.
-    if write_to_stdout:
-        index_path = None
-    elif read_from_stdin:
-        if len(options.format) < len(FORMAT_STRS):
-            index_file = get_output_file_path(
-                input_path=None if read_from_stdin else input_path,
-                postfix='_' + '_'.join(options.format) + '_index.csv',
-                output_dir=options.output_dir,
-                prefix=options.prefix)
-        else:
-            index_file = get_output_file_path(
-                input_path=None if read_from_stdin else input_path,
-                postfix='_index.csv',
-                output_dir=options.output_dir,
-                prefix=options.prefix)
-    else:
-        index_path = get_output_file_path(input_path, '_index.csv', output_dir=options.output_dir)
+    # Open an index CSV only when writing output to disk, skip it when streaming to stdout.
+    index_path = None if write_to_stdout else _get_index_path(input_path, options)
 
-    if index_path is None:
-        timestamp_fd = None
-    else:
-        timestamp_fd = open(index_path, 'wt')
-        timestamp_fd.write(
-            'Protocol, ID, Offset (Bytes), Length (Bytes), P1 Time\n')
+    rtcm_framer, fe_framer, nmea_framer = _create_framers(options, return_bytes=options.extract)
 
-    # Status printout helper.
-    def _print_status(elapsed_sec):
-        if file_size == 0:
-            _logger.log(logging.INFO,
-                        'Processed %d bytes. [elapsed=%.1f sec, rate=%.1f MB/s]' %
-                        (total_bytes_read, elapsed_sec, total_bytes_read / elapsed_sec / 1e6))
-        else:
-            _logger.log(logging.INFO,
-                        'Processed %d/%d bytes (%.1f%%). [elapsed=%.1f sec, rate=%.1f MB/s]' %
-                        (total_bytes_read, bytes_to_process, 100.0 * float(total_bytes_read) / bytes_to_process,
-                            elapsed_sec, total_bytes_read / elapsed_sec / 1e6))
-
-    # Now read from the file.
-    start_time = datetime.now()
-    next_update_time = 0
-    try:
-        while True:
-            # Update status.
-            elapsed_sec = (datetime.now() - start_time).total_seconds()
-            if elapsed_sec > next_update_time:
-                _print_status(elapsed_sec)
-                next_update_time = elapsed_sec + 5
-
-            # If we've hit the limit, we're done.
-            if total_bytes_read >= bytes_to_process:
-                break
-
-            # Otherwise, read more data. If reading from stdin, this will block unless interrupted.
-            data = in_fd.read(READ_SIZE)
-            if len(data) == 0:
-                break
-
-            total_bytes_read += len(data)
-
-            # Index the data:
-            #   Protocol, Message ID, Stream/File Offset, Size, P1 Time (if applicable)
-            current_block_entries = []
-            if rtcm_framer is not None:
-                for msg in rtcm_framer.on_data(data, return_size=True, return_offset=True,
-                                               return_bytes=options.extract):
-                    message_id = msg["message"].message_id
-                    current_block_entries.append(
-                        ('rtcm', message_id, skip_bytes + msg["offset"], msg["size"], ''))
-                    if options.extract:
-                        raw_bytes = msg['bytes']
-
-                        # If requested, open a new file if the base station changes.
-                        if options.split_rtcm_base_id and is_msm_id(message_id):
-                            # offset 36 bits, length 12 bits.
-                            base_id = ((raw_bytes[4] & 0xF) << 8) + raw_bytes[5]
-                            if base_id != current_base_id:
-                                if current_base_id != -1:
-                                    output_map['rtcm'].close()
-                                    rtcm_file_idx += 1
-                                    path = get_output_file_path(input_path, f'_{rtcm_file_idx}.rtcm3',
-                                                               output_dir=options.output_dir, prefix=options.prefix)
-                                    output_map['rtcm'] = open(path, 'wb')
-                                _logger.info(f"Writing for base station id: {base_id}")
-                                current_base_id = base_id
-
-                        output_map['rtcm'].write(raw_bytes)
-            if fe_framer is not None:
-                for header, payload, raw_data, offset_bytes in fe_framer.on_data(data):
-                    p1_time = payload.get_p1_time() if isinstance(payload, MessagePayload) else None
-                    current_block_entries.append(
-                        ('fe', int(header.message_type), skip_bytes + offset_bytes,
-                         header.get_message_size(),
-                         '%.3f' % float(p1_time) if p1_time is not None else ''))
-                    if options.extract:
-                        output_map['fe'].write(raw_data)
-            if nmea_framer is not None:
-                for msg in nmea_framer.on_data(data):
-                    current_block_entries.append(
-                        ('nmea', msg[0].split(',')[0][1:], skip_bytes + msg[1], len(msg[0]), ''))
-                    if options.extract:
-                        output_map['nmea'].write(msg[0])
-
-            # The returned index omits P1 time.
-            index.extend(current_block_entries[:4])
-
-            if timestamp_fd is not None:
-                for entry in sorted(current_block_entries, key=lambda e: e[2]):
-                    timestamp_fd.write(
-                        f'{",".join([str(elem) for elem in entry])}\n')
-    except (BrokenPipeError, KeyboardInterrupt):
-        # User hit Ctrl-C -- done processing.
-        pass
-
-    # Write index file EOF.
-    if timestamp_fd is not None:
-        timestamp_fd.write(f'{EOF_FORMAT},0,{bytes_to_process},0,\n')
-
-    # Sort the data.
-    index = sorted(index, key=lambda e: e[2])
-
-    # Print status one last time.
-    elapsed_sec = (datetime.now() - start_time).total_seconds()
-    _print_status(elapsed_sec)
+    # Run the streaming read loop until stopped or reaching EOF.
+    index, total_bytes_read = _stream_and_index(
+        input_path=input_path, in_fd=in_fd, options=options,
+        rtcm_framer=rtcm_framer, fe_framer=fe_framer, nmea_framer=nmea_framer,
+        skip_bytes=skip_bytes, bytes_to_process=bytes_to_process, file_size=file_size,
+        output_map=output_map, index_path=index_path)
 
     return index, total_bytes_read
-
 
 
 parser = ArgumentParser(description="""\
