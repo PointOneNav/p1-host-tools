@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 
+from __future__ import annotations
+
+from typing import BinaryIO, Dict, List, Optional, Tuple
+
+import argparse
 import io
 import os
 import sys
@@ -35,7 +40,8 @@ def is_msm_id(msg_id):
     return msg_id == 1005 or msg_id == 1006 or (msg_id >= 1071 and msg_id <= 1227)
 
 
-def get_output_file_path(input_path, postfix, output_dir=None, prefix=None):
+def get_output_file_path(input_path: str, postfix: str, output_dir: Optional[str] = None,
+                         prefix: Optional[str] = None) -> str:
     if output_dir is None:
         output_dir = os.path.dirname(input_path)
     if prefix is None:
@@ -43,7 +49,7 @@ def get_output_file_path(input_path, postfix, output_dir=None, prefix=None):
     return os.path.join(output_dir, prefix + postfix)
 
 
-def get_fd(input_path: str, options):
+def get_fd(input_path: str, options: argparse.Namespace) -> BinaryIO:
     if input_path == '-':
         return sys.stdin.buffer
     elif input_path.endswith('.p1bin'):
@@ -54,7 +60,8 @@ def get_fd(input_path: str, options):
         return open(input_path, 'rb')
 
 
-def _create_framers(options, return_bytes=False):
+def _create_framers(options: argparse.Namespace, return_bytes: bool = False) -> \
+        Tuple[Optional[RTCMFramer], Optional[FusionEngineDecoder], Optional[NMEAFramer]]:
     rtcm = RTCMFramer() if 'rtcm' in options.format else None
     fe = FusionEngineDecoder(max_payload_len_bytes=16536, return_offset=True,
                              return_bytes=return_bytes) if 'fe' in options.format else None
@@ -62,7 +69,7 @@ def _create_framers(options, return_bytes=False):
     return rtcm, fe, nmea
 
 
-def _get_index_path(input_path, options):
+def _get_index_path(input_path: str, options: argparse.Namespace) -> str:
     if len(options.format) < len(FORMAT_STRS):
         postfix = '.index.' + '_'.join(sorted(options.format)) + '.csv'
     else:
@@ -71,7 +78,7 @@ def _get_index_path(input_path, options):
                                 prefix=None if options.prefix == '-' else options.prefix)
 
 
-def _open_output_files(input_path, options, text_nmea=False):
+def _open_output_files(input_path: str, options: argparse.Namespace, text_nmea: bool = False) -> Dict[str, BinaryIO]:
     """!
     @brief Open output files for extraction.
 
@@ -105,10 +112,17 @@ def _open_output_files(input_path, options, text_nmea=False):
     return output_map
 
 
-def _stream_and_index(input_path, in_fd, options,
-                      rtcm_framer, fe_framer, nmea_framer,
-                      skip_bytes, bytes_to_process, file_size,
-                      output_map, index_path):
+def _stream_and_index(input_path: str,
+                      in_fd: BinaryIO,
+                      options: argparse.Namespace,
+                      rtcm_framer: Optional[RTCMFramer],
+                      fe_framer: Optional[FusionEngineDecoder],
+                      nmea_framer: Optional[NMEAFramer],
+                      skip_bytes: int,
+                      bytes_to_process: int,
+                      file_size: int,
+                      output_map: Dict[str, BinaryIO],
+                      index_path: Optional[str]):
     """
     @brief Core read loop: parse messages, write index CSV, and optionally extract to output files.
 
@@ -247,7 +261,7 @@ def _stream_and_index(input_path, in_fd, options,
     return sorted(index, key=lambda e: e[2]), total_bytes_read
 
 
-def index_messages(input_path, options):
+def index_messages(input_path: str, options: argparse.Namespace):
     in_fd = get_fd(input_path, options)
     skip_bytes = options.skip_bytes
 
@@ -294,9 +308,9 @@ def index_messages(input_path, options):
                              output_map=None, index_path=index_file)
 
 
-def load_index(index_file):
+def load_index(index_path: str):
     indexes = []
-    with open(index_file, 'r') as index_fd:
+    with open(index_path, 'r') as index_fd:
         # Skip the header line.
         index_fd.readline()
         for line in index_fd.readlines():
@@ -309,7 +323,7 @@ def load_index(index_file):
     return indexes
 
 
-def find_gaps(indexes):
+def find_gaps(indexes: List[Tuple]):
     next_offset = 0
     has_gaps = False
     for index in indexes:
@@ -324,7 +338,7 @@ def find_gaps(indexes):
         _logger.info(f"No gaps found.")
 
 
-def generate_separated_logs(input_path, indexes, options):
+def generate_separated_logs(input_path: str, indexes: List[Tuple], options: argparse.Namespace):
     # Open output files for each requested protocol.
     output_map = _open_output_files(input_path, options, text_nmea=False)
     current_base_id = -1
@@ -354,7 +368,7 @@ def generate_separated_logs(input_path, indexes, options):
             output_map[index[0]].write(data)
 
 
-def separate_and_index(input_path, options):
+def separate_and_index(input_path: str, options: argparse.Namespace):
     # Open the input file (or stdin).
     in_fd = get_fd(input_path, options)
     read_from_stdin = in_fd is sys.stdin.buffer
