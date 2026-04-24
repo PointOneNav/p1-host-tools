@@ -112,6 +112,29 @@ def _open_output_files(input_path: str, options: argparse.Namespace, text_nmea: 
     return output_map
 
 
+def _check_rtcm_base_station(input_path: str,
+                             options: argparse.Namespace,
+                             message_id: int,
+                             raw_data: bytes,
+                             output_map: Dict[str, BinaryIO],
+                             current_base_id: int,
+                             rtcm_file_idx: int) -> Tuple[int, int]:
+    # If splitting by base station ID, open a new output file each time the base changes.
+    if options.split_rtcm_base_id and is_msm_id(message_id):
+        # Base station ID is encoded at bit offset 36, length 12 bits.
+        base_id = ((raw_data[4] & 0xF) << 8) + raw_data[5]
+        if base_id != current_base_id:
+            if current_base_id != -1:
+                output_map['rtcm'].close()
+                rtcm_file_idx += 1
+                output_map['rtcm'] = open(get_output_file_path(
+                    input_path, f'_{rtcm_file_idx}.rtcm3',
+                    output_dir=options.output_dir, prefix=options.prefix), 'wb')
+            _logger.info(f"Writing for base station id: {base_id}")
+            current_base_id = base_id
+    return current_base_id, rtcm_file_idx
+
+
 def _stream_and_index(input_path: str,
                       in_fd: BinaryIO,
                       options: argparse.Namespace,
@@ -189,21 +212,9 @@ def _stream_and_index(input_path: str,
 
                     if extract:
                         raw_data = msg['bytes']
-
-                        # If splitting by base station ID, open a new output file each time the base changes.
-                        if options.split_rtcm_base_id and is_msm_id(message_id):
-                            # Base station ID is encoded at bit offset 36, length 12 bits.
-                            base_id = ((raw_data[4] & 0xF) << 8) + raw_data[5]
-                            if base_id != current_base_id:
-                                if current_base_id != -1:
-                                    output_map['rtcm'].close()
-                                    rtcm_file_idx += 1
-                                    output_map['rtcm'] = open(get_output_file_path(
-                                        input_path, f'_{rtcm_file_idx}.rtcm3',
-                                        output_dir=options.output_dir, prefix=options.prefix), 'wb')
-                                _logger.info(f"Writing for base station id: {base_id}")
-                                current_base_id = base_id
-
+                        current_base_id, rtcm_file_idx = _check_rtcm_base_station(
+                            input_path=input_path, options=options, message_id=message_id, raw_data=raw_data,
+                            output_map=output_map, current_base_id=current_base_id, rtcm_file_idx=rtcm_file_idx)
                         output_map['rtcm'].write(raw_data)
 
             if fe_framer is not None:
@@ -350,21 +361,10 @@ def generate_separated_logs(input_path: str, indexes: List[Tuple], options: argp
         if index[0] in output_map:
             in_fd.seek(index[2], io.SEEK_SET)
             data = in_fd.read(index[3])
-
-            # If splitting by base station, open a new file each time the base station ID changes.
-            if options.split_rtcm_base_id and index[0] == 'rtcm' and is_msm_id(int(index[1])):
-                # Base station ID is encoded at bit offset 36, length 12 bits.
-                base_id = ((data[4] & 0xF) << 8) + data[5]
-                if base_id != current_base_id:
-                    if current_base_id != -1:
-                        output_map['rtcm'].close()
-                        rtcm_file_idx += 1
-                        output_map['rtcm'] = open(get_output_file_path(
-                            input_path, f'_{rtcm_file_idx}.rtcm3',
-                            output_dir=options.output_dir, prefix=options.prefix), 'wb')
-                    _logger.info(f"Writing for base station id: {base_id}")
-                    current_base_id = base_id
-
+            if index[0] == 'rtcm':
+                current_base_id, rtcm_file_idx = _check_rtcm_base_station(
+                    input_path=input_path, options=options, message_id=int(index[1]), raw_data=data,
+                    output_map=output_map, current_base_id=current_base_id, rtcm_file_idx=rtcm_file_idx)
             output_map[index[0]].write(data)
 
 
