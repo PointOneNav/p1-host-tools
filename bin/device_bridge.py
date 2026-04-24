@@ -83,8 +83,6 @@ class SerialConnection:
             self.virtual_serial.close()
             self.virtual_serial = None
 
-        super().__del__()
-
     def start(self, other_device):
         if other_device is not None:
             self.handler = SerialDataHandler(source=self, destination=other_device)
