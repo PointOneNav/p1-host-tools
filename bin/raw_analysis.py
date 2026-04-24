@@ -191,26 +191,40 @@ def find_gaps(indexes):
 
 
 def generate_separated_logs(input_path, indexes, options):
+    write_to_stdout = options.prefix == '-'
     output_map = {}
     current_base_id = -1
     rtcm_file_idx = 0
-    if 'nmea' in options.format:
-        # Note need the write binary to avoid needing to decode the ascii in the for loop.
-        output_map['nmea'] = open(get_output_file_path(input_path, '.nmea',
-                                  output_dir=options.output_dir, prefix=options.prefix), 'wb')
-    if 'rtcm' in options.format:
-        suffix = '_0.rtcm3' if options.split_rtcm_base_id else '.rtcm3'
-        output_map['rtcm'] = open(get_output_file_path(input_path, suffix,
-                                  output_dir=options.output_dir, prefix=options.prefix), 'wb')
-    if 'fe' in options.format:
-        output_map['fe'] = open(get_output_file_path(input_path, '.p1log',
-                                output_dir=options.output_dir, prefix=options.prefix), 'wb')
+    if write_to_stdout:
+        if len(options.format) > 1:
+            _logger.error('Only one data type may be written to stdout.')
+            sys.exit(1)
+        elif 'nmea' in options.format:
+            output_map['nmea'] = sys.stdout.buffer
+        elif 'rtcm' in options.format:
+            output_map['rtcm'] = sys.stdout.buffer
+        elif 'fe' in options.format:
+            output_map['fe'] = sys.stdout.buffer
+    else:
+        if 'nmea' in options.format:
+            # Note need the write binary to avoid needing to decode the ascii in the for loop.
+            output_map['nmea'] = open(get_output_file_path(input_path, '.nmea',
+                                      output_dir=options.output_dir, prefix=options.prefix), 'wb')
+        if 'rtcm' in options.format:
+            suffix = '_0.rtcm3' if options.split_rtcm_base_id else '.rtcm3'
+            output_map['rtcm'] = open(get_output_file_path(input_path, suffix,
+                                      output_dir=options.output_dir, prefix=options.prefix), 'wb')
+        if 'fe' in options.format:
+            output_map['fe'] = open(get_output_file_path(input_path, '.p1log',
+                                    output_dir=options.output_dir, prefix=options.prefix), 'wb')
 
     in_fd = get_fd(input_path, options)
     for index in indexes:
         if index[0] in output_map:
             in_fd.seek(index[2], io.SEEK_SET)
             data = in_fd.read(index[3])
+
+            # If requested, open a new file if the base station changes.
             if options.split_rtcm_base_id and index[0] == 'rtcm' and is_msm_id(int(index[1])):
                 # offset 36 bits, length 12 bits.
                 base_id = ((data[4] & 0xF) << 8) + data[5]
@@ -222,8 +236,8 @@ def generate_separated_logs(input_path, indexes, options):
                             input_path, f'_{rtcm_file_idx}.rtcm3',
                             output_dir=options.output_dir, prefix=options.prefix), 'wb')
                     _logger.info(f"Writing for base station id: {base_id}")
+                    current_base_id = base_id
 
-                current_base_id = base_id
             output_map[index[0]].write(data)
 
 
