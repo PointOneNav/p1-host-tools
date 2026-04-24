@@ -80,7 +80,7 @@ def _get_index_path(input_path: str, options: argparse.Namespace) -> str:
                                 prefix=None if options.prefix == '-' else options.prefix)
 
 
-def _open_output_files(input_path: str, options: argparse.Namespace, text_nmea: bool = False) -> Dict[str, BinaryIO]:
+def _open_output_files(input_path: str, options: argparse.Namespace, text_nmea: bool = True) -> Dict[str, BinaryIO]:
     """!
     @brief Open output files for extraction.
 
@@ -354,6 +354,9 @@ def find_gaps(indexes: List[Tuple]):
 
 def generate_separated_logs(input_path: str, indexes: List[Tuple], options: argparse.Namespace):
     # Open output files for each requested protocol.
+    #
+    # Note: We're reading the input files as binary here, even the NMEA file, so we'll open the NMEA output stream as
+    # binary too so we can call write() below without having to convert to ASCII.
     output_map = _open_output_files(input_path, options, text_nmea=False)
     current_base_id = -1
     rtcm_file_idx = 0
@@ -396,7 +399,7 @@ def separate_and_index(input_path: str, options: argparse.Namespace):
             bytes_to_process = options.bytes_to_process
 
     # Open output files for extraction if requested.
-    output_map = _open_output_files(input_path, options, text_nmea=True) if options.extract else None
+    output_map = _open_output_files(input_path, options) if options.extract else None
 
     # Open an index CSV only when reading from to disk, skip it when reading from stdin.
     index_path = None if read_from_stdin else _get_index_path(input_path, options)
