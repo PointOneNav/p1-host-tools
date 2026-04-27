@@ -13,8 +13,11 @@ import pytest
 _REPO_ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), '..'))
 
 _SCRIPTS = sorted(
-    glob.glob(os.path.join(_REPO_ROOT, 'bin', '*.py')) +
-    glob.glob(os.path.join(_REPO_ROOT, 'p1_runner', '*.py'))
+    p for p in (
+        glob.glob(os.path.join(_REPO_ROOT, 'bin', '**', '*.py'), recursive=True) +
+        glob.glob(os.path.join(_REPO_ROOT, 'p1_runner', '**', '*.py'), recursive=True)
+    )
+    if '__pycache__' not in p
 )
 
 # Parametrize by repo-relative path for readable test IDs.
