@@ -1,3 +1,8 @@
+<table>
+<tr><td>Build Status</td><td><img src="https://img.shields.io/github/actions/workflow/status/PointOneNav/p1-host-tools/release.yml?label=Build+Status"/></td></tr>
+<tr><td>Python Support</td><td><img src="https://img.shields.io/github/actions/workflow/status/PointOneNav/p1-host-tools/python_tests.yml?job=Python+Tests+(3.8)&label=3.8"/> <img src="https://img.shields.io/github/actions/workflow/status/PointOneNav/p1-host-tools/python_tests.yml?job=Python+Tests+(3.9)&label=3.9"/> <img src="https://img.shields.io/github/actions/workflow/status/PointOneNav/p1-host-tools/python_tests.yml?job=Python+Tests+(3.10)&label=3.10"/> <img src="https://img.shields.io/github/actions/workflow/status/PointOneNav/p1-host-tools/python_tests.yml?job=Python+Tests+(3.11)&label=3.11"/> <img src="https://img.shields.io/github/actions/workflow/status/PointOneNav/p1-host-tools/python_tests.yml?job=Python+Tests+(3.12)&label=3.12"/> <img src="https://img.shields.io/github/actions/workflow/status/PointOneNav/p1-host-tools/python_tests.yml?job=Python+Tests+(3.13)&label=3.13"/></td></tr>
+</table>
+
 # Point One Host Tools <!-- omit from toc -->
 Tools for interfacing with Point One FusionEngine devices from a host computer. These tools are compatible with Windows, macOS, and Linux.
 
