@@ -4,13 +4,19 @@ on:
   pull_request:
     paths:
       - '.github/workflows/python_tests.yml'
-      - 'tools/logunitas/**'
+      - 'bin/**'
+      - 'p1_runner/**'
+      - 'tests/**'
+      - 'requirements*.txt'
   push:
     branches:
-      - 'st-develop'
+      - 'internal'
     paths:
       - '.github/workflows/python_tests.yml'
-      - 'tools/logunitas/**'
+      - 'bin/**'
+      - 'p1_runner/**'
+      - 'tests/**'
+      - 'requirements*.txt'
 
 jobs:
   test:
