@@ -200,15 +200,13 @@ class LogManager(threading.Thread):
 
         try:
             with open(path, 'r') as f:
-                prev_sequence_num = int(f.read())
+                sequence_num = int(f.read())
         except:
-            prev_sequence_num = 0
-
-        sequence_num = prev_sequence_num + 1
+            sequence_num = 1
 
         try:
             with open(path, 'w') as f:
-                f.write('%d' % sequence_num)
+                f.write('%d' % (sequence_num + 1))
         except Exception as e:
             self.logger.error("Unable to update log sequence number file '%s': %s" % (path, repr(e)))
 
