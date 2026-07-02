@@ -16,21 +16,16 @@ logger = logging.getLogger('point_one.config_tool')
 
 INTERFACE_MAP = {
     'current': InterfaceID(TransportType.CURRENT, 0),
-    'uart1': InterfaceID(TransportType.SERIAL, 1),
-    'uart2': InterfaceID(TransportType.SERIAL, 2),
-    'udp1': InterfaceID(TransportType.UDP, 1),
-    'udp2': InterfaceID(TransportType.UDP, 2),
-    'tcp1': InterfaceID(TransportType.TCP, 1),
-    'tcp2': InterfaceID(TransportType.TCP, 2),
-    'tcp3': InterfaceID(TransportType.TCP, 3),
-    'tcp4': InterfaceID(TransportType.TCP, 4),
-    'tcp5': InterfaceID(TransportType.TCP, 5),
-    'file1': InterfaceID(TransportType.FILE, 1),
-    'file2': InterfaceID(TransportType.FILE, 2),
-    'unix1': InterfaceID(TransportType.UNIX, 1),
-    'unix2': InterfaceID(TransportType.UNIX, 2),
-    'ws1': InterfaceID(TransportType.WEBSOCKET, 1),
 }
+
+for prefix, type in [('tcp', TransportType.TCP),
+                     ('udp', TransportType.UDP),
+                     ('unix', TransportType.UNIX),
+                     ('ws', TransportType.WEBSOCKET),
+                     ('uart', TransportType.SERIAL),
+                     ('file', TransportType.FILE)]:
+    for i in range(1, 6):
+        INTERFACE_MAP[f'{prefix}{i}'] = InterfaceID(type, i)
 
 PROTOCOL_MAP = {
     'fe': ProtocolType.FUSION_ENGINE,
