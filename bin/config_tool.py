@@ -834,7 +834,13 @@ def request_export(config_interface: DeviceInterface, args):
                 return None
             # Check the response has the expected data type to avoid handling the periodic PlatformStorageDataMessage
             # output.
-            if data_type == data_msg.data_type:
+            #
+            # Note that user config has two sources: active (used by the engine right now, but not saved to disk) and
+            # saved (would replace active after a reboot). Additionally, you may request the default values, which are
+            # what would be used after a configuration or factory reset. We need to make sure we're getting the one we
+            # asked for since the device will output active and saved periodically as part of its diagnostic output.
+            if (data_type == data_msg.data_type and
+                (data_type != DataType.USER_CONFIG or data_msg.source == export_msg.source)):
                 break
 
         if data_msg.response == Response.NO_DATA_STORED:
