@@ -20,11 +20,16 @@ class NTRIPClient(threading.Thread):
     logger = logging.getLogger('point_one.ntrip_client')
     rx_logger = logger.getChild('rx')
 
+    CONNECT_RETRY_DELAY_SEC = 5.0
+    # A caster can keep the socket open and stop sending. After this long with no data, reconnect.
+    RECEIVE_TIMEOUT_SEC = 30.0
+
     def __init__(self, url=None, mountpoint=None, username=None, password=None, version=2, data_callback=None):
         super().__init__(name='ntrip_%s' % repr(mountpoint))
 
         self.ntrip = None
         self.connected = False
+        self.last_rx_time = 0.0
         self.startup_gga_message = None
 
         self.url = None
@@ -56,10 +61,13 @@ class NTRIPClient(threading.Thread):
         return self.connected
 
     def send_position(self, lla_deg: Iterable[float], time: datetime = None):
-        if not self.connected:
-            self.logger.trace('Not connected. Ignoring position update. [%.8f, %.8f, %.2f]' % tuple(lla_deg))
-            return False
+        """!
+        @brief Send a position to the caster as a GGA sentence.
 
+        While the client is not connected, the sentence is kept and sent once the connection opens.
+
+        @return `True` if the sentence was sent now.
+        """
         utc_now = datetime.now(timezone.utc)
         if time is None:
             time = utc_now
@@ -85,6 +93,12 @@ class NTRIPClient(threading.Thread):
         lon_str = self._nmea_deg_to_ddmm(lla_deg[1], True)
         message = '$GPGGA,%s,%s,%s,1,,,%.2f,M,0.0,M,,' % (time.strftime('%H%M%S.%f'), lat_str, lon_str, lla_deg[2])
         message = self._append_nmea_checksum(message)
+
+        if not self.connected:
+            self.logger.debug('Not connected. Sending position once connected. [position=[%.8f, %.8f, %.2f]]' %
+                              (lla_deg[0], lla_deg[1], lla_deg[2]))
+            self.startup_gga_message = message if message.endswith('\r\n') else message + '\r\n'
+            return False
 
         self.logger.debug('Sending position update. [position=[%.8f, %.8f, %.2f]]' %
                           (lla_deg[0], lla_deg[1], lla_deg[2]))
@@ -152,22 +166,28 @@ class NTRIPClient(threading.Thread):
                 await self.ntrip.requestNtripStream(casterUrl=self.url, mountPoint=self.mountpoint, user=self.username,
                                                     passwd=self.password, ntripVersion=self.ntrip_version)
                 self.connected = True
+                self.last_rx_time = time.monotonic()
                 self.logger.debug('Connected successfully. Scheduling data reception.')
                 if self.startup_gga_message:
                     self.logger.debug('Sending cached GGA message.')
                     self.send_nmea(self.startup_gga_message)
                 asyncio.run_coroutine_threadsafe(self.__receive_data(), loop=self.event_loop)
-            except ConnectionError as e:
+            # OSError covers refused and reset connections, DNS failures, unreachable networks, TLS errors and, from
+            # Python 3.11, timeouts; asyncio.TimeoutError covers timeouts before 3.11, EOFError a short header.
+            except (OSError, EOFError, asyncio.TimeoutError) as e:
                 self.logger.error('Unexpected error connecting to NTRIP server: %s' % repr(e))
                 self.logger.debug(traceback.format_exc())
-                self.logger.error('Retrying in 5 seconds.')
-                await asyncio.sleep(5.0, loop=self.event_loop)
-                asyncio.run_coroutine_threadsafe(self.__connect(), loop=self.event_loop)
+                self.logger.error('Retrying in %.0f seconds.' % self.CONNECT_RETRY_DELAY_SEC)
+                await asyncio.sleep(self.CONNECT_RETRY_DELAY_SEC)
 
     async def __receive_data(self):
         try:
             self.rx_logger.trace('Waiting for data.', depth=2)
             data = await asyncio.wait_for(self.ntrip.getRawData(1024), timeout=0.5)
+            if len(data) == 0:
+                # getRawData() returns nothing once the caster has closed the stream.
+                raise ConnectionError('NTRIP server closed the stream.')
+            self.last_rx_time = time.monotonic()
             self.rx_logger.trace('Received %d bytes from mountpoint %s.' % (len(data), self.mountpoint))
             if self.data_callback is not None:
                 self.data_callback(data)
@@ -177,6 +197,13 @@ class NTRIPClient(threading.Thread):
         except SerialException as e:
             raise e
         except asyncio.TimeoutError:
+            quiet_sec = time.monotonic() - self.last_rx_time
+            if quiet_sec >= self.RECEIVE_TIMEOUT_SEC:
+                self.logger.error('No data from NTRIP server for %.0f seconds. Reconnecting to server.' % quiet_sec)
+                self.connected = False
+                self.ntrip = None
+                asyncio.run_coroutine_threadsafe(self.__connect(), loop=self.event_loop)
+                return
             self.rx_logger.trace('Read timed out with no data. Reading again.', depth=2)
             asyncio.run_coroutine_threadsafe(self.__receive_data(), loop=self.event_loop)
         except Exception as e:

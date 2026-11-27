@@ -15,6 +15,9 @@ psutil>=5.9.4
 # Required to avoid errors when downloading packages from github below.
 wheel>=0.37.1
 
+# ntripstreams imports bitstring.BitStream, which bitstring 5.0 removed.
+bitstring<5
+
 # Note: Using the P1 fork of ntripstreams until fixes are mainlined.
 https://github.com/PointOneNav/ntripstreams/archive/d2c8b8e55ae64e440e58bccf290e4d14095aa6e4.zip#egg=ntripstreams
 #ntripstreams~=0.1.12
