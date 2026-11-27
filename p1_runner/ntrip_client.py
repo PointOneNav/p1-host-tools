@@ -58,10 +58,13 @@ class NTRIPClient(threading.Thread):
         return self.connected
 
     def send_position(self, lla_deg: Iterable[float], time: datetime = None):
-        if not self.connected:
-            self.logger.trace('Not connected. Ignoring position update. [%.8f, %.8f, %.2f]' % tuple(lla_deg))
-            return False
+        """!
+        @brief Send a position to the caster as a GGA sentence.
 
+        While the client is not connected, the sentence is kept and sent once the connection opens.
+
+        @return `True` if the sentence was sent now.
+        """
         utc_now = datetime.now(timezone.utc)
         if time is None:
             time = utc_now
@@ -87,6 +90,12 @@ class NTRIPClient(threading.Thread):
         lon_str = self._nmea_deg_to_ddmm(lla_deg[1], True)
         message = '$GPGGA,%s,%s,%s,1,,,%.2f,M,0.0,M,,' % (time.strftime('%H%M%S.%f'), lat_str, lon_str, lla_deg[2])
         message = self._append_nmea_checksum(message)
+
+        if not self.connected:
+            self.logger.debug('Not connected. Sending position once connected. [position=[%.8f, %.8f, %.2f]]' %
+                              (lla_deg[0], lla_deg[1], lla_deg[2]))
+            self.startup_gga_message = message if message.endswith('\r\n') else message + '\r\n'
+            return False
 
         self.logger.debug('Sending position update. [position=[%.8f, %.8f, %.2f]]' %
                           (lla_deg[0], lla_deg[1], lla_deg[2]))

@@ -336,6 +336,10 @@ class P1Runner(threading.Thread):
                              data_callback=self._on_corrections, version=version)
         self.__dict__[client_name] = client
 
+        # A position override set before this client existed is sent once it connects.
+        if self.ntrip_position_override is not None:
+            client.send_position(self.ntrip_position_override)
+
         if self.is_alive():
             client.start()
 
@@ -371,6 +375,10 @@ class P1Runner(threading.Thread):
 
             if self.external_serial_recorder is not None:
                 self.external_serial_recorder.run()
+
+            # Without FusionEngine poses (for example, a receiver that outputs only NMEA), repeat the override here.
+            if self.ntrip_position_override is not None:
+                self._send_ntrip_position_update()
 
     def _on_data(self, data):
         self.logger.trace('Received %d bytes from device.' % len(data), depth=2)
@@ -577,10 +585,10 @@ Are you using the correct UART/COM port (--device-port)?
 
         self._send_ntrip_position_update(response_payload)
 
-    def _send_ntrip_position_update(self, pose_message: PoseMessage):
+    def _send_ntrip_position_update(self, pose_message: PoseMessage = None):
         if self.ntrip_position_override is not None:
             lla_deg = self.ntrip_position_override
-        elif pose_message.solution_type != SolutionType.Invalid:
+        elif pose_message is not None and pose_message.solution_type != SolutionType.Invalid:
             lla_deg = pose_message.lla_deg
         else:
             return
