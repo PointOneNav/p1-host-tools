@@ -126,3 +126,17 @@ def test_reconnects_when_the_caster_closes_a_non_chunked_stream(fake_stream):
     finally:
         client.stop()
         client.join(timeout=5)
+
+
+def test_reconnects_when_the_stream_goes_quiet(fake_stream, monkeypatch):
+    """The caster keeps the socket open but sends nothing: the client reconnects after RECEIVE_TIMEOUT_SEC."""
+    fake_stream.refusals = 0
+    monkeypatch.setattr(NTRIPClient, 'RECEIVE_TIMEOUT_SEC', 0.3)
+    client = NTRIPClient(url='http://localhost:2101', mountpoint='TEST')
+    client.daemon = True
+    client.start()
+    try:
+        assert _wait(lambda: fake_stream.attempts >= 2), 'client never reconnected on a quiet stream'
+    finally:
+        client.stop()
+        client.join(timeout=5)

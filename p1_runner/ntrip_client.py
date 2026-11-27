@@ -21,12 +21,15 @@ class NTRIPClient(threading.Thread):
     rx_logger = logger.getChild('rx')
 
     CONNECT_RETRY_DELAY_SEC = 5.0
+    # A caster can keep the socket open and stop sending. After this long with no data, reconnect.
+    RECEIVE_TIMEOUT_SEC = 30.0
 
     def __init__(self, url=None, mountpoint=None, username=None, password=None, version=2, data_callback=None):
         super().__init__(name='ntrip_%s' % repr(mountpoint))
 
         self.ntrip = None
         self.connected = False
+        self.last_rx_time = 0.0
         self.startup_gga_message = None
 
         self.url = None
@@ -163,6 +166,7 @@ class NTRIPClient(threading.Thread):
                 await self.ntrip.requestNtripStream(casterUrl=self.url, mountPoint=self.mountpoint, user=self.username,
                                                     passwd=self.password, ntripVersion=self.ntrip_version)
                 self.connected = True
+                self.last_rx_time = time.monotonic()
                 self.logger.debug('Connected successfully. Scheduling data reception.')
                 if self.startup_gga_message:
                     self.logger.debug('Sending cached GGA message.')
@@ -183,6 +187,7 @@ class NTRIPClient(threading.Thread):
             if len(data) == 0:
                 # getRawData() returns nothing once the caster has closed the stream.
                 raise ConnectionError('NTRIP server closed the stream.')
+            self.last_rx_time = time.monotonic()
             self.rx_logger.trace('Received %d bytes from mountpoint %s.' % (len(data), self.mountpoint))
             if self.data_callback is not None:
                 self.data_callback(data)
@@ -192,6 +197,13 @@ class NTRIPClient(threading.Thread):
         except SerialException as e:
             raise e
         except asyncio.TimeoutError:
+            quiet_sec = time.monotonic() - self.last_rx_time
+            if quiet_sec >= self.RECEIVE_TIMEOUT_SEC:
+                self.logger.error('No data from NTRIP server for %.0f seconds. Reconnecting to server.' % quiet_sec)
+                self.connected = False
+                self.ntrip = None
+                asyncio.run_coroutine_threadsafe(self.__connect(), loop=self.event_loop)
+                return
             self.rx_logger.trace('Read timed out with no data. Reading again.', depth=2)
             asyncio.run_coroutine_threadsafe(self.__receive_data(), loop=self.event_loop)
         except Exception as e:
