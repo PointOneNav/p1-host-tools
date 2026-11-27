@@ -20,6 +20,8 @@ class NTRIPClient(threading.Thread):
     logger = logging.getLogger('point_one.ntrip_client')
     rx_logger = logger.getChild('rx')
 
+    CONNECT_RETRY_DELAY_SEC = 5.0
+
     def __init__(self, url=None, mountpoint=None, username=None, password=None, version=2, data_callback=None):
         super().__init__(name='ntrip_%s' % repr(mountpoint))
 
@@ -160,9 +162,8 @@ class NTRIPClient(threading.Thread):
             except ConnectionError as e:
                 self.logger.error('Unexpected error connecting to NTRIP server: %s' % repr(e))
                 self.logger.debug(traceback.format_exc())
-                self.logger.error('Retrying in 5 seconds.')
-                await asyncio.sleep(5.0, loop=self.event_loop)
-                asyncio.run_coroutine_threadsafe(self.__connect(), loop=self.event_loop)
+                self.logger.error('Retrying in %.0f seconds.' % self.CONNECT_RETRY_DELAY_SEC)
+                await asyncio.sleep(self.CONNECT_RETRY_DELAY_SEC)
 
     async def __receive_data(self):
         try:
