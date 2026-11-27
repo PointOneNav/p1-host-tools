@@ -168,7 +168,9 @@ class NTRIPClient(threading.Thread):
                     self.logger.debug('Sending cached GGA message.')
                     self.send_nmea(self.startup_gga_message)
                 asyncio.run_coroutine_threadsafe(self.__receive_data(), loop=self.event_loop)
-            except ConnectionError as e:
+            # OSError covers refused and reset connections, DNS failures, unreachable networks, TLS errors and, from
+            # Python 3.11, timeouts; asyncio.TimeoutError covers timeouts before 3.11, EOFError a short header.
+            except (OSError, EOFError, asyncio.TimeoutError) as e:
                 self.logger.error('Unexpected error connecting to NTRIP server: %s' % repr(e))
                 self.logger.debug(traceback.format_exc())
                 self.logger.error('Retrying in %.0f seconds.' % self.CONNECT_RETRY_DELAY_SEC)
@@ -178,6 +180,9 @@ class NTRIPClient(threading.Thread):
         try:
             self.rx_logger.trace('Waiting for data.', depth=2)
             data = await asyncio.wait_for(self.ntrip.getRawData(1024), timeout=0.5)
+            if len(data) == 0:
+                # getRawData() returns nothing once the caster has closed the stream.
+                raise ConnectionError('NTRIP server closed the stream.')
             self.rx_logger.trace('Received %d bytes from mountpoint %s.' % (len(data), self.mountpoint))
             if self.data_callback is not None:
                 self.data_callback(data)
